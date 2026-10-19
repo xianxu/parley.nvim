@@ -122,6 +122,131 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 7b2d3e49-5f6f-4f5f-a4ba-778d54a4b5b7
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000391"
+            recipe: milestone-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/a4adf50dc5c0eefc
+            reviewed_head: 0c9ab358822e20670a58467ad050217d830ff25c
+            slot: parley.nvim:3
+            requested_at: "2026-10-19T06:10:57.319906Z"
+          phase: finished
+          pid: 15150
+          started_at: "2026-10-19T06:10:57.574476Z"
+          finished_at: "2026-10-19T06:18:11.566298Z"
+          session_id: 2e93f784-95d5-4fa8-890f-8d55a829e2c3
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 0c9ab358822e20670a58467ad050217d830ff25c
+        tracker_head: 5a33adec63b89fb7d34a5bb8c6cf588e45cac71d
+        branch_point: db7248f16be76d951384a396fd8a1a344d093c22
+        since: "2026-10-18T20:36:10-07:00"
+        until: "2026-10-18T23:10:21-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-18T20:36:10-07:00"
+              end: "2026-10-18T23:10:21-07:00"
+              began: "2026-10-18T20:36:10-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 338ec900-e10b-4fe4-be14-0f0ef1bf7fbd
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: ef74ba124e5c60223f5178b86911cfdd8d01fd1155a677e991ea8ec23124d70c
+              started: "2026-10-18T22:09:43.273Z"
+              spawned: false
+              bytes: 3367143
+              windows:
+                - start: "2026-10-18T20:36:10-07:00"
+                  end: "2026-10-18T23:10:21-07:00"
+        queue_waits:
+            - attempt_id: 2373632091e630b7782d45187345b7e0
+              slot: parley.nvim:3
+              record_digest: 52ecf60afd58b67d2464e95398a1fd83f51b13764cb19979b76bc9514c4eee12
+              start: "2026-10-19T04:57:01.75779Z"
+              end: "2026-10-19T05:51:07.01241Z"
+              queue_seconds: 3245.25462
+              raw_seconds: 3245.25462
+              exact: true
+        cuts:
+            - dispatched: "2026-10-18T23:01:09-07:00"
+              finalized: "2026-10-18T23:06:04-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-18T23:18:12-07:00"
+      dispatched: "2026-10-18T23:10:57-07:00"
+      agent: claude
+      reviewer: claude (anthropic; author anthropic)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: pcall(readfile) at file_history.lua:49; reverting it makes file_history_spec.lua:142 fail with E484.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: visible() is now paths>0; reverting to >1 fails file_history_spec lines 61 and 122 (root shows " A").
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: observe repaints when shown[win] changes; removing the moved check fails file_history_spec.lua:133.
+          round: 2
+        - id: BR-4
+          disposition: addressed
+          note: Done when now lists own-path display, roots and repo-top files, the unreadable-parent and re-entry behaviour, and the opt-out.
+          round: 2
+        - id: BR-5
+          disposition: addressed
+          note: README.md:226 describes the tree path or own path and documents breadcrumb = { enable = false }, which matches config.lua:704.
+          round: 2
+        - id: BR-6
+          disposition: addressed
+          note: side_tree_model.parse is pure with unit tests (side_tree_model_spec); not reusing chat_parser is justified in Revisions (top-level keys only).
+          round: 2
+        - id: BR-7
+          disposition: addressed
+          note: Round-1 Revisions entry records shown[win] and the own-path fallback.
+          round: 2
+      findings:
+        - kind: defect
+          id: BR-8
+          severity: Minor
+          title: read_node scans every buffer with resolve() before the cache check, on each node of every BufEnter
+          detail: file_history.lua:35 calls helpers.buffer_for for each chain node. That walks all buffers and calls vim.fn.resolve on each, so the cost is O(buffers x (depth+1)) per event, while the plan's hot-path budget counts only frontmatter reads (ARCH-CONSTRAINTS). Consider one resolved name-to-buffer map per observe.
+          family: hot-path-cost-matches-budget
+          round: 2
+        - kind: defect
+          id: BR-9
+          severity: Minor
+          title: path_value's home (~) and filesystem-root (/) fallbacks have no test
+          detail: Only the .git-relative branch is covered, in file_history_spec. I probed path_value directly and the other two branches are correct today; a short unit test in breadcrumb_model_spec would keep them that way.
+          family: untested-fallback-branches
+          round: 2
+        - kind: defect
+          id: BR-10
+          severity: Minor
+          title: 'side_tree_model.parse checks the opening --- exactly while find_header_end trims it; a trailing comment on parent: is kept as part of the path'
+          detail: 'A file whose opening line is "--- " is treated as having no tree, and "parent: x.md # note" resolves to a path that doesn''t exist, which shows the missing marker. Both cases are visible, not silent.'
+          family: frontmatter-parse-consistency
+          round: 2
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 0c9ab358822e20670a58467ad050217d830ff25c
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#391 (boundary-review)
@@ -148,12 +273,29 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Minor] `plan-matches-code` (kind: defect) Plan names trees[win] and a trail fallback; the code uses shown[win] and falls back to the file path
   Add a Revisions entry or edit the Plan bullet so it matches file_history.lua.
 
+## Round 2 — 2026-10-18T23:18:12-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — pcall(readfile) at file_history.lua:49; reverting it makes file_history_spec.lua:142 fail with E484.
+- BR-2 — addressed — visible() is now paths>0; reverting to >1 fails file_history_spec lines 61 and 122 (root shows " A").
+- BR-3 — addressed — observe repaints when shown[win] changes; removing the moved check fails file_history_spec.lua:133.
+- BR-4 — addressed — Done when now lists own-path display, roots and repo-top files, the unreadable-parent and re-entry behaviour, and the opt-out.
+- BR-5 — addressed — README.md:226 describes the tree path or own path and documents breadcrumb = { enable = false }, which matches config.lua:704.
+- BR-6 — addressed — side_tree_model.parse is pure with unit tests (side_tree_model_spec); not reusing chat_parser is justified in Revisions (top-level keys only).
+- BR-7 — addressed — Round-1 Revisions entry records shown[win] and the own-path fallback.
+
+### Raised
+
+- **BR-8** [Minor] `hot-path-cost-matches-budget` (kind: defect) read_node scans every buffer with resolve() before the cache check, on each node of every BufEnter
+  file_history.lua:35 calls helpers.buffer_for for each chain node. That walks all buffers and calls vim.fn.resolve on each, so the cost is O(buffers x (depth+1)) per event, while the plan's hot-path budget counts only frontmatter reads (ARCH-CONSTRAINTS). Consider one resolved name-to-buffer map per observe.
+- **BR-9** [Minor] `untested-fallback-branches` (kind: defect) path_value's home (~) and filesystem-root (/) fallbacks have no test
+  Only the .git-relative branch is covered, in file_history_spec. I probed path_value directly and the other two branches are correct today; a short unit test in breadcrumb_model_spec would keep them that way.
+- **BR-10** [Minor] `frontmatter-parse-consistency` (kind: defect) side_tree_model.parse checks the opening --- exactly while find_header_end trims it; a trailing comment on parent: is kept as part of the path
+  A file whose opening line is "--- " is treated as having no tree, and "parent: x.md # note" resolves to a path that doesn't exist, which shows the missing marker. Both cases are visible, not silent.
+
 ## Open findings
 
-- **BR-1** [Critical] `untrusted-file-read-must-degrade` (kind: defect) Unreadable parent file throws E484 out of the BufEnter autocmd instead of ending the chain with the missing marker
-- **BR-2** [Critical] `display-contract-every-file-visible` (kind: defect) A side-doc tree root (discussions only) shows no winbar, contrary to the Revision and atlas
-- **BR-3** [Important] `display-cache-repaint-drift` (kind: defect) Frontmatter edit is recomputed on window re-entry but not repainted, contrary to the atlas claim
-- **BR-4** [Important] `done-when-tracks-revisions` (kind: defect) Done when is stale: says files outside trees keep today's trail, but the revision shows their own path
-- **BR-5** [Important] `readme-tracks-user-surface` (kind: defect) README still describes the winbar as the Alt+o file trail and omits the breadcrumb.enable config key
-- **BR-6** [Important] `parsing-in-io-adapter` (kind: defect) Frontmatter parsing and parent resolution live inside the IO adapter read_node and are not unit-tested (ARCH-PURE)
-- **BR-7** [Minor] `plan-matches-code` (kind: defect) Plan names trees[win] and a trail fallback; the code uses shown[win] and falls back to the file path
+- **BR-8** [Minor] `hot-path-cost-matches-budget` (kind: defect) read_node scans every buffer with resolve() before the cache check, on each node of every BufEnter
+- **BR-9** [Minor] `untested-fallback-branches` (kind: defect) path_value's home (~) and filesystem-root (/) fallbacks have no test
+- **BR-10** [Minor] `frontmatter-parse-consistency` (kind: defect) side_tree_model.parse checks the opening --- exactly while find_header_end trims it; a trailing comment on parent: is kept as part of the path

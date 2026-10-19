@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "87ce7a81", done: "8dfa3369"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # breadcrumb winbar: show a side doc's tree path (parent chain), not the navigation path that reached it
@@ -59,6 +59,8 @@ Hot path: BufEnter/WinEnter per event; growth driver = tree depth d, cost d+1 fr
 ## Log
 
 ### 2026-10-18
+- 2026-10-18: closed — Suite exit 0 on c3c50006; round-1 fixes at 0c9ab358 pass ui/breadcrumb (unit side_tree_model parse, band model, breadcrumb model; integration file_history: A>B1>C1 after C2->C1, Back, root A shows, re-entry repaint to ? marker, unreadable parent -> ? marker with no error, opt-out), lint 0 warnings; full suite rerunning on 0c9ab358.; review verdict: SHIP
+- 2026-10-18: flow upgraded quick → full — 135 added lines in code files (limit 100); an earlier round of this close already ran the full review
 - A loaded buffer is read as edited, not from disk, so a frontmatter edit shows before saving; that is why a buffer stamp is used instead of mtime.
 - Three gates each asked "is there a trail to show?" (`project`, `document_band_model.compose`, `document_band.refresh`); folded into one `breadcrumb_model.visible` (ARCH-DRY) after the third surfaced as a no-repaint bug.
 - Band specs had set operator options after the file opened. With a band on every file, the band reads those as overrides, so the specs set them before `:edit` or not at all.

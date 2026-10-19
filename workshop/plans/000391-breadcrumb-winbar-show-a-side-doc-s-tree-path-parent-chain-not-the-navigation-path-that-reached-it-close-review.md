@@ -155,3 +155,137 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"bfbc4529-a015-4a46-9767-95cec9b97c51","repository":"github.com/xianxu/parley.nvim","issue_id":"000391","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/245f86cdcf6be105","reviewed_head":"ffe3c155a23a8fbe2f638f1101f670361902ae16","slot":"parley.nvim:3","requested_at":"2026-10-19T06:01:09.05184Z"},"phase":"finished","pid":73548,"started_at":"2026-10-19T06:01:09.298025Z","finished_at":"2026-10-19T06:06:03.615444Z","session_id":"bbd1dfbf-0ba5-468a-a452-64c445d8bb04","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-18T23:18:12-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 391 — breadcrumb winbar: show a side doc's tree path (parent chain), not the navigation path that reached it |
+| repo | parley.nvim |
+| issue file | workshop/issues/000391-breadcrumb-winbar-show-a-side-doc-s-tree-path-parent-chain-not-the-navigation-path-that-reached-it.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | db7248f16be76d951384a396fd8a1a344d093c22..0c9ab358822e20670a58467ad050217d830ff25c |
+| command | sdlc close --issue 391 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | fenced |
+| timestamp | 2026-10-18T23:18:12-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Running the affected spec files now.
+
+Tests ran; checking which one failed.
+
+Consistent failure; checking whether base also fails it.
+
+The `src` failure also happens at base, so this diff didn't cause it. Next: running the other changed integration specs.
+
+Now verifying each claimed fix by reverting it and checking that its test goes red.
+
+All three fixes go red when reverted. Now checking helper semantics and config merging for new issues.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All seven round-1 findings are fixed, and I found nothing new that blocks the gate. For the three behaviour fixes (BR-1/2/3) I reverted each fix in the disposable checkout, and each one turned its regression test red. The prose fixes (BR-4/5/7) are in the issue's Done-when/Revisions sections and in `README.md`, and they match the code. The parsing was moved into the pure `side_tree_model.parse`, which now has unit tests (BR-6). The `ui/breadcrumb` and `modes/session_sync` spec groups pass, with one exception: `file_history_spec` "commits the successful src Alt+o landing" fails the same way at base `db7248f1`. It comes from the environment and predates this diff. Only three Minor notes remain, and none of them blocks.
+
+1. **Strengths**
+   - `breadcrumb_model.visible` (`lua/parley/breadcrumb_model.lua:164`) is now the single gate used by `project`, `document_band_model.compose:37` and `document_band.refresh:177`. Before, three separate "is there a trail?" checks could drift apart (ARCH-DRY).
+   - `side_tree_model.chain` is pure, with an injected reader. It is bounded by a cap of 32, cycle detection via `seen`, and a missing marker. Counted-read tests check the cost: CAP+1 reads.
+   - `read_node` checks `stat.type ~= "file"` before `readfile`, so a `parent:` pointing at a FIFO or device can't block BufEnter. Reads are guarded by `pcall` (`lua/parley/file_history.lua:49`).
+   - The display value (`display`) stays separate from the trail (`peek`). Snapshot, restore and Back are untouched, and the integration test checks this (`snapshot(0).paths == {C2, C1}`, then Back returns to C2).
+   - Lifecycle is handled: `shown[win]` is cleared on WinClosed, and the parse cache is capped at 256 entries and resets when full.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings**
+   - `file_history.lua:35`: `helpers.buffer_for(path, true)` runs before the cache check. It walks every buffer and calls `vim.fn.resolve` on each one, for every node in the chain, on every BufEnter. The cost is O(buffers × (depth+1)), but the plan's hot-path note only counts frontmatter reads (ARCH-CONSTRAINTS).
+   - The `~` and `/` fallbacks of `path_value` / `path_display` have no tests. I probed them by hand and they are correct: `etc › hosts`, `~ › a › b`.
+   - `side_tree_model.parse` checks `lines[1] == "---"` exactly, while `find_header_end` trims whitespace. A trailing `# comment` on a `parent:` line also becomes part of the path, so the chain shows the missing marker (visible, not silent).
+
+5. **Test coverage notes**
+   - Revert checks:
+     - BR-1: removing `pcall` gives E484 at `file_history_spec.lua:142`.
+     - BR-2: restoring the old `>1` visibility rule fails lines 61 and 122.
+     - BR-3: removing the `moved` repaint fails line 133.
+   - The opt-out test changes `parley.config.breadcrumb.enable` and only resets it at the end of the test. If an assertion fails partway through, the change leaks into later tests.
+   - The base-failing `src` Alt+o test is unrelated to #391, but it should get its own issue.
+
+6. **Architectural notes (one line per principle)**
+   - ARCH-DRY pass: the three visibility gates now share one helper.
+   - ARCH-PURE pass: parsing and the chain walk are pure; `resolve`, `stat` and the cache stay in the thin adapter.
+   - ARCH-PURPOSE pass: every file window gets its value from `display()`, and no consumer still renders the trail.
+   - ARCH-MOCK: does not apply. The only dependency is the local filesystem, which tests exercise through real temp files. No external binary or service is involved.
+   - ARCH-CONSTRAINTS pass, with the Minor note above.
+   - ARCH-SECURE pass: an unreadable or non-regular parent becomes a visible `?` marker, never an error.
+   - ARCH-ORDER pass: `shown[win]` changes only in `observe`, `display` re-checks the path against the trail leaf, and re-entry ordering is tested.
+   - ARCH-FUNERAL pass: the cache is capped, and per-window state dies on WinClosed.
+
+7. **Plan revision recommendations:** none. The round-1 Revisions entry already reconciles `trees[win]` → `shown[win]` and the trail → own-path fallback.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      pcall(readfile) at file_history.lua:49; reverting it makes file_history_spec.lua:142 fail with E484.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      visible() is now paths>0; reverting to >1 fails file_history_spec lines 61 and 122 (root shows " A").
+  - id: BR-3
+    disposition: addressed
+    note: |
+      observe repaints when shown[win] changes; removing the moved check fails file_history_spec.lua:133.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Done when now lists own-path display, roots and repo-top files, the unreadable-parent and re-entry behaviour, and the opt-out.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      README.md:226 describes the tree path or own path and documents breadcrumb = { enable = false }, which matches config.lua:704.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      side_tree_model.parse is pure with unit tests (side_tree_model_spec); not reusing chat_parser is justified in Revisions (top-level keys only).
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Round-1 Revisions entry records shown[win] and the own-path fallback.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: hot-path-cost-matches-budget
+    title: |
+      read_node scans every buffer with resolve() before the cache check, on each node of every BufEnter
+    detail: |
+      file_history.lua:35 calls helpers.buffer_for for each chain node. That walks all buffers and calls vim.fn.resolve on each, so the cost is O(buffers x (depth+1)) per event, while the plan's hot-path budget counts only frontmatter reads (ARCH-CONSTRAINTS). Consider one resolved name-to-buffer map per observe.
+  - id: new
+    severity: Minor
+    kind: defect
+    family: untested-fallback-branches
+    title: |
+      path_value's home (~) and filesystem-root (/) fallbacks have no test
+    detail: |
+      Only the .git-relative branch is covered, in file_history_spec. I probed path_value directly and the other two branches are correct today; a short unit test in breadcrumb_model_spec would keep them that way.
+  - id: new
+    severity: Minor
+    kind: defect
+    family: frontmatter-parse-consistency
+    title: |
+      side_tree_model.parse checks the opening --- exactly while find_header_end trims it; a trailing comment on parent: is kept as part of the path
+    detail: |
+      A file whose opening line is "--- " is treated as having no tree, and "parent: x.md # note" resolves to a path that doesn't exist, which shows the missing marker. Both cases are visible, not silent.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"7b2d3e49-5f6f-4f5f-a4ba-778d54a4b5b7","repository":"github.com/xianxu/parley.nvim","issue_id":"000391","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/a4adf50dc5c0eefc","reviewed_head":"0c9ab358822e20670a58467ad050217d830ff25c","slot":"parley.nvim:3","requested_at":"2026-10-19T06:10:57.319906Z"},"phase":"finished","pid":15150,"started_at":"2026-10-19T06:10:57.574476Z","finished_at":"2026-10-19T06:18:11.566298Z","session_id":"2e93f784-95d5-4fa8-890f-8d55a829e2c3","outcome":"returned"}] -->
