@@ -1,6 +1,6 @@
 ---
 id: 000393
-status: codecomplete
+status: done
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: bccb5aa99d44c54ee946f806bc0487d927a0c56f
         evidence_commit: a3c09e3bf4369efc701235615836c4d34b06ac0e
+        landed_commit: cf2af8a91f96b556d55051cd603040dd85ecd6d9
 ---
 
 # spelling: the Blink corrections menu is off by default (underlines stay on)
