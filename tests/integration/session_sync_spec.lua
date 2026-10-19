@@ -373,7 +373,45 @@ describe("session-sync buffer", function()
             end), "reload " .. i)
         end
         settle()
-        assert.equals(before, fds())
+        assert.is_true(fds() <= before + 2, ("fds %d -> %d"):format(before, fds()))
+    end)
+
+    it("keeps descriptors flat across a rename storm of registered docs (#399)", function()
+        local function fds() local n = 0 for _ in vim.fs.dir("/dev/fd") do n = n + 1 end return n end
+        local function settle() vim.wait(500, function() return false end) collectgarbage() collectgarbage() end
+        local function couch(...)
+            local r = vim.system({ "couch", "--session-sync", ... }, { text = true }):wait()
+            assert(r.code == 0, table.concat({ ... }, " ") .. ": " .. tostring(r.stdout) .. tostring(r.stderr))
+        end
+        enable_registry()
+        vim.fn.mkdir(root .. "/answers", "p")
+        local docs = {}
+        for i = 1, 50 do
+            docs[i] = root .. "/answers/a" .. i .. ".md"
+            vim.fn.writefile({ "---", "type: session-sync", "owner: ops:0", "parent: ../tl-status.md", "---", "", "answer " .. i }, docs[i])
+            couch("register", docs[i], "--owner", "ops:0")
+        end
+        open(header)
+        for i = 1, 10 do vim.fn.bufload(vim.fn.bufadd(docs[i])) end
+        settle()
+        local before = fds()
+        vim.fn.mkdir(root .. "/tl-status.side", "p")
+        local links = {}
+        for i = 1, 50 do
+            local new = root .. "/tl-status.side/a" .. i .. ".md"
+            assert(os.rename(docs[i], new))
+            couch("rename", docs[i], new)
+            links[#links + 1] = "- [a" .. i .. "](tl-status.side/a" .. i .. ".md)"
+        end
+        local update = vim.deepcopy(header)
+        vim.list_extend(update, links)
+        vim.fn.writefile(update, file)
+        assert.is_true(vim.wait(arrival_ms(), function()
+            return vim.api.nvim_buf_line_count(buf) == #update
+        end))
+        settle()
+        -- A child in flight at either count moves it by two; a per-path leak is +50.
+        assert.is_true(fds() <= before + 2, ("fds %d -> %d"):format(before, fds()))
     end)
 
     it("a free buffer follows the agent's writes on disk", function()
