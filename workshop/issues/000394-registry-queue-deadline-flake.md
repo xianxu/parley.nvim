@@ -1,13 +1,21 @@
 ---
 id: 000394
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-18
-updated: 2026-10-18
+updated: 2026-10-19
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'f5900cbdaf6cae0399a65af11229018fe78d9c55' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'fbfb77660ef21066f0af4f6342dbe19a9a50bcfe' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-19T14:14:24-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Registry queue deadline flake
@@ -29,7 +37,19 @@ Remove the load-sensitive timing assumption while preserving the actual invarian
 
 ## Plan
 
-- [ ]
+Diagnosis: in the recorded failure, request 1 failed with `queued_ms=0` and `ran_ms=1000`. It never queued. Its own Python fake child took longer than the 1 s deadline under load. The queue invariant held; the test's 0.4 s of real-time slack is what broke. No registry code changes.
+
+- [ ] Deterministic regression (controlled scheduling). Stub `couch.run` so that no child answers until the test answers it.
+  - Requests 1–4 take long deadlines (arrival.MS) and hold all four active slots.
+  - Request 5 has a 300 ms deadline and waits in the queue.
+  - Hold the queue for 900 ms, then answer request 1 with a null-registration reply. That frees a slot, and request 5 spawns.
+  - The stub answers request 5 synchronously with the same reply (the registry handles a synchronous answer).
+  - Assert: request 5 is `absent` with `queued_ms >= 900`, and `couch.run` ran five times.
+  - Why it's deterministic: a deadline started at admission would fire during the hold, because a timer never fires early. Request 5's real deadline never comes into play, because its answer arrives in the same call that starts it.
+  - Red check: start the timer at admission and confirm the test fails.
+- [ ] Real process-boundary coverage stays, without the narrow slack.
+  - Eight lookups through the Python fake now sleep 0.2 s and take the arrival deadline, not 1 s.
+  - All eight answer `absent`, and at least four queued for at least 150 ms. A queued request waits for a child that sleeps at least 0.2 s, so the lower bound is structural, not a timing guess.
 
 ## Log
 
