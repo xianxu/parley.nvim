@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "06dca77a", done: "29773055"}
 ---
 
 # attention finder opens on the oldest unread entry
