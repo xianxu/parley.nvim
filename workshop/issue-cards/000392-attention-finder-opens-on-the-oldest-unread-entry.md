@@ -1,6 +1,6 @@
 ---
 id: 000392
-status: codecomplete
+status: done
 created: 2026-10-18
 updated: 2026-10-19
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 2302826c8848bb0eac245f1009d759112adb9d5d
         evidence_commit: 6d811d540394adbaa1d5233a91c954f7ca885aac
+        landed_commit: 7041bccd208dbfff3f7144194ac26e641f99dda2
 ---
 
 # attention finder opens on the oldest unread entry
