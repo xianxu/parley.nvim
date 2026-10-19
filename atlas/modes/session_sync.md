@@ -283,7 +283,7 @@ Code: `agentic_document.lua` owns admission, cached knowledge and native move
 hooks and the public Parley movers. Owned file moves journal intent before an
 atomic no-replace rename; native saveas waits for its successful write witness.
 `document_session.lua` owns the pure lifecycle; `document_registry.lua`
-uses the shared `couch.run` transport and owns the default registry deadline
+uses the shared `couch.run` transport (with `timeout = false`: its own timer is the one deadline) and owns the default registry deadline
 (`default_deadline_ms`, read through `config_ms`). A request that names none
 gets `agentic_submit_timeout_ms`, and a rename, native or journaled, gets three
 of them; there is no hidden literal (#382). Only the inline `:saveas!` check

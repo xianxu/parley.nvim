@@ -866,3 +866,17 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   (`ps -o comm=`) so the secret is never read, rather than redacting after the
   fact. Run the repo's arch guards (`prepare_dir_spec` and friends) before a
   close: a targeted spec run doesn't include them.
+
+- #400: A hang fake made from a shell script and `sleep` doesn't die with its
+  shell. vim.system reports an exit only after the stdio pipes close, and an
+  orphaned `sleep` still holds them. Make the fake's sleep end on the script's
+  SIGTERM. Then red-check every new regression test against the unfixed code:
+  the first probe test passed without the fix, because duplicate attaches on
+  open spawned a second, unhung probe. Key a test's wait on the mechanism's own
+  evidence (a timed-out result), not on a count that something else can raise.
+
+- #400 close review: a Revisions entry doesn't retire the claim it replaces.
+  When a revision changes what the Spec or Plan says, strike the old sentence
+  where it stands and write the current one beside it, citing the Revision.
+  Readers and reviewers read the body first, so a body that still states the
+  old design is a second, contradicting Spec.

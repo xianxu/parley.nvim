@@ -241,6 +241,98 @@ describe("session-sync buffer", function()
         assert.equals("ops:0|submitted: " .. file, sent()[1])
     end)
 
+    -- #400: no couch child lives forever; a hung couch can't stall the editor.
+    describe("couch deadlines (#400)", function()
+        local couch = require("parley.couch")
+        local real_system, real_notify, saved_deadline, spawns, notes, timeouts
+        before_each(function()
+            real_system, real_notify, saved_deadline = vim.system, vim.notify, { couch.deadline_ms, couch.send_deadline_ms }
+            spawns, notes, timeouts = {}, {}, 0
+            vim.system = function(argv, opts, cb)
+                local on_exit = cb
+                cb = function(obj)
+                    if couch.timed_out(obj) then timeouts = timeouts + 1 end
+                    return on_exit(obj)
+                end
+                if argv[1] == "couch" then
+                    -- document_registry bounds its children with its own timer (#382).
+                    spawns[#spawns + 1] = { argv = argv, timeout = opts and opts.timeout,
+                        registry = debug.traceback():find("document_registry.lua", 1, true) ~= nil }
+                end
+                return real_system(argv, opts, cb)
+            end
+            vim.notify = function(msg) notes[#notes + 1] = msg end
+        end)
+        after_each(function()
+            vim.system, vim.notify = real_system, real_notify
+            couch.deadline_ms, couch.send_deadline_ms = saved_deadline[1], saved_deadline[2]
+            vim.env.FAKE_COUCH_QUERY_SLEEP = nil
+        end)
+        local function count(flag)
+            return #vim.tbl_filter(function(s) return s.argv[2] == flag end, spawns)
+        end
+
+        it("a probe whose status query hangs past the deadline probes again, then pings", function()
+            couch.deadline_ms = function() return 300 end
+            vim.env.FAKE_COUCH_QUERY_SLEEP = "30"
+            vim.env.FAKE_COUCH_STATUS = owed(6)
+            open(header)
+            -- Every probe hangs until the deadline kills it; only then can the
+            -- next poll probe again, and this time couch answers.
+            assert.is_true(vim.wait(arrival_ms(), function() return timeouts >= 1 end))
+            local before = count("--session-sync")
+            vim.env.FAKE_COUCH_QUERY_SLEEP = nil
+            assert.is_true(vim.wait(arrival_ms(), function() return count("--session-sync") > before end))
+            wait_sent(1)
+            assert.equals(1, sent()[1]:find("ops:0|session-sync ping: " .. file, 1, true))
+        end)
+
+        it("every couch spawn on the probe, ping, submit, violation and own-slot paths carries a deadline", function()
+            vim.env.FAKE_COUCH_STATUS = owed(6)
+            open(header)
+            wait_sent(1)
+            edit("- submit")
+            keymap_cb("<M-CR>")()
+            wait_sent(2)
+            edit("- edited")
+            local lines = vim.fn.readfile(file)
+            lines[#lines] = "- foreign"
+            vim.fn.writefile(lines, file)
+            wait_sent(3)
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "s0", "t0"
+            local resolved
+            couch.own_slot(function() resolved = true end)
+            assert.is_true(vim.wait(arrival_ms(), function() return resolved end))
+            local kinds = {}
+            for _, s in ipairs(spawns) do
+                if s.registry then
+                    assert.is_nil(s.timeout, vim.inspect(s)) -- one owner per deadline
+                else
+                    -- A send outlives the submit deadline; a query gets one (#400).
+                    local expected = s.argv[2] == "--send-to" and couch.send_deadline_ms() or couch.deadline_ms()
+                    assert.equals(expected, s.timeout, vim.inspect(s))
+                end
+                kinds[s.argv[2] == "--send-to" and s.argv[5]:match("^[%w -]+:") or s.argv[2]] = true
+            end
+            kinds["--session-sync"] = vim.tbl_contains(vim.tbl_map(function(s)
+                return not s.registry and s.argv[3] == "status" end, spawns), true) or nil
+            assert.same({ ["--session-sync"] = true, ["--actors"] = true, ["session-sync ping:"] = true,
+                ["submitted:"] = true, ["session-sync violation:"] = true }, kinds)
+        end)
+
+        it("a submit send past the deadline is unconfirmed, not failed", function()
+            couch.send_deadline_ms = function() return 300 end
+            vim.env.FAKE_COUCH_SLEEP = "30"
+            open(header)
+            edit("- slow")
+            keymap_cb("<M-CR>")()
+            assert.is_true(vim.wait(arrival_ms(), function()
+                return vim.tbl_contains(notes, "session-sync: send to ops:0 not confirmed within 0.3 s; it may have arrived. Alt+Return resends")
+            end), vim.inspect(notes))
+            for _, msg in ipairs(notes) do assert.is_nil(msg:find("failed", 1, true), msg) end
+        end)
+    end)
+
     describe("inside a Couch pane, confirmed typed owner overrides the pane (#332)", function()
         -- Two live slots; this editor runs in the one bound to scope s1/tag t1.
         local function slots()
