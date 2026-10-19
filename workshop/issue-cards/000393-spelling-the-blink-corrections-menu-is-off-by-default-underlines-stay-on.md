@@ -1,6 +1,6 @@
 ---
 id: 000393
-status: working
+status: codecomplete
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.10
+tracker:
+    version: 1
+    completion:
+        token: close-b9f5ee50f519
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: bccb5aa99d44c54ee946f806bc0487d927a0c56f
+        evidence_commit: a3c09e3bf4369efc701235615836c4d34b06ac0e
 ---
 
 # spelling: the Blink corrections menu is off by default (underlines stay on)
