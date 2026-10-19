@@ -59,6 +59,7 @@ Diagnosis: in the recorded failure, request 1 failed with `queued_ms=0` and `ran
 Failed evidence: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/cb7588a68bab3b4b10fa36c1e134718c.log (SHA-256 prefix 1fb5f695372b). File: tests/integration/document_registry_spec.lua, case starts a request's deadline when its child spawns, not when it queues. Failure assertion line 115. The isolated unchanged run passed 11/11. Filed unclaimed for the hub; #393 will retain this failure and make one unchanged recorded rerun per the worker flake rule.
 
 ### 2026-10-19
+- 2026-10-19: closed — Test-only fix, no new surface (--no-atlas). Diagnosis from the recorded numbers: request 1 never queued (queued_ms=0) and overran 1 s under load, so the queue invariant held. A new deterministic test (stubbed couch.run, request 5 held in the queue for 3x its 300 ms deadline) fails when the deadline is armed at admission and passes with the spawn-time code. The real-process test now uses a 0.2 s fake with the arrival deadline and structural queued_ms >= 150. make test-spec SPEC=modes/session_sync green. No registry code change.; review verdict: SHIP
 
 - Request 1 failed with `queued_ms=0`, so its own child, not the queue, overran the deadline. The registry needed no change; the test's 0.4 s slack did.
 - The deterministic test stubs `couch.run`, holds request 5 in the queue for three times its deadline, then answers it in the call that starts it.
