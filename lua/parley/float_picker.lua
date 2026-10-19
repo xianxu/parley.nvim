@@ -1053,7 +1053,7 @@ function M.open(opts)
         if vim.api.nvim_win_is_valid(results_win) then
             local target_row = visual_row_for_index(sel_idx)
             if selection_opts.preserve_view then
-                local view = vim.api.nvim_win_call(results_win, vim.fn.winsaveview)
+                local view = selection_opts.view or vim.api.nvim_win_call(results_win, vim.fn.winsaveview)
                 vim.api.nvim_win_set_cursor(results_win, { target_row, 0 })
                 view.lnum = target_row
                 view.col = 0
@@ -1192,7 +1192,7 @@ function M.open(opts)
         end
     end
 
-    local function apply_filter(reset_selection)
+    local function apply_filter(reset_selection, selection_opts)
         local query = query_text:gsub("^%s+", "")
         if opts.filter_items then
             filtered = vim.deepcopy(opts.filter_items(items, query, M._fuzzy_score))
@@ -1244,7 +1244,7 @@ function M.open(opts)
         end
         refresh_results()
         if reset_selection == false then
-            set_selection(sel_idx)
+            set_selection(sel_idx, selection_opts)
             if title:match("^Chat Files") then
                 local selected = get_selected_item()
                 logger.debug(string.format(
@@ -1256,7 +1256,7 @@ function M.open(opts)
                 ))
             end
         elseif initial_index and query == "" then
-            set_selection(initial_index)
+            set_selection(initial_index, { ensure_visible = true })
             if title:match("^Chat Files") then
                 local selected = get_selected_item()
                 logger.debug(string.format(
@@ -1735,9 +1735,13 @@ function M.open(opts)
     --- conversion is the widget's job precisely because callers cannot know it:
     --- an index that means one row in their list means a different row here the
     --- moment a query is active, which is when an async repaint is most likely to
-    --- move the cursor under the operator.
-    local function update(new_items, new_tag_bar_tags, next_selection)
+    --- move the cursor under the operator. Optional selection_opts can request
+    --- ensure_visible for an explicit operator-directed target; default keeps view.
+    local function update(new_items, new_tag_bar_tags, next_selection, selection_opts)
         if closed then return end
+        -- Capture before reflow/refilter can reset a top-anchored viewport.
+        local viewport = { preserve_view = true,
+            view = vim.api.nvim_win_is_valid(results_win) and vim.api.nvim_win_call(results_win, vim.fn.winsaveview) or nil }
         local next_identity
         if type(next_selection) == "string" then
             next_identity = next_selection
@@ -1767,11 +1771,11 @@ function M.open(opts)
             tag_bar_opts.tags = new_tag_bar_tags
         end
         if not reflow_picker() then return end
-        apply_filter(false)
+        apply_filter(false, viewport)
         if next_identity then
             for i, item in ipairs(filtered) do
                 if recall_id_fn(item) == next_identity then
-                    set_selection(i, { preserve_view = true })
+                    set_selection(i, selection_opts or viewport)
                     break
                 end
             end

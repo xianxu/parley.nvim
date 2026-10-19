@@ -103,6 +103,86 @@ describe("attention finder", function()
         vim.fn.delete(root, "rf")
     end)
 
+    for _, outcome in ipairs({ "success", "failure" }) do
+    it("keeps oldest unread visible through " .. outcome .. " probes in both scopes (#392)", function()
+        local state = Model.empty()
+        local function add(name, submitted_at, answered_at, slot, parent)
+            local path = root .. "/" .. name
+            vim.fn.writefile({ "body" }, path)
+            state = Model.transition(state, { type = "submitted", path = path, id = name, slot = slot }, submitted_at)
+            if answered_at then state = Model.transition(state,
+                { type = "observed", path = path, probed_ids = { name }, owed_ids = {} }, answered_at) end
+            if parent then state.entries[path].kind, state.entries[path].parent = "side", parent end
+            return path
+        end
+        add("newer.md", 900, 800, "ops:0")
+        add("outside.md", 850, 100, "echo:0")
+        for i = 1, 24 do add("waiting" .. i .. ".md", 900 - i, nil, "ops:0") end
+        local parent = add("parent.md", 40, nil, "ops:0")
+        add("child.md", 30, 200, "ops:0", parent)
+        local seen = add("seen.md", 20, 50, "ops:0")
+        state = Model.transition(state, { type = "opened", path = seen }, 60)
+        vim.fn.mkdir(vim.fn.fnamemodify(Store.path(), ":h"), "p")
+        assert(require("parley.helper").table_to_file_atomic(state, Store.path()))
+        local held = {}
+        Attention.open({ store = { now = now }, own_slot = function(cb) cb({}, { Binding = { Slot = "ops:0" } }) end,
+            run = function(argv, cb) held[argv[#argv]] = cb end })
+        local prompt = vim.api.nvim_get_current_buf()
+        local results
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+            if vim.api.nvim_win_get_config(win).relative ~= "" and vim.bo[vim.api.nvim_win_get_buf(win)].buftype ~= "prompt" then
+                results = win
+            end
+        end
+        assert(results, "finder results did not open")
+        local function selected()
+            local row = vim.api.nvim_win_get_cursor(results)[1]
+            return vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(results), row - 1, row, false)[1]
+        end
+        local function visible()
+            local view = vim.api.nvim_win_call(results, vim.fn.winsaveview)
+            local row = vim.api.nvim_win_get_cursor(results)[1]
+            assert.is_true(row >= view.topline and row < view.topline + vim.api.nvim_win_get_height(results))
+        end
+        local function toggle()
+            vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<C-a>", "i", false, true).callback() end)
+        end
+        assert.truthy(selected():find("child.md", 1, true)); visible()
+        local function complete_probe(expected)
+            local pending_path, reply = next(held)
+            assert(reply, "no held probe")
+            held[pending_path] = nil
+            if outcome == "success" then reply({ Status = { Owed = {} } })
+            else reply(nil, "probe unavailable") end
+            await(function()
+                local entry = Store.load().entries[pending_path]
+                return outcome == "success" and Model.state_of(entry) == "answered" or entry.unknown ~= nil
+            end, "probe result never landed")
+            assert.truthy(selected():find(expected, 1, true)); visible()
+        end
+        complete_probe("child.md")
+        local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(results), 0, -1, false)
+        assert.truthy(lines[1]:find("newer.md", 1, true))
+        assert.truthy(lines[#lines - 2]:find("parent.md", 1, true))
+        assert.truthy(lines[#lines - 1]:find("child.md", 1, true))
+        toggle(); assert.truthy(selected():find("outside.md", 1, true)); visible()
+        complete_probe("outside.md")
+        toggle(); assert.truthy(selected():find("child.md", 1, true)); visible()
+        -- An operator filter wins over the opening preference in either scope.
+        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> newer" })
+        vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt })
+        assert.truthy(selected():find("newer.md", 1, true))
+        toggle(); assert.truthy(selected():find("newer.md", 1, true))
+        assert.equals("> newer", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
+        local pending_path, reply = next(held)
+        assert(reply)({ Status = { Owed = {} } })
+        await(function() return Model.state_of(Store.load().entries[pending_path]) == "answered" end, "probe never landed")
+        assert.truthy(selected():find("newer.md", 1, true))
+        vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Esc>", "n", false, true).callback() end)
+    end)
+
+    end
+
     it("toggles current/all scope and keeps that scope after late probe updates", function()
         local a, b, legacy = submitted("here.md", "m1"), submitted("there.md", "m2"), submitted("legacy.md", "m3")
         apply({ type = "submitted", path = a, id = "m1", slot = "ops:0" })

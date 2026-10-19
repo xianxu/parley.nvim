@@ -76,14 +76,19 @@ end
 --- The marker is `?` for an entry whose last probe failed, `↳` for a side doc
 --- the agent wrote (searchable by its parent's name). options: { home, clock }
 --- where clock(seconds) formats a submit time (os.date by default).
+--- Returns the unchanged rows and oldest-unread index (1 when none).
 function M.items(entries, options)
     options = options or {}
     local home = options.home
     local clock = options.clock or function(t) return os.date("%H:%M", t) end
-    local items = {}
+    local items, initial, oldest = {}, 1, nil
     for _, node in ipairs(tree(entries)) do
         local entry = node.entry
         local state = Model.state_of(entry)
+        local answered = entry.answered_at or entry.submitted_at
+        if state == "answered" and (not oldest or answered < oldest) then
+            initial, oldest = #items + 1, answered
+        end
         local dir = dirname(entry.path)
         local shown = dir
         if home and home ~= "" and (dir == home or dir:sub(1, #home + 1) == home .. "/") then
@@ -100,7 +105,7 @@ function M.items(entries, options)
             highlights = { { 0, #display, M.GROUPS[state] } },
         }
     end
-    return items
+    return items, initial
 end
 
 return M

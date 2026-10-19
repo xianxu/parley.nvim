@@ -150,3 +150,47 @@ describe("attention tree rows", function()
         end
     end)
 end)
+
+describe("attention initial selection (#392)", function()
+    it("chooses answer time without reordering the forest and includes a nested child", function()
+        local entries = {
+            entry("/new.md", { submitted_at = 900, answered_at = 800 }),
+            entry("/child.md", { kind = "side", parent = "/parent.md", submitted_at = 500, answered_at = 100 }),
+            entry("/seen.md", { answered_at = 10, seen_at = 20 }),
+            entry("/parent.md", { pending = { m = 1 }, submitted_at = 200 }),
+        }
+        local before = vim.deepcopy(entries)
+        local items, initial = Rows.items(entries, options)
+        assert.same({ "/new.md", "/seen.md", "/parent.md", "/child.md" },
+            vim.tbl_map(function(item) return item.value end, items))
+        assert.equals(4, initial)
+        assert.same(before, entries)
+    end)
+    it("keeps tree order on ties and falls back to submit time for a legacy answer", function()
+        local _, initial = Rows.items({ entry("/a", { answered_at = 40 }), entry("/b", { answered_at = 40 }) }, options)
+        assert.equals(1, initial)
+        _, initial = Rows.items({ entry("/a", { answered_at = 40 }), entry("/legacy", { submitted_at = 30 }) }, options)
+        assert.equals(2, initial)
+    end)
+    it("evaluates state once per entry at N and 2N", function()
+        for _, count in ipairs({ 8, 16 }) do
+            local entries, reads = {}, 0
+            for i = 1, count do
+                entries[i] = setmetatable({ path = "/" .. i .. ".md", submitted_at = 10,
+                    answered_at = count - i }, { __index = function(_, key)
+                    if key == "pending" then reads = reads + 1; return {} end
+                end })
+            end
+            local _, initial = Rows.items(entries, options)
+            assert.equals(count, reads)
+            assert.equals(count, initial)
+        end
+    end)
+    it("uses the top for waiting-only, seen-only and empty lists", function()
+        for _, entries in ipairs({ {}, { entry("/waiting", { pending = { m = 1 } }) },
+            { entry("/seen", { answered_at = 1, seen_at = 2 }) } }) do
+            local _, initial = Rows.items(entries, options)
+            assert.equals(1, initial)
+        end
+    end)
+end)

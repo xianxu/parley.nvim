@@ -847,6 +847,9 @@ The first ColorScheme fix re-ran only `setup_highlights`, while the atlas said "
   the first unvisited descendant. Test reverse-ordered tails entering self and
   multi-node cycles, including ancestor-search context and linear traversal.
 
+## 2026-10-19 (#392 — preserve viewport before the first repaint effect)
+
+Saving a picker view after refiltering saves the reset viewport. Capture it before reflow/refilter and use that same proof while resolving the selected identity. Test background success and failure before typing, with a selected row below the fold in each scope; a one-row filtered test cannot catch hidden selection.
 - #391: When a scope change widens a rule ("every file shows a path"), sweep
   the old gates that encoded the narrower rule (the lone-root hide) and the
   repaint triggers keyed on the old inputs (path change only). Every read of a
