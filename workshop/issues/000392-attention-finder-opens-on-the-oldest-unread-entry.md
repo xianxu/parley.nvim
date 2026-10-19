@@ -53,6 +53,8 @@ Choice costs one comparison per displayed entry, bounded by the store's256 entri
 
 ## Log
 
+
+- 2026-10-19: closed — BR1 viewport correction captures view before complete update/reflow/refilter; below-fold selection remains visible through successful and failed probes in both scopes before typing. RED /tmp/parley392-br1-red.log fails both; GREEN /tmp/parley392-br1-green.log passes34 finder+18 rows+82 picker cases; lint/diff clean. Required suite on384fc34433fc4fc5709cc5be8e75ac54e405d639 passes480 unique spec paths,805 lint files clean,no survivors; suite.log SHA256e7e609bd987a58cfca2b9c30d02af304ca2acf22c1a696992ddc67422ff117a7. Current code unchanged since tested head; atlas and lessons updated. Oldest answer choice, side trees, scope/filter behavior retained. Hub directs normal landing and main integration after SHIP. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 ### 2026-10-18
 
 - Read atlas/ui/attention_finder.md first. Card was unclaimed, then claimed by parley.nvim:2. start-plan refreshed the ariadne tool build and was rerun as directed. Existing top-anchored picker always selects row1; existing row generation already receives scope-filtered entries, and async repaint preserves identity. Keep those owners; do not sort the forest to implement cursor preference.
