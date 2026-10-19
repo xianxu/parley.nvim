@@ -699,6 +699,12 @@ local config = {
 		edit_change = nil, -- highlight for changed spans: review edits, the agent's changed text (default: Normal bg tinted blue)
 	},
 
+	-- winbar breadcrumb (#391): a side doc's tree path, else the file's own
+	-- path. false leaves file windows' winbar to the user unless a lock shows.
+	breadcrumb = {
+		enable = true,
+	},
+
 	-- lualine integration options
 	lualine = {
 		-- enable lualine integration

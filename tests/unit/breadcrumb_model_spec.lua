@@ -61,11 +61,34 @@ describe("breadcrumb_model", function()
     end)
 
     it("strips date and markdown suffix and disambiguates equal parent names", function()
-        assert.are.equal("", model.project(trail({ "/a.md" }), 100, ops))
+        assert.are.equal("a", model.project(trail({ "/2026-10-16-a.md" }), 100, ops))
         assert.are.equal("root › leaf", model.project(trail({ "/2026-10-16-root.md", "/leaf.md" }), 100, ops))
         assert.are.equal("a/shared/topic › b/shared/topic", model.project(trail({ "/a/shared/topic.md", "/b/shared/topic.md" }), 100, ops))
         assert.are.equal("same › same", model.project(trail({ "/same.md", "/same.md" }), 100, ops))
         assert.are.equal("100% › end", model.project(trail({ "/100%.md", "/end.md" }), 100, ops))
+    end)
+
+    it("shows a file's own path below its base as segments (#391)", function()
+        local repo = model.path_value("/r/lua/parley/x.lua", "/r")
+        assert.are.same({ version = 1, paths = { "/r/lua/parley/x.lua" }, omitted = 0,
+            labels = { "lua", "parley", "x.lua" } }, repo)
+        assert.are.equal("lua › parley › x.lua", model.project(repo, 100, ops))
+        assert.are.equal("README", model.project(model.path_value("/r/README.md", "/r"), 100, ops))
+        assert.are.equal("~ › notes › plan", model.project(model.path_value("/h/notes/2026-10-18-plan.md", "/h", "~"), 100, ops))
+        assert.are.equal("etc › x", model.project(model.path_value("/etc/x.md", "/"), 100, ops))
+        assert.are.equal("a › … › e › f", model.project(model.path_value("/r/a/b/c/d/e/f.md", "/r"), 14, ops))
+        assert.is_true(model.visible(model.path_value("/r/README.md", "/r")))
+    end)
+
+    it("leads a side-doc tree path that stopped early with its marker (#391)", function()
+        local function marked(paths, marker)
+            local value = trail(paths)
+            value.marker = marker
+            return value
+        end
+        assert.are.equal("? › leaf", model.project(marked({ "/leaf.md" }, "missing"), 100, ops))
+        assert.are.equal("↻ › b › a", model.project(marked({ "/b.md", "/a.md" }, "cycle"), 100, ops))
+        assert.are.equal("… › p › leaf", model.project(marked({ "/p.md", "/leaf.md" }, "depth"), 100, ops))
     end)
 
     it("keeps raw names when stripping makes distinct full suffixes identical", function()

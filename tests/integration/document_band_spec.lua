@@ -10,6 +10,30 @@ describe("shared document bands", function()
     local function observe(item)
         return { winbar = vim.wo[item.win].winbar, winhighlight = vim.wo[item.win].winhighlight }
     end
+    -- Every file shows its own path after the lock cell (#391).
+    local function path_of(item)
+        local value = require("parley.file_history").display(item.win)
+        return value and require("parley.breadcrumb_model").project(value, 1000, require("parley.display_text")) or ""
+    end
+    -- A window's band with its own path replaced, to compare different files.
+    local function shape(item)
+        local view, path = observe(item), path_of(item)
+        local escaped = vim.pesc(" " .. path:gsub("%%", "%%%%"))
+        if path ~= "" then
+            local replaced, count = view.winbar:gsub(escaped .. " · ", " <path> · ", 1)
+            view.winbar = count > 0 and replaced or view.winbar:gsub(escaped .. "%%=$", " <path>%%=")
+        end
+        return view
+    end
+    -- What a window shows once every owner has cleared: its path alone.
+    local function plain(item)
+        local path = path_of(item):gsub("%%", "%%%%")
+        return { winbar = "%#WinBar#         " .. (path ~= "" and " " .. path or "") .. "%=",
+            winhighlight = "StatusLine:WinBar" }
+    end
+    local function expect_plain(item)
+        assert.same(plain(item), observe(item))
+    end
     local function expect_view(item, label, highlight, cell_override, base_override)
         local cell, detail, base = "free     ", label, highlight
         if label == "free: editing takes your turn" then detail = ""
@@ -22,7 +46,9 @@ describe("shared document bands", function()
         if highlight == "DiagnosticError" or highlight == "DiagnosticOk" then base = "ParleySessionSyncFree" end
         cell, base = cell_override or cell, base_override or base
         local bar = "%#" .. base .. "#" .. cell
-        if detail ~= "" then bar = bar .. " %#" .. highlight .. "#" .. detail:gsub("%%", "%%%%") end
+        local path = path_of(item):gsub("%%", "%%%%")
+        if path ~= "" then bar = bar .. " " .. path end
+        if detail ~= "" then bar = bar .. (path ~= "" and " · " or " ") .. "%#" .. highlight .. "#" .. detail:gsub("%%", "%%%%") end
         assert.same({ winbar = bar .. "%=", winhighlight = "StatusLine:" .. base }, observe(item))
     end
     local function open(name, typed)
@@ -31,10 +57,11 @@ describe("shared document bands", function()
             or { "# Ordinary question", "body", "tail" }
         vim.fn.writefile(lines, path)
         if #opened > 0 then vim.cmd("vsplit") end
+        -- The operator's options predate the band, which claims a file on entry.
+        vim.wo.winbar = "original"
+        vim.wo.winhighlight = "StatusLine:Search"
         vim.cmd("edit " .. vim.fn.fnameescape(path))
         local item = { path = path, buf = vim.api.nvim_get_current_buf(), win = vim.api.nvim_get_current_win() }
-        vim.wo[item.win].winbar = "original"
-        vim.wo[item.win].winhighlight = "StatusLine:Search"
         opened[#opened + 1] = item
         return item
     end
@@ -49,7 +76,7 @@ describe("shared document bands", function()
         await(function() return document.identity(item.buf) ~= nil end)
     end
     before_each(function()
-        root = vim.fn.resolve(vim.fn.tempname()); vim.fn.mkdir(root, "p")
+        root = vim.fn.resolve(vim.fn.tempname()); vim.fn.mkdir(root .. "/.git", "p")
         opened, saved = {}, { env = {} }
         for _, key in ipairs(env_keys) do saved.env[key] = vim.env[key] end
         require("tests.helpers.fake_couch").write(root, root .. "/sent", root .. "/argv")
@@ -70,6 +97,8 @@ describe("shared document bands", function()
         p.config.state_dir = root .. "/state"
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
         ss.POLL_MS, ss.PING_CHECK_MS = 20, 60000
+        -- Production paints every file's path; tests share that observer.
+        require("parley.file_history").setup()
     end)
     after_each(function()
         for _, item in ipairs(opened) do
@@ -97,12 +126,12 @@ describe("shared document bands", function()
         -- Once that owner detaches, the same fallback is used by either kind.
         ss.detach(typed.buf)
         expect_view(typed, "Couch unavailable: agentic state unknown", "WarningMsg")
-        local typed_view = observe(typed)
+        local typed_view = shape(typed)
         local ordinary = open("unknown")
         p.setup_markdown_keymaps(ordinary.buf)
         await(function() return document.status(ordinary.buf).phase == "unknown" end)
         expect_view(ordinary, "Couch unavailable: agentic state unknown", "WarningMsg")
-        assert.same(typed_view, observe(ordinary))
+        assert.same(typed_view, shape(ordinary))
     end)
 
     it("shares error text while retaining proven-plain and attached lock knowledge", function()
@@ -127,7 +156,7 @@ describe("shared document bands", function()
         return typed, ordinary
     end
     local function equivalent(typed, ordinary, label, highlight)
-        assert.same(observe(typed), observe(ordinary))
+        assert.same(shape(typed), shape(ordinary))
         expect_view(ordinary, label, highlight)
     end
     local function feedback_label(item)
@@ -207,7 +236,7 @@ describe("shared document bands", function()
             end)
             local label = feedback_label(item)
             expect_view(item, label, is_error and "DiagnosticError" or "DiagnosticOk")
-            return observe(item), label
+            return shape(item), label
         end
         local snapshots = {}
         for _, item in ipairs({ typed, ordinary }) do
@@ -258,8 +287,6 @@ describe("shared document bands", function()
         vim.api.nvim_set_current_win(ordinary.win)
         vim.cmd("edit " .. vim.fn.fnameescape(ordinary.path))
         ordinary.buf = vim.api.nvim_get_current_buf()
-        vim.wo[ordinary.win].winbar = "original"
-        vim.wo[ordinary.win].winhighlight = "StatusLine:Search"
         p.setup_markdown_keymaps(ordinary.buf)
         local label = "Pending document move: open " .. destination .. " to recover"
         await(function() return feedback_label(ordinary) == label end)
@@ -269,7 +296,7 @@ describe("shared document bands", function()
         assert.is_nil(vim.wo[ordinary.win].winbar:find("unknown", 1, true))
     end)
 
-    it("restores original options after unknown-to-registered handoff and detach", function()
+    it("returns to the path band after unknown-to-registered handoff and detach", function()
         local unrelated = open("unrelated", true); ss.attach(unrelated.buf)
         local ordinary = open("handoff")
         vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
@@ -282,11 +309,11 @@ describe("shared document bands", function()
         await(function() return document.identity(ordinary.buf) ~= nil end)
         expect_view(ordinary, "free: editing takes your turn", "ParleySessionSyncFree")
         document.detach(ordinary.buf)
-        assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(ordinary))
+        expect_plain(ordinary)
         expect_view(unrelated, "free: editing takes your turn", "ParleySessionSyncFree")
     end)
 
-    it("keeps matching trails and lock cells for actual session and registered file states", function()
+    it("keeps matching paths and lock cells for actual session and registered file states", function()
         vim.fn.mkdir(root .. "/typed", "p"); vim.fn.mkdir(root .. "/ordinary", "p")
         local typed = open("typed/question", true); ss.attach(typed.buf)
         local ordinary = open("ordinary/question"); register(ordinary); admit(ordinary)
@@ -296,22 +323,24 @@ describe("shared document bands", function()
         for _, item in ipairs({ typed, ordinary }) do
             assert.is_true(history.restore(item.win, { version = 1, paths = { base, item.path }, omitted = 0 }))
         end
-        assert.same(observe(typed), observe(ordinary))
-        assert.truthy(vim.wo[ordinary.win].winbar:find("root › question", 1, true))
+        assert.same(shape(typed), shape(ordinary))
+        -- A restored trail stays behind Back; the band names the file (#391).
+        assert.truthy(vim.wo[ordinary.win].winbar:find(" ordinary › question%=", 1, true))
+        assert.is_nil(vim.wo[ordinary.win].winbar:find("root", 1, true))
         for _, item in ipairs({ typed, ordinary }) do
             vim.api.nvim_buf_set_lines(item.buf, -1, -1, false, { "unsubmitted" })
             assert.is_true(ss.set_submission_feedback(item.buf, "submit failed: busy", true))
         end
-        assert.same(observe(typed), observe(ordinary))
+        assert.same(shape(typed), shape(ordinary))
         for _, item in ipairs({ typed, ordinary }) do
             assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[item.win].winhighlight)
             assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
             assert.truthy(vim.wo[item.win].winbar:find("submit failed: busy", 1, true))
-            assert.truthy(vim.wo[item.win].winbar:find("root › question", 1, true))
+            assert.truthy(vim.wo[item.win].winbar:find("question · ", 1, true))
         end
     end)
 
-    it("composes independent trails in two windows showing the same attached buffer", function()
+    it("shows the same path, not each window's trail, in two windows of one attached buffer", function()
         local item = open("same-window-buffer", true); ss.attach(item.buf)
         local history = require("parley.file_history"); history.setup()
         local first = item.win
@@ -322,8 +351,9 @@ describe("shared document bands", function()
         assert.is_true(history.restore(first, { version = 1, paths = { a, item.path }, omitted = 0 }))
         assert.is_true(history.restore(second, { version = 1, paths = { b, item.path }, omitted = 0 }))
         assert.is_true(ss.set_submission_feedback(item.buf, "submitted to ops:0 · 14:23", false))
-        assert.truthy(vim.wo[first].winbar:find("first › same-window-buffer", 1, true))
-        assert.truthy(vim.wo[second].winbar:find("second › same-window-buffer", 1, true))
+        assert.equals(vim.wo[first].winbar, vim.wo[second].winbar)
+        assert.truthy(vim.wo[first].winbar:find(" same-window-buffer · ", 1, true))
+        assert.is_nil(vim.wo[first].winbar:find("first", 1, true))
         for _, win in ipairs({ first, second }) do
             assert.truthy(vim.wo[win].winbar:find("submitted to ops:0", 1, true))
             assert.equals("StatusLine:ParleySessionSyncFree", vim.wo[win].winhighlight)
@@ -333,7 +363,9 @@ describe("shared document bands", function()
         local rendered = vim.api.nvim_eval_statusline(vim.wo[second].winbar,
             { winid = second, use_winbar = true, maxwidth = 1000 }).str
         assert.is_true(vim.fn.strdisplaywidth(vim.trim(rendered)) <= 24)
-        assert.truthy(vim.wo[first].winbar:find("first › same-window-buffer", 1, true))
+        assert.truthy(vim.wo[first].winbar:find(" same-window-buffer · ", 1, true))
+        assert.same({ a, item.path }, history.snapshot(first).paths)
+        assert.same({ b, item.path }, history.snapshot(second).paths)
     end)
 
     local function renderer(item)
@@ -372,7 +404,7 @@ describe("shared document bands", function()
             vim.fn.writefile({ "ancestor" }, ancestor)
             local trail = { version = 1, paths = { ancestor, item.path }, omitted = 0 }
             assert.is_true(history.restore(item.win, trail))
-            assert.truthy(vim.wo[item.win].winbar:find("ancestor › eligible", 1, true))
+            assert.truthy(vim.wo[item.win].winbar:find(" eligible%=", 1, true))
             local scratch, float
             if excluded == "floating" then
                 float = vim.api.nvim_open_win(item.buf, true,
@@ -391,13 +423,13 @@ describe("shared document bands", function()
             for _ = 1, 2 do
                 vim.api.nvim_exec_autocmds("WinResized", {})
                 band.refresh(win)
-                assert.is_nil(vim.wo[win].winbar:find("ancestor › eligible", 1, true))
+                assert.is_nil(vim.wo[win].winbar:find("eligible", 1, true))
             end
             if float then vim.api.nvim_win_close(float, true)
             else vim.api.nvim_win_set_buf(item.win, item.buf) end
             band.refresh(item.win)
             assert.same(trail, history.snapshot(item.win))
-            assert.truthy(vim.wo[item.win].winbar:find("ancestor › eligible", 1, true))
+            assert.truthy(vim.wo[item.win].winbar:find(" eligible%=", 1, true))
             assert.is_true(history.back())
             assert.equals(ancestor, vim.api.nvim_buf_get_name(0))
             if scratch then vim.api.nvim_buf_delete(scratch, { force = true }) end
@@ -414,13 +446,13 @@ describe("shared document bands", function()
         vim.bo[item.buf].buftype = "nofile"
         band.refresh(item.win)
         assert.is_nil(history.peek(item.win))
-        assert.is_nil(vim.wo[item.win].winbar:find("ancestor ›", 1, true))
+        assert.is_nil(vim.wo[item.win].winbar:find("same-buffer-eligibility", 1, true))
         vim.bo[item.buf].buftype = ""
         assert.truthy(history.snapshot(item.win))
         vim.api.nvim_buf_set_name(item.buf, "test://renamed")
         band.refresh(item.win)
         assert.is_nil(history.peek(item.win))
-        assert.is_nil(vim.wo[item.win].winbar:find("ancestor ›", 1, true))
+        assert.is_nil(vim.wo[item.win].winbar:find("same-buffer-eligibility", 1, true))
         vim.api.nvim_buf_set_name(item.buf, item.path)
         assert.truthy(history.snapshot(item.win))
         assert.is_true(history.back())
@@ -457,7 +489,8 @@ describe("shared document bands", function()
                 local owner = renderer(item)
                 if kind == "state-owned" then owner.render(free) end
                 local custom = { winbar = "operator custom bar", winhighlight = "StatusLine:IncSearch" }
-                local expected = { winbar = "original", winhighlight = "StatusLine:Search" }
+                -- The band keeps every option it still owns once the owner clears.
+                local expected = plain(item)
                 for _, option in ipairs({ "winbar", "winhighlight" }) do
                     if overridden == option or overridden == "both" then
                         vim.wo[item.win][option] = custom[option]
@@ -472,7 +505,8 @@ describe("shared document bands", function()
                         if overridden == option or overridden == "both" then
                             assert.equals(custom[option], vim.wo[item.win][option])
                         else
-                            assert.is_true(vim.wo[item.win][option] ~= expected[option], "unclaimed override must not disable owned option")
+                            assert.is_true(vim.wo[item.win][option] ~= "original" and vim.wo[item.win][option] ~= "StatusLine:Search",
+                                "unclaimed override must not disable owned option")
                         end
                     end
                 end
@@ -493,7 +527,7 @@ describe("shared document bands", function()
         coordinator.clear()
         expect_view(item, free.label, free.hl)
         session.clear()
-        assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(item))
+        expect_plain(item)
     end)
 
     it("keeps a pending overlay above refreshed lock state without hiding the lock cell", function()
@@ -518,7 +552,7 @@ describe("shared document bands", function()
         assert.equals("StatusLine:WarningMsg", vim.wo[item.win].winhighlight)
         assert.truthy(vim.wo[item.win].winbar:find("unknown", 1, true))
         overlay.clear()
-        assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(item))
+        expect_plain(item)
     end)
 
     it("does not let an older owner clear a newer identical band", function()
@@ -528,7 +562,7 @@ describe("shared document bands", function()
         older.clear()
         expect_view(item, free.label, free.hl)
         newer.clear()
-        assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(item))
+        expect_plain(item)
     end)
 
     it("keeps another window owner intact and preserves user option overrides", function()
@@ -541,7 +575,7 @@ describe("shared document bands", function()
         assert.same({ winbar = "operator custom bar", winhighlight = "StatusLine:IncSearch" }, observe(first))
         expect_view(second, free.label, free.hl)
         b.clear()
-        assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(second))
+        expect_plain(second)
     end)
 
     it("retires the previous buffer's ownership when a window changes buffers", function()
@@ -553,7 +587,7 @@ describe("shared document bands", function()
         older.clear()
         expect_view(first, free.label, free.hl)
         newer.clear()
-        assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(first))
+        expect_plain(first)
     end)
 
     for _, mode in ipairs({ "native :buffer", "noncurrent nvim_win_set_buf" }) do
@@ -570,22 +604,21 @@ describe("shared document bands", function()
                     vim.api.nvim_win_set_buf(target, buf)
                 end
             end
-            local original_a = { winbar = "original A", winhighlight = "StatusLine:Search" }
-            local original_b = { winbar = "original B", winhighlight = "StatusLine:IncSearch" }
-            vim.wo[target].winbar, vim.wo[target].winhighlight = original_a.winbar, original_a.winhighlight
+            -- Each buffer's baseline is its own path band (#391).
             local owner_a, owner_b = renderer(a), renderer(b)
             owner_a.render(free)
             switch(b.buf)
-            vim.wo[target].winbar, vim.wo[target].winhighlight = original_b.winbar, original_b.winhighlight
             owner_b.render(free)
             switch(a.buf)
             owner_a.render(free)
             owner_a.clear()
-            assert.same(original_a, observe(a), "A must recover its own options after returning from B")
+            expect_plain(a)
+            assert.truthy(vim.wo[target].winbar:find(" roundtrip-a%=", 1, true), "A must recover its own band after returning from B")
             switch(b.buf)
             owner_b.render(free)
             owner_b.clear()
-            assert.same(original_b, observe(a), "B must recover its own options after returning from A")
+            expect_plain(a)
+            assert.truthy(vim.wo[target].winbar:find(" roundtrip-b%=", 1, true), "B must recover its own band after returning from A")
         end)
     end
 
@@ -593,7 +626,6 @@ describe("shared document bands", function()
         local a, b = open("hidden-a"), open("hidden-b")
         local target = a.win
         vim.api.nvim_set_current_win(target)
-        vim.wo[target].winbar, vim.wo[target].winhighlight = "original A", "StatusLine:Search"
         local hidden = renderer(a)
         hidden.render(free)
         vim.cmd("vsplit")
@@ -601,14 +633,14 @@ describe("shared document bands", function()
         local visible = renderer(a)
         visible.render(free)
         vim.api.nvim_win_set_buf(target, b.buf)
-        vim.wo[target].winbar, vim.wo[target].winhighlight = "original B", "StatusLine:IncSearch"
         local owner_b = renderer(b)
         owner_b.render(free)
         hidden.clear()
         expect_view(a, free.label, free.hl)
         expect_view(other_a, free.label, free.hl)
         owner_b.clear()
-        assert.same({ winbar = "original B", winhighlight = "StatusLine:IncSearch" }, observe(a))
+        expect_plain(a)
+        assert.truthy(vim.wo[target].winbar:find(" hidden-b%=", 1, true))
         expect_view(other_a, free.label, free.hl)
         visible.clear()
     end)

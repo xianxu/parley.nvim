@@ -10,7 +10,7 @@ local text_ops = require("parley.display_text")
 
 local function trail_for(win)
     local history = package.loaded["parley.file_history"]
-    return history and history.peek and history.peek(win) or nil
+    return history and history.display and history.display(win) or nil
 end
 
 local function value_for(win, record, depth)
@@ -174,7 +174,7 @@ function M.refresh(win)
     end
     if record and record.buf ~= buf then retire(win, record, true); record = nil end
     local trail = trail_for(win)
-    if not record and (not trail or #trail.paths < 2) then return end
+    if not record and not require("parley.breadcrumb_model").visible(trail) then return end
     record = record or record_for(win, buf)
     local value = value_for(win, record)
     if not value.winbar then retire(win, record); return end
