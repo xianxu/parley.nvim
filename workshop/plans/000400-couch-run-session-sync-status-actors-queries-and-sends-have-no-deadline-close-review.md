@@ -98,3 +98,96 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"911c58ab-03f3-42b5-984e-dddd63e03545","repository":"github.com/xianxu/parley.nvim","issue_id":"000400","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/637be2cad62ad5ba","reviewed_head":"9d5d5f7586131f1f162f46fbfea75abe4d4f7f26","slot":"parley.nvim:3","requested_at":"2026-10-19T19:36:39.794063Z"},"phase":"finished","pid":28189,"started_at":"2026-10-19T19:36:39.898306Z","finished_at":"2026-10-19T19:56:26.078862Z","session_id":"cce98557-87ad-433a-a7ac-5e56c2e22bc6","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T13:24:00-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 400 — couch.run: session-sync status/actors queries and sends have no deadline |
+| repo | parley.nvim |
+| issue file | workshop/issues/000400-couch-run-session-sync-status-actors-queries-and-sends-have-no-deadline.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | f5afbf45bf761ff0249f1e6a9d345ebe44814b1d..5b58f710009b8d7191052e9908c7b57da51fbbf8 |
+| command | sdlc close --issue 400 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T13:24:00-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking prior-round fixes against the code; next I'll look at attention.lua and run the specs.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Summary.** All three findings from round 1 are fixed, and I checked each one against the code and the tests rather than the commit messages. The default deadline is now `couch.deadline_ms()`. It is read on every call through `document_registry.config_ms`, so the user's own `agentic_submit_timeout_ms` applies (`couch.lua:17-19`). Sends get three deadlines (`couch.send_deadline_ms` → `document_registry.lost_ms`). `couch.timed_out` checks only for code 124, and the Revisions entry corrects the Spec's status-query row. I searched for every way `couch` gets called (`couch.run`, `couch.query` and `couch.send`). Only `document_registry` opts out of the default deadline, with `timeout = false` (`document_registry.lua:120`). `attention` keeps its own explicit 5000 ms, and every other caller gets the default. I ran `make test-spec SPEC=modes/review` and `SPEC=modes/session_sync` in this checkout: 46 spec files, 0 failed, 0 errors. That includes the 6 new `couch.run deadline` unit specs, the 3 `#400` session-sync integration specs and the new agentic killed-send spec. One Minor finding remains, about prose: the Spec and Plan text still state the round-1 design that the Revisions replaced.
+
+Done-when: current. Both clauses still hold under the revised design. Every child is bounded (1x the submit deadline for queries, 3x for sends, `timeout = false` only where the registry's own timer bounds the child), and the callback fires once on expiry. A timed-out probe clears `s.probing` and probes again, and a spec shows it. What the Revisions added (the send log line and the agentic band message) goes beyond Done-when, and it is tested.
+
+1. **Strengths**
+   - `document_registry.lost_ms` (`document_registry.lua:24-26`) is now the one source for "three submit deadlines". The rename default and the send deadline both read it (ARCH-DRY).
+   - The legacy submit notice uses the `obj.stderr` that `couch.send` sets (`session_sync.lua:865-866`). The deadline value is formatted in one place only.
+   - `finish` in `couch.run` drops a second report, and a unit spec pins that by feeding it two reports (`couch_spec.lua`, "delivers once").
+   - The fake's `nap` helper ends on SIGTERM. Without it, an orphaned `sleep` would hold the pipes and keep the timeout from ever reporting. The lessons entry records this.
+   - The session-sync spec checks that every spawn has the right deadline: queries get `deadline_ms()`, sends get `send_deadline_ms()`, registry children get none. It also checks that all five call kinds were actually exercised.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - The Spec and Plan body still describe the round-1 design. This is the 2nd finding in family `spec-claim-diverges-from-code`.
+     - **The rule:** when a Revision replaces a Spec or Plan claim, edit or strike the replaced sentence where it stands, so the body never contradicts the code.
+     - **Instances:**
+       - Spec ¶1 says the default is `couch.DEADLINE_MS`, the shipped 15000.
+       - Spec table: the ping/violation and legacy-submit rows say "default", but sends now get 3x.
+       - Spec timeout table, status row: "the band keeps its last owed state".
+       - ARCH-CONSTRAINTS says "at most 15 s", but sends now live up to 45 s.
+       - Plan item 1 says "`DEADLINE_MS` … (code 124, signal 15)".
+
+5. **Test coverage notes**
+   - Done-when clause 2 says "a probe whose couch call times out". The integration spec hangs only the status query. A hung actors query is never reached (`--actors` hangs too, but the status query is already hanging). The code clears `s.probing` before using the result at `session_sync.lua:431`, so the behavior is right, but no spec pins it.
+   - The #357 slow-send spec now has 1 s of slack (it sleeps 2 s against a 3 s send deadline). That is enough, but it could time out on a heavily loaded runner.
+   - Reverting `deadline_ms` to read `require("parley.config")` would turn the "follows the user's submit budget, read per call" spec red. That is the regression evidence for BR-2.
+
+6. **Architecture**
+   - **ARCH-DRY: pass.** `lost_ms` is extracted and shared, and the timeout message has one source.
+   - **ARCH-PURE: pass.** `timed_out` and `lost_ms` are pure. `couch.run` is the thin IO seam.
+   - **ARCH-PURPOSE: pass.** Every `couch.run` caller is now bounded. No caller was left out of the search, and nothing that was the point of the issue was pushed to a follow-up.
+   - **ARCH-EVOLVE: pass (not applicable).** No persisted format changed.
+
+7. **Plan revision recommendations**
+   - Fold the Revisions into the Spec and Plan body text, as listed under Minor. No other revision is needed.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Revisions entry corrects the Spec row; a nil status reads as nothing owed like every failed status (session_sync.lua:405-420), which is consistent with pair 437's documented rule.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      couch.deadline_ms reads document_registry.config_ms per call (couch.lua:17-19); the unit spec "follows the user's submit budget, read per call" pins it; the session_sync notice uses the stderr couch.send formats.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      couch.timed_out is obj.code == 124 alone (couch.lua:43-45); the unit spec asserts code 124 with signal 0 counts as timed out.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: spec-claim-diverges-from-code
+    title: |
+      Spec and Plan body still state the round-1 design the Revisions replaced
+    detail: |
+      This is the 2nd finding in this family. The rule: when a Revision replaces a Spec or Plan claim, edit or strike the replaced sentence where it stands. Instances: Spec paragraph 1 (couch.DEADLINE_MS, shipped 15000); Spec table ping/violation and legacy-submit rows (default, but sends get 3x); status row (the band keeps its last owed state); ARCH-CONSTRAINTS (at most 15 s, but sends live up to 45 s); Plan item 1 (DEADLINE_MS, code 124 with signal 15).
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"56294bd1-c2ca-44c7-8a11-7e23f60f7aa7","repository":"github.com/xianxu/parley.nvim","issue_id":"000400","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/5dff3a2815417e27","reviewed_head":"5b58f710009b8d7191052e9908c7b57da51fbbf8","slot":"parley.nvim:3","requested_at":"2026-10-19T20:16:23.456289Z"},"phase":"finished","pid":46937,"started_at":"2026-10-19T20:16:23.550931Z","finished_at":"2026-10-19T20:23:51.274626Z","session_id":"069186f2-920b-4347-9950-0286b567b407","outcome":"returned"}] -->
