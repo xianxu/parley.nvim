@@ -1,6 +1,6 @@
 ---
 id: 000397
-status: codecomplete
+status: done
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
@@ -22,6 +22,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 555ad10936db22758652a4a29f0a2ce861a8b1de
         evidence_commit: fcc4a21d91be7041ab68a7c9d9ce4df078683185
+        landed_commit: 70c00daf62a61a53bed9d9385dd734f1e94c94ed
 ---
 
 # breadcrumb tree path: trailing comment on parent: breaks the chain; per-node buffer scan; untested path fallbacks
