@@ -61,7 +61,7 @@ describe("breadcrumb_model", function()
     end)
 
     it("strips date and markdown suffix and disambiguates equal parent names", function()
-        assert.are.equal("", model.project(trail({ "/a.md" }), 100, ops))
+        assert.are.equal("a", model.project(trail({ "/2026-10-16-a.md" }), 100, ops))
         assert.are.equal("root › leaf", model.project(trail({ "/2026-10-16-root.md", "/leaf.md" }), 100, ops))
         assert.are.equal("a/shared/topic › b/shared/topic", model.project(trail({ "/a/shared/topic.md", "/b/shared/topic.md" }), 100, ops))
         assert.are.equal("same › same", model.project(trail({ "/same.md", "/same.md" }), 100, ops))

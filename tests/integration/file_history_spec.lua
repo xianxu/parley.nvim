@@ -117,11 +117,30 @@ describe("per-window file Back (#333)", function()
         assert.equals(tree.C2, path())
         assert.truthy(vim.wo.winbar:find("A › B2 › C2", 1, true))
 
-        -- An edited parent (seen on re-entry) that no longer exists ends with a marker.
+        -- A tree root shows itself.
+        vim.cmd("edit " .. vim.fn.fnameescape(tree.A))
+        assert.truthy(vim.wo.winbar:find(" A%=", 1, true))
+
+        -- An edited parent that no longer exists repaints with a marker on re-entry.
         local c1 = vim.fn.bufnr(tree.C1)
-        api.nvim_buf_set_lines(c1, 1, 2, false, { "parent: ../gone.md" })
         vim.cmd("buffer " .. c1)
+        assert.truthy(vim.wo.winbar:find("A › B1 › C1", 1, true))
+        api.nvim_buf_set_lines(c1, 1, 2, false, { "parent: ../gone.md" })
+        local here = api.nvim_get_current_win()
+        vim.cmd("new")
+        local other = api.nvim_get_current_win()
+        api.nvim_set_current_win(here)
         assert.truthy(vim.wo.winbar:find("? › C1", 1, true))
+        api.nvim_win_close(other, true)
+
+        -- An unreadable parent ends the chain the same way, without an error.
+        doc("E", "A.side/E.md", { "parent: ../A.md" })
+        doc("D", "A.side/D.md", { "parent: E.md" })
+        vim.uv.fs_chmod(tree.E, 0)
+        local ok, err = pcall(vim.cmd, "edit " .. vim.fn.fnameescape(tree.D))
+        vim.uv.fs_chmod(tree.E, 420)
+        assert.is_true(ok, err)
+        assert.truthy(vim.wo.winbar:find("? › D", 1, true))
     end)
 
     it("exports detached trails for real Alt+o and restores native roots on Back", function()

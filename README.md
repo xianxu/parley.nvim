@@ -223,4 +223,4 @@ Deleting a link leaves its asset on disk. The Markdown file's owner handles
 sidecar moves and sweeps unreferenced assets (the TL for session and QA files).
 
 
-The document winbar combines a fixed-width edit-lock indicator with the current window's Alt+o file trail. Alt+Shift+O restores earlier file visits and their trails. Submission feedback remains visible beside the lock; long trails shorten in the middle to fit the window. See [breadcrumb behavior and snapshots](atlas/ui/breadcrumb.md).
+The document winbar combines a fixed-width edit-lock indicator with where the file is: a side doc's tree path (its `parent:` chain up to the root), otherwise the file's own path relative to its repository. Alt+o links never change what it shows; Alt+Shift+O still walks earlier file visits. Submission feedback remains visible beside the lock; long paths shorten in the middle to fit the window. The band replaces any winbar of your own in file windows; set `breadcrumb = { enable = false }` to turn it off there (lock states still show). See [breadcrumb behavior and snapshots](atlas/ui/breadcrumb.md).

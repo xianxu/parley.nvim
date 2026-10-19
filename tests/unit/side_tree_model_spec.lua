@@ -62,4 +62,13 @@ describe("side_tree_model.chain (#391)", function()
         model.chain("/100", r.read)
         assert.are.equal(model.CAP + 1, r.reads)
     end)
+
+    it("parses top-level frontmatter keys only, resolving parent against the doc's directory", function()
+        assert.are.same({ tree = false }, model.parse({ "# no frontmatter", "parent: ../a.md" }, "/r/a.side"))
+        assert.are.same({ tree = true, parent = "/r/a.md" },
+            model.parse({ "---", "parent: \"../a.md\"", "discussions:", "  - doc: b.side/c.md", "    parent: x.md", "---", "parent: y.md" }, "/r/a.side"))
+        assert.are.same({ tree = false, parent = "/abs/p.md" }, model.parse({ "---", "parent: '/abs/p.md'", "---" }, "/r"))
+        assert.are.same({ tree = false }, model.parse({ "---", "parent:", "---" }, "/r"))
+        assert.are.same({ tree = false }, model.parse({ "---", "parent: a.md" }, "/r"))
+    end)
 end)

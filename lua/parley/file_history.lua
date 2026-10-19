@@ -43,18 +43,13 @@ local function read_node(path)
     end
     local hit = parsed[path]
     if hit and hit.stamp == stamp then return hit.node end
-    local lines = buf and vim.api.nvim_buf_get_lines(buf, 0, 200, false) or vim.fn.readfile(path, "", 200)
-    local node = { tree = false }
-    local close = lines[1] == "---" and require("parley.chat_parser").find_header_end(lines)
-    for i = 2, (close or 1) - 1 do
-        local key, value = lines[i]:match("^([%w_-]+):%s*(.-)%s*$")
-        if key == "discussions" then node.tree = true end
-        value = value and (value:match('^"(.*)"$') or value:match("^'(.*)'$") or value)
-        if key == "parent" and value ~= "" then
-            local absolute = value:sub(1, 1) == "/" and value or vim.fs.dirname(path) .. "/" .. value
-            node.parent = vim.fn.resolve(vim.fs.normalize(absolute))
-        end
-    end
+    local ok, lines = true
+    if buf then lines = vim.api.nvim_buf_get_lines(buf, 0, 200, false)
+    else ok, lines = pcall(vim.fn.readfile, path, "", 200) end
+    -- An unreadable file is a missing node, never an error out of BufEnter.
+    if not ok then return nil end
+    local node = side_tree.parse(lines, vim.fs.dirname(path))
+    if node.parent then node.parent = vim.fn.resolve(node.parent) end
     if not hit then parsed_count = parsed_count + 1 end
     if parsed_count > PARSED_MAX then parsed, parsed_count = {}, 1 end
     parsed[path] = { stamp = stamp, node = node }
@@ -86,10 +81,13 @@ local function observe(win, kind)
             generations[win] = (generations[win] or 0) + 1
         end
         histories[win] = model.transition(history, entry)
-        if kind == "visit" or not shown[win] or shown[win].path ~= entry.path then
+        local before = shown[win]
+        if kind == "visit" or not before or before.path ~= entry.path then
             shown[win] = { path = entry.path, value = side_tree.chain(entry.path, read_node) or path_display(entry.path) }
         end
-        if kind == "visit" and (changed or not vim.deep_equal(previous, presented[win])) then repaint(win) end
+        -- A frontmatter edit seen on re-entry changes the value, not the path.
+        local moved = not before or not vim.deep_equal(before, shown[win])
+        if moved or kind == "visit" and (changed or not vim.deep_equal(previous, presented[win])) then repaint(win) end
     elseif previous then
         repaint(win)
     end

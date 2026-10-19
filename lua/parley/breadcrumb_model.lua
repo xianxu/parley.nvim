@@ -159,10 +159,10 @@ function M.path_value(path, base, prefix)
     return { version = 1, paths = { path }, omitted = 0, labels = labels }
 end
 
--- A lone navigation root shows nothing; tree paths with a marker and file
--- paths always show.
+-- Every display value shows, a tree root and a repo-top file included: the
+-- navigation trail, the one value a lone root once hid, is never displayed.
 function M.visible(value)
-    return value ~= nil and (value.labels ~= nil or #value.paths > 1 or value.marker ~= nil)
+    return value ~= nil and #value.paths > 0
 end
 
 function M.project(value, budget, ops)

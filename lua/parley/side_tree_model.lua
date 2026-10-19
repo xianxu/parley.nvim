@@ -5,7 +5,23 @@ local M = {}
 
 M.CAP = 32
 
--- nil means the leaf is outside every side-doc tree and keeps its trail.
+-- A node from top-level frontmatter keys only (line 1 is `---`); an indented
+-- key belongs to a `discussions:` entry. `parent:` resolves against `dir`.
+function M.parse(lines, dir)
+    local node = { tree = false }
+    if lines[1] ~= "---" then return node end
+    for i = 2, (require("parley.chat_parser").find_header_end(lines) or 1) - 1 do
+        local key, value = lines[i]:match("^([%w_-]+):%s*(.-)%s*$")
+        if key == "discussions" then node.tree = true end
+        value = value and (value:match('^"(.*)"$') or value:match("^'(.*)'$") or value)
+        if key == "parent" and value ~= "" then
+            node.parent = vim.fs.normalize(value:sub(1, 1) == "/" and value or dir .. "/" .. value)
+        end
+    end
+    return node
+end
+
+-- nil means the leaf is outside every side-doc tree and shows its own path.
 function M.chain(leaf, read, cap)
     cap = cap or M.CAP
     local node = read(leaf)

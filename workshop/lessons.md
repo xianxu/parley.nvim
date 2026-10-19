@@ -846,3 +846,9 @@ The first ColorScheme fix re-ran only `setup_highlights`, while the atlas said "
 - #390: Cycle recovery in a parent forest must start within the cycle, not at
   the first unvisited descendant. Test reverse-ordered tails entering self and
   multi-node cycles, including ancestor-search context and linear traversal.
+
+- #391: When a scope change widens a rule ("every file shows a path"), sweep
+  the old gates that encoded the narrower rule (the lone-root hide) and the
+  repaint triggers keyed on the old inputs (path change only). Every read of a
+  user file on an autocmd path is guarded: an unreadable file is data, not an
+  error out of BufEnter.

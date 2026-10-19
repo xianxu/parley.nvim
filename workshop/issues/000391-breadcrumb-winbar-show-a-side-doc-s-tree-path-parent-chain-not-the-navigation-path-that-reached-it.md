@@ -33,7 +33,9 @@ For a document in a side-doc tree (a `.side/` doc with `parent:` frontmatter, or
 
 - The A > B1 > C1 / A > B2 > C2 case shows A > B1 > C1 after jumping from C2 to C1 (spec test).
 - A cycle, a missing parent and a depth over the cap each show a bounded path with a marker, no hang.
-- Files outside trees keep today's trail; Back behaves as before.
+- Every other file shows its own path (repo-relative, else `~`, else absolute); no file window shows the navigation trail. A tree root and a repo-top file show a winbar too. Back behaves as before. (Revised 2026-10-18 for the operator's scope addition; was "files outside trees keep today's trail".)
+- An unreadable parent ends the chain with the missing marker, never an error; a frontmatter edit repaints on window re-entry.
+- `breadcrumb = { enable = false }` opts out; README and atlas describe the surface and the replaced user winbar.
 
 ## Plan
 
@@ -52,6 +54,7 @@ Hot path: BufEnter/WinEnter per event; growth driver = tree depth d, cost d+1 fr
 - 2026-10-18, hub refinement: cache each file's parsed frontmatter by path plus stamp (mtime and size, or changedtick for a loaded buffer), bounded at 256 entries and reset when full.
 - 2026-10-18, operator scope addition (hub-approved reading): no navigation trail in the winbar anywhere. A file outside any tree shows its own path as segments under the existing label and collapse rules, relative to the nearest `.git` root, else `~`, else `/`. Every file, including roots and repo-top files, shows a winbar. Back and snapshot/restore are unchanged. Delta: `breadcrumb_model.path_value` and `visible`; `file_history.display` returns the tree or file path, never the trail. The band, lock-leave and session-sync specs now treat the path band as every file's baseline: an operator's original winbar comes back only when the window stops showing a file.
 - 2026-10-18, hub follow-up: `breadcrumb = { enable = false }` opts out (the band then shows only for lock states, and Back still works); atlas/ui/breadcrumb.md notes that the band replaces a user's own winbar in file windows.
+- 2026-10-18, close review round 1 (REWORK, BR-1..7): an unreadable parent degrades to the missing marker (guarded read); every display value is visible, so a tree root shows itself (the lone-root rule hid only trails, which are never displayed); the band repaints when the shown value changes on re-entry; frontmatter parsing moved into the pure `side_tree_model.parse` with unit tests (top-level keys only, which is why chat_parser's indentation-trimming key parser is not reused); Done when and README updated. The Plan's `trees[win]` is `shown[win]` in code, and its "else the trail" fallback is the file's own path per the scope addition.
 
 ## Log
 
