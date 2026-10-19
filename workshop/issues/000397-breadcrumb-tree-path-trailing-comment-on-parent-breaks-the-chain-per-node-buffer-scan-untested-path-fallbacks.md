@@ -45,6 +45,7 @@ None written: the three fixes are small and recorded in the Log.
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — ui/breadcrumb (now mapping breadcrumb_model_spec) exit 0 on 555ad109, 74 cases: side_tree_model_spec parses parent: with trailing comments (bare, quoted, tab), keeps a#b.md, parent: # none is no parent, padded --- opener; breadcrumb_model_spec located() root/home/absolute/home-lookalike; file_history_spec depth-1 and depth-8 scans equal with the exact 9-segment winbar (old per-node lookup: 10 vs 3, red). Lint 0 warnings; full suite running on 555ad109.; review verdict: SHIP
 
 ### 2026-10-19
 - `parse` takes a quoted value as quoted, else the text before whitespace + `#` (a leading `#` included, so `parent: # none` is no parent); `a#b.md` keeps its `#`. The opener trims as `find_header_end` does.

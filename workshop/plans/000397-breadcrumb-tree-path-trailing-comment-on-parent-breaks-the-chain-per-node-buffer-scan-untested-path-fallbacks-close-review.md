@@ -87,3 +87,66 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"226861a8-8c70-4a34-b23f-344278f68270","repository":"github.com/xianxu/parley.nvim","issue_id":"000397","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/426575a874c6971f","reviewed_head":"d1dfab038d0bd6c595b903a8fe2f4dd965988f60","slot":"parley.nvim:3","requested_at":"2026-10-19T08:06:45.543908Z"},"phase":"finished","pid":93383,"started_at":"2026-10-19T08:06:45.66995Z","finished_at":"2026-10-19T08:14:22.349562Z","session_id":"8545f63f-3a26-497d-b798-f195d5de6669","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T01:18:10-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 397 — breadcrumb tree path: trailing comment on parent: breaks the chain; per-node buffer scan; untested path fallbacks |
+| repo | parley.nvim |
+| issue file | workshop/issues/000397-breadcrumb-tree-path-trailing-comment-on-parent-breaks-the-chain-per-node-buffer-scan-untested-path-fallbacks.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a1b0a08b07d10b9902680e6aabba57d73c634601..555ad10936db22758652a4a29f0a2ce861a8b1de |
+| command | sdlc close --issue 397 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | fenced |
+| timestamp | 2026-10-19T01:18:10-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Running the three changed spec files through make to verify the round-1 fixes.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Both findings from round 1 are fixed, and I re-ran the tests to confirm. In `make test-spec SPEC=ui/breadcrumb`, `breadcrumb_model_spec` now runs and passes 13/13, `side_tree_model_spec` passes 6/6, and the new depth test in `file_history_spec` passes with the exact 9-segment chain. One test in that file fails: "commits the successful src Alt+o landing". It is not caused by this diff; the first review saw it fail at the base commit `a1b0a08b` too, because of how this review checkout resolves paths. I also checked that the `located()` test catches real breakage. I deleted the home branch from `breadcrumb_model.located`, and the test failed at `breadcrumb_model_spec.lua:83`. I then restored the file, and the tree is clean. All three Done-when clauses are now met and each has a passing test.
+
+1. **Strengths**
+   - `helper.lua:713`: `buffer_key` is shared by `buffer_for` and `loaded_buffer_index`, and both keep the first match. **ARCH-DRY: pass.**
+   - `breadcrumb_model.located` is pure and its tests cover the root, home, absolute and `/hx` lookalike cases, which leaves `path_display` as a two-line IO wrapper. **ARCH-PURE: pass.**
+   - `file_history_spec.lua:146-167` counts `nvim_list_bufs` calls at depth 1 and depth 8, so it tests that cost doesn't grow with depth rather than restating the code. The first review confirmed it fails when the fix is reverted.
+   - The new mapping in `atlas/traceability.yaml` makes the targeted `ui/breadcrumb` run include the model spec. That is the root cause of round 1's missed failure, and `lessons.md` records it.
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor**
+   - The issue Log has the `### 2026-10-19` heading twice. It is in the tracker only, so there is no runtime effect.
+5. **Test coverage**
+   - Each clause has a test that passes at head. The trailing-comment cases and the padded opener are in `side_tree_model_spec`. The scan count not growing with depth is in `file_history_spec`. The `~` and `/` branches are in `breadcrumb_model_spec`.
+   - The home-branch test is shown to catch its removal (it went red when I deleted the branch).
+6. **Architecture**
+   - **ARCH-DRY: pass.**
+   - **ARCH-PURE: pass.**
+   - **ARCH-PURPOSE: pass.** Every Done-when clause is delivered. The family sweep found only one non-`.md` leaf among the `located()` assertions, and it is fixed.
+   - **ARCH-EVOLVE: pass.** No persisted format is written. The frontmatter read now drops a trailing comment, as YAML does, and `atlas/ui/breadcrumb.md` documents that.
+   - There is no new README surface.
+7. **Plan revisions:** none. The Log matches the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Line 82 now uses x.md; breadcrumb_model_spec passes 13/13 under ui/breadcrumb (newly mapped). Deleting the home branch makes line 83 fail.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The assertion now pins the exact " 0 › 1 › … › 8%=" winbar (document_band_model emits a trailing %=), and the test passes at head.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"40147664-e921-4d3f-a972-08fcdd42ec6d","repository":"github.com/xianxu/parley.nvim","issue_id":"000397","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/e5b9a4369766c905","reviewed_head":"555ad10936db22758652a4a29f0a2ce861a8b1de","slot":"parley.nvim:3","requested_at":"2026-10-19T08:16:04.757865Z"},"phase":"finished","pid":62167,"started_at":"2026-10-19T08:16:05.00603Z","finished_at":"2026-10-19T08:18:09.54694Z","session_id":"de8468f5-3e87-4368-a3c6-8b130d9efbdb","outcome":"returned"}] -->
