@@ -47,6 +47,7 @@ Determine whether the committed issue vocabulary is hand-authored or stale gener
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Released weave 0.1.0 archive SHA verified; cold old snapshot reproduces exact authored-replacement refusal, regenerated pair compiles successfully and repeat generation leaves bytes/digest identical. Current weave repeat and canonical make check-vocabulary pass; all 23 focused vocabulary/drift/fresh-clone cases pass, git diff --check clean. Only canonical JSON + matching sidecar changed; no new architecture/flow, hence no atlas update. Recorded suite scheduled on ef203913, must pass before landing; PR #316 real CI must be green, no bypass. Upstream old-compiler ownership repair tracked separately as ariadne#459.; review verdict: SHIP
 
 Dispatched as a fleet-blocking quick-flow repair; hub will grant landing priority when ready.
 
