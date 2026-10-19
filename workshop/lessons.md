@@ -846,3 +846,7 @@ The first ColorScheme fix re-ran only `setup_highlights`, while the atlas said "
 - #390: Cycle recovery in a parent forest must start within the cycle, not at
   the first unvisited descendant. Test reverse-ordered tails entering self and
   multi-node cycles, including ancestor-search context and linear traversal.
+
+## 2026-10-19 (#392 — preserve viewport before the first repaint effect)
+
+Saving a picker view after refiltering saves the reset viewport. Capture it before reflow/refilter and use that same proof while resolving the selected identity. Test background success and failure before typing, with a selected row below the fold in each scope; a one-row filtered test cannot catch hidden selection.

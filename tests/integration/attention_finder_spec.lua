@@ -103,7 +103,8 @@ describe("attention finder", function()
         vim.fn.delete(root, "rf")
     end)
 
-    it("focuses the oldest scoped unread child, keeps tree order and scrolls it into view (#392)", function()
+    for _, outcome in ipairs({ "success", "failure" }) do
+    it("keeps oldest unread visible through " .. outcome .. " probes in both scopes (#392)", function()
         local state = Model.empty()
         local function add(name, submitted_at, answered_at, slot, parent)
             local path = root .. "/" .. name
@@ -147,11 +148,25 @@ describe("attention finder", function()
             vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<C-a>", "i", false, true).callback() end)
         end
         assert.truthy(selected():find("child.md", 1, true)); visible()
+        local function complete_probe(expected)
+            local pending_path, reply = next(held)
+            assert(reply, "no held probe")
+            held[pending_path] = nil
+            if outcome == "success" then reply({ Status = { Owed = {} } })
+            else reply(nil, "probe unavailable") end
+            await(function()
+                local entry = Store.load().entries[pending_path]
+                return outcome == "success" and Model.state_of(entry) == "answered" or entry.unknown ~= nil
+            end, "probe result never landed")
+            assert.truthy(selected():find(expected, 1, true)); visible()
+        end
+        complete_probe("child.md")
         local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(results), 0, -1, false)
         assert.truthy(lines[1]:find("newer.md", 1, true))
         assert.truthy(lines[#lines - 2]:find("parent.md", 1, true))
         assert.truthy(lines[#lines - 1]:find("child.md", 1, true))
         toggle(); assert.truthy(selected():find("outside.md", 1, true)); visible()
+        complete_probe("outside.md")
         toggle(); assert.truthy(selected():find("child.md", 1, true)); visible()
         -- An operator filter wins over the opening preference in either scope.
         vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> newer" })
@@ -165,6 +180,8 @@ describe("attention finder", function()
         assert.truthy(selected():find("newer.md", 1, true))
         vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Esc>", "n", false, true).callback() end)
     end)
+
+    end
 
     it("toggles current/all scope and keeps that scope after late probe updates", function()
         local a, b, legacy = submitted("here.md", "m1"), submitted("there.md", "m2"), submitted("legacy.md", "m3")
