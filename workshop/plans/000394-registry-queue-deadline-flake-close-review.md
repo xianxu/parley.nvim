@@ -71,3 +71,65 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"40f5ec4c-d13c-49ff-9d2d-30d1b3e6afa2","repository":"github.com/xianxu/parley.nvim","issue_id":"000394","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d0501a49ec530696","reviewed_head":"73da5e8a628d5ea970a8591ddb41e21f0088529e","slot":"parley.nvim:3","requested_at":"2026-10-19T21:25:12.849315Z"},"phase":"finished","pid":53809,"started_at":"2026-10-19T21:25:13.109118Z","finished_at":"2026-10-19T21:36:44.103265Z","session_id":"e76c35b5-7fe4-47db-b975-4ac9b60f666a","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T14:39:00-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 394 — Registry queue deadline flake |
+| repo | parley.nvim |
+| issue file | workshop/issues/000394-registry-queue-deadline-flake.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4b917f41b24427c3d9bfc2b44fe38d33a812b3a5..6ead4772405e93e115d7b6f86be3c3f907e16778 |
+| command | sdlc close --issue 394 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T14:39:00-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This window changes one comment in a test file. Everything else in it is tracker bookkeeping: the generated gate ledger, the close-review record, and the issue moving to `codecomplete` with a close log entry. The new comment at `tests/integration/document_registry_spec.lua:100-103` no longer says "a timer never fires early". It now says the admission-time deadline would be due about 300 ms into the 900 ms hold, and that libuv's truncated clock may fire it about 1 ms early. That matches the file's own note at `:174-175`. Since nothing executable changed, no regression test is required. The prior finding BR-1 is addressed. The issue file's `## Spec`, `## Revisions` and `## Done when` sections are unchanged, so scope did not change. The review notes list no conflict resolutions to judge.
+
+1. **Strengths**
+   - `:100-103`: the new wording is accurate, not just softer. It says why the admission-time deadline would fire, puts the timing in terms of the 900 ms hold, and gives the real limit (~1 ms early). It is also consistent with `:174-175`.
+   - I checked the other absolute claims in the file:
+     - `:99`: "can't depend on load" holds because the stubbed `couch.run` controls every child's answer.
+     - `:102`: "never comes into play" holds because request 5 is answered inside the call that starts it.
+     - `:156`: an assertion message, not a claim.
+
+   None of them overstates, so the fix covers the whole class, not just the line the finding named.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings:** none new.
+
+5. **Test coverage notes:** only a comment changed, so no new regression evidence is needed. The earlier red check (deadline armed at admission fails at `:122`) still applies, because the test body is unchanged.
+
+6. **Architectural notes:**
+   - ARCH-DRY: pass. There is no logic in the interdiff.
+   - ARCH-PURE: pass. Only a test comment changed.
+   - ARCH-PURPOSE: pass. The fix covers the class: I swept the file for other overstated absolutes and found none.
+   - ARCH-EVOLVE: not applicable. The interdiff changes no persisted format; the ledger and review files are generated tracker artifacts.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Comment at document_registry_spec.lua:100-103 drops "a timer never fires early", says the deadline is due ~300 ms into the 900 ms hold and may fire ~1 ms early, consistent with :174-175; sweeping the file's other absolutes (:99, :102) found them accurate.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e9f5afbb-afda-4f55-a337-df7c80326716","repository":"github.com/xianxu/parley.nvim","issue_id":"000394","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/c43fb374fd861e33","reviewed_head":"6ead4772405e93e115d7b6f86be3c3f907e16778","slot":"parley.nvim:3","requested_at":"2026-10-19T21:38:32.660345Z"},"phase":"finished","pid":16470,"started_at":"2026-10-19T21:38:32.915457Z","finished_at":"2026-10-19T21:38:59.626169Z","session_id":"014b034a-bdbb-4afd-abac-eafed71c94f0","outcome":"returned"}] -->
