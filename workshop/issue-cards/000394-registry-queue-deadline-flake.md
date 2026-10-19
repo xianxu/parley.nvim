@@ -1,6 +1,6 @@
 ---
 id: 000394
-status: working
+status: codecomplete
 created: 2026-10-18
 updated: 2026-10-19
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.16
+tracker:
+    version: 1
+    completion:
+        token: close-22147d16ce15
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 73da5e8a628d5ea970a8591ddb41e21f0088529e
+        evidence_commit: 1418abfab22c5866bbe8ecf3487e4bac28fda9e8
 ---
 
 # Registry queue deadline flake
