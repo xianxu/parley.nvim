@@ -61,6 +61,7 @@ end of the buffer or at a now-short line.
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Red-first native extmark tests reproduced short-line/stale-row failures; all 20 display cases pass on Neovim 0.12.5 and 0.11.7, including partial failure cleanup and recovery; N/2N size lookup bounded to one; architecture/define/refresh/reentrancy guards pass; lint clean across 815 files. Recorded suite 97f542a62ca6572feb43aa83deff9a13 queued and operator live check staged at 2dd15196: both remain required before landing, per worker overlap policy and hub instruction. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 ### 2026-10-19 — scoped design
 
