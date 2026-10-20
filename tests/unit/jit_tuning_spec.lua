@@ -140,13 +140,11 @@ describe("module-scoped compiler protection in a real VM", function()
         assert.equals(0, result.own, seen)
         -- The compiler is on for unrelated code: it starts their traces.
         assert.is_true(result.foreign > 0, seen)
-        -- And completes one, unless the LuaJIT could place no machine code at all:
-        -- every foreign abort is the mcode-allocation error (#294's arm64 defect).
-        local unplaceable = #result.aborts > 0 and vim.iter(result.aborts):all(function(reason)
-            return reason == 'failed to allocate mcode memory'
-        end)
-        assert.is_true(result.foreign_stops > 0 or unplaceable,
-            "no foreign trace completed, and not every abort was #294's mcode-allocation defect: " .. seen)
+        -- And completes one, unless #294's arm64 mcode defect kept every recorded
+        -- foreign trace from being placed.
+        local blocked = require('tests.helpers.jit_oracle').mcode_blocked(result.foreign_stops, result.aborts)
+        assert.is_true(result.foreign_stops > 0 or blocked,
+            "no foreign trace completed, and no abort was #294's mcode-allocation defect: " .. seen)
         assert.equals(50005000, result.sum)
         assert.equals('idle', result.status)
     end)

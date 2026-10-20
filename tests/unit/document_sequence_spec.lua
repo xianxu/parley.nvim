@@ -659,11 +659,16 @@ describe("document sequence", function()
             -- including on old allocators. Ordinary editor/harness drains use
             -- the production guard; replacing it here preserves this oracle.
             package.loaded['parley.jit_tuning'] = { protect_chunk = function() end }
-            local own, compiled = {}, 0
-            jit.attach(function(what, trace, fn)
+            local own, compiled, aborts = {}, 0, {}
+            local traceerr = require('jit.vmdef').traceerr
+            jit.attach(function(what, trace, fn, _, otr, oex)
                 if what == 'start' then
                     own[trace] = debug.getinfo(fn, 'S').source:find('/document/sequence.lua', 1, true) ~= nil
-                elseif what == 'stop' and own[trace] then compiled = compiled + 1 end
+                elseif what == 'stop' and own[trace] then compiled = compiled + 1
+                elseif what == 'abort' and own[trace] then
+                    local reason = type(otr) == 'number' and traceerr[otr] or tostring(otr)
+                    aborts[#aborts + 1] = type(oex) == 'number' and reason:format(oex) or reason
+                end
             end, 'trace')
             local S=require('parley.document.sequence')
             local G=require('parley.document.grammar')
@@ -682,19 +687,31 @@ describe("document sequence", function()
             S.splice(seq,0,50000,{{rows=1,bytes=1,opaque=true}})
             collectgarbage('collect'); collectgarbage('collect')
             print(vim.json.encode({retained=collectgarbage('count')-baseline,
-                allocated=attached-baseline,valid=S.validate_certificate(seq,certificate),compiled=compiled}))
+                allocated=attached-baseline,valid=S.validate_certificate(seq,certificate),compiled=compiled,aborts=aborts}))
         ]=]
         local path=vim.fn.tempname()..'.lua'
         vim.fn.writefile(vim.split(source,'\n',{plain=true}),path)
-        local output=vim.fn.system({vim.v.progpath,'--headless','--noplugin','-u','NONE','-i','NONE',
-            '--cmd','set rtp^='..vim.fn.fnameescape(vim.fn.getcwd()),
-            '-c','luafile '..vim.fn.fnameescape(path),'-c','qa!'})
-        local status=vim.v.shell_error
+        local function run()
+            local output=vim.fn.system({vim.v.progpath,'--headless','--noplugin','-u','NONE','-i','NONE',
+                '--cmd','set rtp^='..vim.fn.fnameescape(vim.fn.getcwd()),
+                '-c','luafile '..vim.fn.fnameescape(path),'-c','qa!'})
+            assert.equals(0,vim.v.shell_error,output)
+            return vim.json.decode(output)
+        end
+        -- Compiled sequence code is this oracle's precondition. An old LuaJIT
+        -- without #294's mcode fix can fail to place every trace under load;
+        -- only then (Oracle.mcode_blocked) does a fresh VM retry, at most three
+        -- in all, so a passing run compiled.
+        local Oracle=require('tests.helpers.jit_oracle')
+        local result
+        for _=1,3 do
+            result=run()
+            if not Oracle.mcode_blocked(result.compiled,result.aborts) then break end
+        end
         vim.fn.delete(path)
-        assert.equals(0,status,output)
-        local result=vim.json.decode(output)
         assert.is_false(result.valid)
-        assert.is_true(result.compiled > 0, 'the active-JIT reclamation oracle must compile sequence code')
+        assert.is_true(result.compiled > 0, 'the active-JIT reclamation oracle must compile sequence code (aborts: '
+            ..table.concat(vim.list_slice(result.aborts or {},1,5),'; ')..'; #294 is the mcode defect)')
         -- A pinned tree keeps tens of MiB; allocator/JIT bookkeeping may keep
         -- a few MiB. The coarse ratio avoids platform-sensitive byte equality.
         assert.is_true(result.retained<result.allocated*0.3+2048,

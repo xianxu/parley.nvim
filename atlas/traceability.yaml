@@ -706,6 +706,7 @@ atlas:
       - tests/minimal_init.vim
       - tests/helpers/ready_port.lua
       - tests/helpers/await.lua
+      - tests/helpers/jit_oracle.lua
       - tests/helpers/embedded_nvim.lua
       - tests/helpers/spec_runner.lua
       - tests/helpers/spec_deadline.lua
@@ -745,6 +746,7 @@ atlas:
       - tests/unit/spec_progress_spec.lua
       - tests/integration/spec_runner_native_spec.lua
       - tests/unit/jit_tuning_spec.lua
+      - tests/unit/jit_oracle_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/fixture_reaping_spec.lua
       - tests/unit/reap_test_orphans_spec.lua

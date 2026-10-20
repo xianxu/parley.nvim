@@ -53,6 +53,17 @@ So the compiler stays on for the unrelated code, which keeps starting traces, bu
   - Re-run the 120-way stress on both runtimes, using the spec's child script, and log the outcome.
   - Red checks: a global `jit.off()` in the child fails the starts assertion; a policy that compiles the document pipeline fails `own == 0`.
 
+## Revisions
+
+- 2026-10-19, after close round 1 (SHIP, three Minor advisories). The hub approved the scope revision and both design deltas.
+  - Scope revision: the sibling oracle `document_sequence_spec` ('reclaims detached document storage with active JIT traces'), the same defect class. There `compiled > 0` is the oracle's precondition, so it gets a bounded retry, not an exemption: up to 3 fresh VMs, and only when the mcode defect explains the zero. A passing run really compiled.
+  - Shared helper `tests/helpers/jit_oracle.lua`: `MCODE_ERROR` (pinned against `jit.vmdef.traceerr`) and `mcode_blocked(completed, aborts)`, unit-pinned in `tests/unit/jit_oracle_spec.lua`.
+  - Delta 2, the predicate: 'no trace completed and at least one mcode-allocation abort' replaces 'every abort is the mcode error'.
+    - Measured on the sibling's workload on 0.11.7: 3 of 60 runs compiled nothing. Their about 99,000 mcode aborts sit among about 32,000 ordinary recording aborts ('inner loop in root trace', 'leaving loop in root trace', 'loop unroll limit reached') that a healthy VM also has, so 'every abort' never held there.
+    - A zero with no mcode abort still fails at once.
+    - `jit_tuning` still requires foreign starts > 0.
+  - This is the second delta on this mechanism; a third would need a revised plan first.
+
 ## Log
 
 ### 2026-10-19
@@ -68,4 +79,5 @@ So the compiler stays on for the unrelated code, which keeps starting traces, bu
   - `jit.off(foreign, true)` (the compiler off for only the unrelated chunk, global status still on) fails the starts assertion.
   - Removing the forced `requires_interpreter` lets the pipeline compile, and the case fails.
 - `make test-spec SPEC=infra/test_harness` is green on both runtimes.
+- After round 1: the helper, the sibling retry and the new predicate are implemented. `infra/test_harness` and `chat/document` are green on both runtimes. Stress runs from here on are capped at 4 parallel processes (the hub's load check: the 120- and 60-way runs pushed the machine's load to 72).
 
