@@ -660,14 +660,12 @@ describe("document sequence", function()
             -- the production guard; replacing it here preserves this oracle.
             package.loaded['parley.jit_tuning'] = { protect_chunk = function() end }
             local own, compiled, aborts = {}, 0, {}
-            local traceerr = require('jit.vmdef').traceerr
+            local abort_reason = require('tests.helpers.jit_oracle').abort_reason
             jit.attach(function(what, trace, fn, _, otr, oex)
                 if what == 'start' then
                     own[trace] = debug.getinfo(fn, 'S').source:find('/document/sequence.lua', 1, true) ~= nil
                 elseif what == 'stop' and own[trace] then compiled = compiled + 1
-                elseif what == 'abort' and own[trace] then
-                    local reason = type(otr) == 'number' and traceerr[otr] or tostring(otr)
-                    aborts[#aborts + 1] = type(oex) == 'number' and reason:format(oex) or reason
+                elseif what == 'abort' and own[trace] then aborts[#aborts + 1] = abort_reason(otr, oex)
                 end
             end, 'trace')
             local S=require('parley.document.sequence')

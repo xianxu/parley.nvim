@@ -7,6 +7,15 @@ local M = {}
 -- jit.vmdef.traceerr's text for LJ_TRERR_MCODEAL; jit_oracle_spec pins it.
 M.MCODE_ERROR = "failed to allocate mcode memory"
 
+--- A trace abort's reason as LuaJIT words it, from jit.attach's 'abort'
+--- arguments (`otr` the error code, `oex` its detail). Child VMs require this
+--- too: they run from the repository root, on Lua's default ./?.lua path.
+--- @return string
+function M.abort_reason(otr, oex)
+    local reason = type(otr) == "number" and require("jit.vmdef").traceerr[otr] or tostring(otr)
+    return type(oex) == "number" and reason:format(oex) or reason
+end
+
 --- Whether the mcode defect explains a child that completed no trace: none
 --- completed, and at least one abort is the mcode-allocation error, so every
 --- trace that finished recording then failed to be placed. Other aborts are

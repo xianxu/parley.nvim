@@ -96,12 +96,11 @@ describe("module-scoped compiler protection in a real VM", function()
             -- every trace while the compiler is plainly on.
             local starts = { own = 0, foreign = 0, foreign_stops = 0, aborts = {} }
             local foreign_traces = {}
-            local traceerr = require('jit.vmdef').traceerr
+            local abort_reason = require('tests.helpers.jit_oracle').abort_reason
             jit.attach(function(what, trace, fn, _, otr, oex)
                 if what == 'stop' and foreign_traces[trace] then starts.foreign_stops = starts.foreign_stops + 1 end
                 if what == 'abort' and foreign_traces[trace] then
-                    local reason = type(otr) == 'number' and traceerr[otr] or tostring(otr)
-                    starts.aborts[#starts.aborts + 1] = type(oex) == 'number' and reason:format(oex) or reason
+                    starts.aborts[#starts.aborts + 1] = abort_reason(otr, oex)
                 end
                 if what == 'stop' or what == 'abort' then foreign_traces[trace] = nil end
                 if what == 'flush' then foreign_traces = {} end
