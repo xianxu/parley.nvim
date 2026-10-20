@@ -1,13 +1,21 @@
 ---
 id: 000403
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'c59f4b05935c9a694a7fb066444b7ecc7504e7ec' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '6489efc4c8cc76f70a25964be57b7c62f5bd2312' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-19T22:31:29-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # review diagnostics: CursorMoved error 'Invalid col: out of range' (fixed column 2 on short lines; stale lnum after a rewrite)
@@ -45,8 +53,22 @@ end of the buffer or at a now-short line.
 
 ## Plan
 
-- [ ]
+- [ ] Red tests through real extmarks/handler/CursorMoved: empty, one-byte and multibyte lines; stale cached start rows after shrink; injected partial-render failure, one warning and recovery.
+- [ ] Anchor at column 0 with existing visual padding unchanged; validate start rows using one current line count; shared render boundary clears failed refreshes and warns once per module lifetime (ARCH-DRY).
+- [ ] Count row-boundary lookup at N/2N, run focused/architecture guards and recorded suite, update atlas, send tested commit to hub for the required live check before landing.
 
 ## Log
 
 ### 2026-10-19
+
+### 2026-10-19 — scoped design
+
+The real module is lua/parley/skills/review/diag_display.lua. Its shared renderer
+serves handler show, CursorMoved/resize refresh and scheduled rewrap; guard that
+one boundary rather than patching each callback. Existing scan cost stays O(D)
+plus message wrapping; one native line-count lookup per render, O(1) row checks,
+with N/2N counted coverage. No new worker, timer, queue or durable data. A single
+module-lifetime warning bit is bounded; failure shows no display for that refresh,
+logs once, and the next normal refresh retries automatically. Text and original
+diagnostic spans remain untouched. Workflow refresh changes to merge-check.yml
+and local-gates-guard.yml were reverted exactly as the hub instructed (#398).
