@@ -3,17 +3,17 @@ local Jobs = require("tests.helpers.spec_jobs")
 local identity = require("tests.helpers.process_identity")
 
 describe("spec job registry", function()
-    it("signals a job whose start time still matches, and skips a reused pid", function()
+    it("signals a job that is the same process or gone, and skips a reused pid", function()
         local now = { [10] = "100.000001", [11] = "250.000000" }
         local targets, skipped = Jobs.targets({
             { pid = 10, start = "100.000001" }, -- the same process
             { pid = 11, start = "100.000002" }, -- the pid now belongs to another process
-            { pid = 12, start = "100.000003" }, -- exited: nothing to do
+            { pid = 12, start = "100.000003" }, -- exited: its group may outlive it
         }, function(pid) return now[pid] end)
-        assert.same({ 10 }, targets)
+        assert.same({ 10, 12 }, targets)
         assert.equals(1, #skipped)
         assert.equals(11, skipped[1].pid)
-        assert.matches("pid reused", skipped[1].reason)
+        assert.matches("pid 11 reused", skipped[1].reason)
     end)
 
     it("reads only well-formed ledger lines", function()

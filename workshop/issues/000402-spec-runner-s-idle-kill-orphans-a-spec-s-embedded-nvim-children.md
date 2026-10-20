@@ -60,6 +60,13 @@ Steps:
   - Added: a per-spec `jobstart` registry, installed from one place (`tests/minimal_init.vim`) in spec children only. It records each job's pid with its start time.
   - The runner signals a recorded job's group only while the start time still matches; a reused pid is skipped and logged. The hub's guard, with its own test.
 
+- 2026-10-19, close review round 1 (FIX-THEN-SHIP):
+  - The plan's red check "without `detach`, the idle case fails" was wrong. That case's grandchild is a `jobstart` job, which the registry kills either way. A new case gives the spec a `vim.system` grandchild, which only the spec child's own group reaches. It's red without `detach`.
+  - The spec child's group is now signalled under the same identity guard (`spec_jobs.may_signal`) and the same group-else-pid fallback (`spec_jobs.signal_group`) as each job.
+  - A pid no process holds is still signalled, because its group can outlive it and the kernel reuses no pid while the group exists. Only a pid now naming another process is skipped.
+  - The TERM, grace, KILL escalation is one function, given its wait.
+  - The docs say the wrapper covers `vim.fn.jobstart` only.
+
 ## Log
 
 ### 2026-10-19
@@ -74,4 +81,5 @@ Steps:
 - Every case SIGKILLs any surviving embedded child itself, so no red run left a spinner.
 - Targeted runs green: `infra/test_harness`, `modes/session_sync`, `chat/document`.
 - Stress respected the hub's cap: each case runs at most four nvims at once.
+- Round-1 fixes verified: the new `vim.system`-grandchild case passes, and fails with `detach` removed (its cleanup killed the survivor). `infra/test_harness` green.
 

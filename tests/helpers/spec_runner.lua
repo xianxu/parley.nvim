@@ -4,6 +4,7 @@ local M={}
 local Deadline = require("tests.helpers.spec_deadline")
 local Progress = require("tests.helpers.spec_progress")
 local Jobs = require("tests.helpers.spec_jobs")
+local Identity = require("tests.helpers.process_identity")
 local function absolute(path)
     return vim.fn.resolve(vim.fn.fnamemodify(path,':p'))
 end
@@ -49,20 +50,28 @@ function M.execute(path, options)
     end)
     local command = { vim.v.progpath, "--headless", "--noplugin", "-n", "-i", "NONE", "-u", INIT,
         "-c", ("lua require('tests.helpers.spec_child').run(%q, %q)"):format(absolute(path), token) }
-    local result, child
+    local result, child, child_start
     local timer = uv.new_timer()
     -- End everything the spec child started (#402). It leads its own process
     -- group, which its vim.system and uv.spawn children inherit; each jobstart
     -- child leads a group of its own and is recorded in `jobs` (spec_jobs).
     local jobs = vim.fn.tempname() .. "-spec-jobs"
     vim.fn.mkdir(jobs, "p")
+    local function log(message) output("stderr", message) end
+    -- The spec child's group, under the same identity guard as its jobs.
     local function signal_group(signal)
-        if child and child.pid then uv.kill(-child.pid, signal) end
-        Jobs.signal(jobs, signal, function(message) output("stderr", message) end)
+        if child and child.pid and child_start then
+            local ok, reason = Jobs.may_signal(child.pid, child_start, Identity.start_time(child.pid))
+            if ok then Jobs.signal_group(child.pid, signal) else log("spec child not signalled: " .. reason .. "\n") end
+        end
+        Jobs.signal(jobs, signal, log)
     end
-    local function end_group()
+    -- TERM, a grace, then KILL for whatever remains (a spinning nvim never acts
+    -- on TERM), even when the leader itself exited on TERM. `wait` is the one
+    -- difference: uv.sleep in a signal callback, vim.wait on the main loop.
+    local function escalate(wait)
         signal_group("sigterm")
-        uv.sleep(M.GRACE_MS)
+        wait(M.GRACE_MS)
         signal_group("sigkill")
     end
     local ok, err = pcall(function()
@@ -77,6 +86,7 @@ function M.execute(path, options)
             state = Deadline.transition(state, { kind = "exit", now_ms = now() })
             result = exited
         end)
+        child_start = Identity.start_time(child.pid)
     end)
     if not ok then
         timer:close()
@@ -89,7 +99,7 @@ function M.execute(path, options)
     local watchers = {}
     for _, name in ipairs({ "sigterm", "sigint" }) do
         local watcher = uv.new_signal()
-        watcher:start(name, function() end_group() end)
+        watcher:start(name, function() escalate(uv.sleep) end)
         watchers[#watchers + 1] = watcher
     end
     timer:start(0, 25, function()
@@ -106,11 +116,7 @@ function M.execute(path, options)
     end, 10)
     local expiring = Deadline.snapshot(state).status ~= "completed"
     if not result or expiring then
-        -- TERM, a grace for the child to exit, then KILL for whatever remains
-        -- in the group, even when the leader itself exited on TERM.
-        signal_group("sigterm")
-        vim.wait(M.GRACE_MS, function() return result ~= nil end, 10)
-        signal_group("sigkill")
+        escalate(function(ms) vim.wait(ms, function() return result ~= nil end, 10) end)
         vim.wait(3000, function() return result ~= nil end, 10) -- drain: the leader's exit after KILL
     end
     for _, watcher in ipairs(watchers) do watcher:stop(); watcher:close() end

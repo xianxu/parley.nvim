@@ -306,8 +306,11 @@ group of its own, so in spec children `tests/minimal_init.vim` installs `tests/h
 which records each job's pid with its start time (`tests/helpers/process_identity.lua`) in a per-spec
 directory (`PARLEY_SPEC_JOBS_DIR`). On the deadline, an unobserved exit, or the runner's own SIGTERM or
 SIGINT, the runner sends TERM to the spec's group and to each recorded job's group, waits `GRACE_MS`, then
-sends KILL; a spinning nvim never acts on TERM. A recorded pid whose start time no longer matches is
-skipped and logged, never signalled.
+sends KILL; a spinning nvim never acts on TERM. The spec child and each job are signalled under one
+identity guard: a pid whose start time no longer matches names another process and is skipped and logged.
+A pid no process holds is still signalled, because its group can outlive it. The wrapper covers
+`vim.fn.jobstart` only; `termopen`, Vimscript `jobstart()` and `nvim_call_function("jobstart")` bypass it,
+and no spec uses them.
 
 ### Deadlines, load, and the Neovim under test (#294)
 

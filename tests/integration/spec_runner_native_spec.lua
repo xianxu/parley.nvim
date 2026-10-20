@@ -157,6 +157,22 @@ describe("owned headless spec execution", function()
         assert.is_true(gone(pid), "embedded nvim " .. pid .. " outlived the idle kill")
     end)
 
+    -- A vim.system grandchild isn't a job: only the spec child's own process
+    -- group (detach) reaches it.
+    it("ends a spec's vim.system grandchild at the idle deadline", function()
+        local pidfile = root .. "/pid"
+        local result = run({
+            'describe("orphan", function() it("hangs", function()',
+            '    local sleeper = vim.system({ "sleep", "600" })',
+            '    vim.fn.writefile({ tostring(sleeper.pid) }, ' .. vim.inspect(pidfile) .. ')',
+            '    vim.wait(600000, function() return false end, 50)',
+            'end) end)',
+        }, { base_ms = 3000 })
+        local pid = embedded_pid(pidfile)
+        assert.equals("stalled", result.reason)
+        assert.is_true(gone(pid), "vim.system grandchild " .. pid .. " outlived the idle kill")
+    end)
+
     for _, signal in ipairs({ "sigterm", "sigint" }) do
         it("takes its spec's process group with it when the runner gets " .. signal, function()
             local pidfile, path = root .. "/pid", root .. "/fixture.lua"
@@ -184,6 +200,6 @@ describe("owned headless spec execution", function()
         live:wait()
         assert.is_true(survived, "a mismatched record was signalled")
         assert.equals(1, #logged)
-        assert.matches("spec job " .. live.pid .. " not signalled: pid reused", logged[1])
+        assert.matches("spec job not signalled: pid " .. live.pid .. " reused", logged[1])
     end)
 end)
