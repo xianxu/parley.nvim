@@ -1,6 +1,6 @@
 ---
 id: 000403
-status: codecomplete
+status: done
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 1326aebbad6b609a856dbd2d127229365024c549
         evidence_commit: f1e9732ff0da48da2278fd17c617002bd6e0a8db
+        landed_commit: ccbc2dd511309841707d687e4aff417516b63681
 ---
 
 # review diagnostics: CursorMoved error 'Invalid col: out of range' (fixed column 2 on short lines; stale lnum after a rewrite)
