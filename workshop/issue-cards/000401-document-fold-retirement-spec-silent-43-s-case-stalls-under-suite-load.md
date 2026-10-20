@@ -1,6 +1,6 @@
 ---
 id: 000401
-status: working
+status: codecomplete
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.72
+tracker:
+    version: 1
+    completion:
+        token: close-86a5958bdd27
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 1d168ccaa7afba31b643dfb743400cb5b9a75bd5
+        evidence_commit: be2129fdfe31d42707a9a1377a1b7fa038f99670
 ---
 
 # document_fold_retirement_spec: silent 43 s case stalls under suite load
