@@ -1,13 +1,13 @@
 ---
 id: 000398
-status: working
+status: codecomplete
 deps: [ariadne#459]
 github_issue:
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'e8acc83e0b178a8616a9cb9ebfda70dfcf0c2db6' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a22f29c3a90d2bc32a50ee5cdbcf3bc84e9d2a54' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-19T21:32:47-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.35
 ---
 
 # CI: build weave from a pinned ariadne commit
