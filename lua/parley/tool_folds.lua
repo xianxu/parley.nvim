@@ -66,7 +66,9 @@ local function configure(win,current)
     return not current or current()
 end
 local BATCH_GROUPS=64
-local INTERACTIVE_ROWS=50000
+-- Scopes past this many rows suspend folds and page their walk. A module
+-- field, read at each use, so a spec can cross it with a small fixture (#401).
+M.INTERACTIVE_ROWS=50000
 local function release_window(buf,window)
     local suspended=window.suspended;window.suspended=false
     if suspended then window.released_preference=true end
@@ -138,7 +140,7 @@ local function clear_uncertainty(s)
     -- reconcile then changes only what differs. Clearing here, a turn before
     -- any replacement existed, is what made closed folds blink open.
     local first=math.max(scope.first,s.owned_first or scope.first)
-    if not job and scope.last-first<=INTERACTIVE_ROWS then
+    if not job and scope.last-first<=M.INTERACTIVE_ROWS then
         s.first=math.min(s.first or first,first)
         s.last=math.max(s.last or scope.last,scope.last)
         s.uncertainty_cleared=true
@@ -149,7 +151,7 @@ local function clear_uncertainty(s)
         for _,win in ipairs(vim.fn.win_findbuf(s.buf)) do
             job.windows[#job.windows+1]={win=win,row=job.first,
                 enabled=vim.api.nvim_get_option_value('foldenable',{win=win}),
-                suspended=job.last-job.first>INTERACTIVE_ROWS}
+                suspended=job.last-job.first>M.INTERACTIVE_ROWS}
         end
         s.uncertainty=job
         -- Recreation must include every removed suffix fold once context returns.
@@ -255,7 +257,7 @@ local function apply(buf,s,plan)
                 window.index=last+1
                 if window.index>#plan.ranges then
                     window.phase='inventory';window.inventory_row=plan.first;window.existing={}
-                    if plan.last-plan.first>INTERACTIVE_ROWS then window.suspended=true end
+                    if plan.last-plan.first>M.INTERACTIVE_ROWS then window.suspended=true end
                 end
             elseif window.phase=='inventory' then
                 -- Read the native folds without changing any (#264). At most 50k

@@ -1,4 +1,5 @@
 local uv = vim.uv or vim.loop
+local Embedded = require('tests.helpers.embedded_nvim')
 
 describe('kernel document migration lease', function()
     local root, children, handles
@@ -10,14 +11,13 @@ describe('kernel document migration lease', function()
         return handle, err
     end
     local function editor()
-        local child = vim.fn.jobstart({ vim.v.progpath, '--clean', '--embed', '--headless', '-i', 'NONE' }, { rpc = true })
-        assert.is_true(child > 0)
+        local child = Embedded.start()
         children[#children + 1] = child
-        vim.rpcrequest(child, 'nvim_exec_lua', 'vim.opt.runtimepath:append(...)', { vim.fn.getcwd() })
+        child:exec('vim.opt.runtimepath:append(...)', vim.fn.getcwd())
         return child
     end
     local function remote(child, code, args)
-        return vim.rpcrequest(child, 'nvim_exec_lua', code, args or {})
+        return child:exec(code, unpack(args or {}))
     end
     before_each(function()
         root = vim.fn.tempname()
@@ -26,7 +26,7 @@ describe('kernel document migration lease', function()
     end)
     after_each(function()
         for _, handle in ipairs(handles) do handle.release() end
-        for _, child in ipairs(children) do pcall(vim.fn.jobstop, child); vim.fn.jobwait({ child }, 1000) end
+        for _, child in ipairs(children) do child:stop() end
         vim.fn.delete(root, 'rf')
     end)
 
@@ -44,7 +44,7 @@ describe('kernel document migration lease', function()
         local pid = remote(owner, [[local root=...; held=assert(require('parley.document_lease').acquire('ns','id',{root=root})); return vim.fn.getpid()]], { root })
         assert.equals('busy', select(2, acquire('ns', 'id')).kind)
         assert(uv.kill(pid, 9))
-        assert.is_true(vim.fn.jobwait({ owner }, 5000)[1] >= 0)
+        assert.is_true(vim.fn.jobwait({ owner.channel }, 5000)[1] >= 0)
         assert.is_truthy(acquire('ns', 'id'))
     end)
 

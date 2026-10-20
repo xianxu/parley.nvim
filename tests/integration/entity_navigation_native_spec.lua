@@ -1,15 +1,16 @@
 -- Exercise the real mapping and event-loop mode transitions in a clean editor.
 -- Command spies cannot prove that startinsert lands in the destination buffer.
 local arrival = require("tests.helpers.arrival")
+local Embedded = require("tests.helpers.embedded_nvim")
 describe("entity navigation native input", function()
     local child, root, source, target
 
     local function exec(code, ...)
-        return vim.rpcrequest(child, "nvim_exec_lua", code, { ... })
+        return child:exec(code, ...)
     end
 
     local function keys(input)
-        vim.rpcrequest(child, "nvim_input", input)
+        child:input(input)
     end
 
     local function wait_for(code)
@@ -21,8 +22,7 @@ describe("entity navigation native input", function()
         vim.fn.mkdir(root, "p")
         source, target = root .. "/source.md", root .. "/answer.md"
         vim.fn.writefile({ "# Answer", "The destination is a real file." }, target)
-        child = vim.fn.jobstart({ vim.v.progpath, "--clean", "--embed", "--headless", "-i", "NONE" }, { rpc = true })
-        vim.rpcrequest(child, "nvim_ui_attach", 100, 30, { rgb = true })
+        child = Embedded.start({ ui = { 100, 30 } })
         exec([[
             local runtime, root = ...
             vim.opt.rtp:append(runtime)
@@ -42,10 +42,7 @@ describe("entity navigation native input", function()
     end)
 
     after_each(function()
-        if child and child > 0 then
-            vim.fn.jobstop(child)
-            vim.fn.jobwait({ child }, 1000)
-        end
+        if child then child:stop() end
         if root then vim.fn.delete(root, "rf") end
     end)
 
