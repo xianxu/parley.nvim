@@ -1,13 +1,13 @@
 ---
 id: 000403
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '6489efc4c8cc76f70a25964be57b7c62f5bd2312' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '7e9b69e19795624dc759ae74422a58ef95af1443' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-19T22:31:29-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "b7b4ba3b", done: "60533640"}
+actual_hours: 0.14
 ---
 
 # review diagnostics: CursorMoved error 'Invalid col: out of range' (fixed column 2 on short lines; stale lnum after a rewrite)
