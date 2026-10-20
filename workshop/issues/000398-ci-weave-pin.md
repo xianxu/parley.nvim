@@ -54,9 +54,11 @@ on pin acquisition/build failure. Preserve bootstrap, setup and check ordering.
 
 ## Plan
 
-- [ ] Regenerate the two workflow files with weave refresh on this clean issue branch; add the exact approved compiler pin outside the manifest (ARCH-DRY, ARCH-SECURE).
-- [ ] Verify generated workflow equality with the reviewed upstream template, pin grammar/fetch/build/provenance failure propagation and PATH precedence using upstream actual-block conformance; build the exact pin and run cold ownership/tamper conformance. Confirm compile retains the authored pin.
-- [ ] Run the required suite and close review; report the PR, exact compiler identity and CI result to the hub for operator-held local-gates verification. Normal landing follows the operator label and green gates.
+- [x] Regenerate the two workflow files with weave refresh on this clean issue branch; add the exact approved compiler pin outside the manifest (ARCH-DRY, ARCH-SECURE).
+- [x] Verify generated workflow equality with the reviewed upstream template, pin grammar/fetch/build/provenance failure propagation and PATH precedence using upstream actual-block conformance; build the exact pin and run cold ownership/tamper conformance. Confirm compile retains the authored pin.
+- [ ] Record the required suite result.
+
+Close review follows verification. Report the PR, compiler identity and real CI result to the hub for operator-held local-gates verification; normal landing follows the label and green gates.
 
 Actions: review/bump pin, rerun CI, operator labels verified PR. Pin acquisition/build/identity failures stop CI before bootstrap; recover by correcting the pin/source and rerunning, with no fallback to PATH or formula. A successful build uses its private PATH directory before bootstrap/setup/checks. No new product state or hot-path work; one bounded compiler checkout/build per CI job. Existing upstream conformance owns malformed/failure cases rather than a second hand-maintained workflow implementation.
 
@@ -67,6 +69,9 @@ checkout, unclaimed, depending on ariadne#459. Source class C; inventory:
 [verified active GitHub consumers](https://github.com/xianxu/ariadne/blob/000459-weave-release-downstream-ci-still-runs-weave-0-1-0-pre-422-vocabulary-changes-break-every-downstream-merge-check/workshop/plans/000459-downstream-compiler-inventory.md).
 The upstream owner files the hand-off; this repository's assigned slot and the
 operator own implementation and acceptance.
+
+- Started from a clean issue branch. Plain weave refresh refused the local issue commits without changing refs; used its documented issue-branch mode, weave refresh --substrate, preserving this branch/HEAD. It regenerated exactly .github/workflows/merge-check.yml and local-gates-guard.yml. Both match the reviewed upstream templates byte-for-byte; no handwritten workflow variant. Added the Spec's exact pin plus newline, absent from construct/base.manifest. A subsequent weave compile passed and preserved both workflows and the authored pin.
+- make -k conformance `/tmp/parley398-conformance.log` passed: upstream portable-ci actual Bash blocks reject malformed pins, fetch/build/source/metadata/dirty failures and an older PATH weave, preserve bootstrap/setup/check ordering; the workflow bytes here equal the tested template. Isolated clean clone at approved63d6bfd86509d97649e10d7a5dd1e9a06db17d21 built successfully (local Go1.27.1; real CI selects Go from pinned go.mod1.26.3). go version -m reports vcs.revision=63d6bfd86509d97649e10d7a5dd1e9a06db17d21 and vcs.modified=false. Real pinned compiler conformance passes changed-cold and no-drift cold consumers across6 noun exports, plus tampered/missing/malformed/symlink/undeclared refusal controls without losing bytes. Fixture also preserves its authored pin. Log SHA256 f485f0a83b5301dab0ec63a3b8bbb2166fee20b77bc6c71050b136534966cbdb. Scratch `/Volumes/TestScratch/tmp/parley.nvim-slot2/parley398.CMM4Ii`; binary lives outside its clean source clone. Whitespace checks clean. Required consumer suite and real GitHub CI remain pending; operator alone applies the local-gates-verified label.
 
 ## Revisions
 
