@@ -298,6 +298,17 @@ A child that never answers is killed by pid, and the request fails naming its me
 before the runner's idle kill ends the spec with no cause. `tests/arch/embedded_rpc_spec.lua` refuses a raw `vim.rpcrequest` or
 `--embed` spawn anywhere else.
 
+### A spec's processes end with it (#402)
+
+`spec_runner` starts each spec child as a process-group leader (`vim.system{detach = true}`), so the
+child's `vim.system` and `uv.spawn` descendants share its group. Neovim starts every `jobstart` child in a
+group of its own, so in spec children `tests/minimal_init.vim` installs `tests/helpers/spec_jobs.lua`,
+which records each job's pid with its start time (`tests/helpers/process_identity.lua`) in a per-spec
+directory (`PARLEY_SPEC_JOBS_DIR`). On the deadline, an unobserved exit, or the runner's own SIGTERM or
+SIGINT, the runner sends TERM to the spec's group and to each recorded job's group, waits `GRACE_MS`, then
+sends KILL; a spinning nvim never acts on TERM. A recorded pid whose start time no longer matches is
+skipped and logged, never signalled.
+
 ### Deadlines, load, and the Neovim under test (#294)
 
 The runner distinguishes useful work from a stall (#337). A single startup
