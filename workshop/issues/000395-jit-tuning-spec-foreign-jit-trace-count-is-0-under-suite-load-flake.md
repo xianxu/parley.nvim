@@ -55,6 +55,7 @@ So the compiler stays on for the unrelated code, which keeps starting traces, bu
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Test-only, no new surface (--no-atlas). Root cause measured: with the case child script run 120 ways in parallel, the preferred runtime gives 240/240 foreign=2, and installed 0.11.7 gives 6/120 and 11/120 foreign=0, every foreign abort "failed to allocate mcode memory" (the #294 arm64 defect); both recorded failures were in the 0.11.7 compat pass. The case now tracks foreign trace ids as a set, records abort reasons, and asserts own==0 starts, foreign starts>0, and foreign stops>0 unless every abort is the mcode error, with a message that cites #294. Stress under the new rule: 120/120 on preferred; 112+8 (exemption) of 120 on 0.11.7. Red checks: jit.off(foreign,true) fails the starts assertion; removing the forced interpreter requirement fails the case. infra/test_harness green on both runtimes.; review verdict: SHIP
 - Implemented:
   - Foreign trace ids are kept in a set, so another source's start, an abort or a flush no longer hides a later stop.
   - Abort reasons come from `jit.vmdef.traceerr`.
