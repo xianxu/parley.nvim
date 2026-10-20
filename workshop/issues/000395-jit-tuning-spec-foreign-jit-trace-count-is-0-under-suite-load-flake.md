@@ -1,6 +1,6 @@
 ---
 id: 000395
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-19
@@ -8,7 +8,7 @@ updated: 2026-10-19
 estimate_hours:
 severity: low
 collaboration-mode: collaboration
-card_mirror: '4d8ad09cb55b1e56e78cbeab2989b927dfd26faf' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c29c8b911b8c4bcd64bb65d671043c435f10d59e' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-19T19:32:05-07:00
 claimant:
     operator: Xian Xu
@@ -18,6 +18,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "e0848ff7"}
+actual_hours: 0.22
 ---
 
 # jit_tuning_spec foreign JIT trace count is 0 under suite load (flake)
