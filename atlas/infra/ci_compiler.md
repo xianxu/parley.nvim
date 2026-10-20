@@ -25,7 +25,7 @@ reachable commit through review, then rerun CI. For a build or provenance
 failure, inspect the pinned source, toolchain and metadata; fix the cause before
 rerunning. Keep the pin and provenance checks in place during recovery.
 
-The inherited [CI merge-check contract](../workflow/ci-merge-check.md) describes
+The inherited [CI merge-check contract](https://github.com/xianxu/ariadne/blob/63d6bfd86509d97649e10d7a5dd1e9a06db17d21/atlas/workflow/ci-merge-check.md) describes
 the shared workflow; this page maps its repository-owned configuration and
 operator approval. The workflow and upstream conformance remain the executable
 source of truth.

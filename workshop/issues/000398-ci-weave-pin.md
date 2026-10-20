@@ -92,3 +92,7 @@ Added contributor guidance and indexed atlas/infra/ci_compiler.md covering the
 pin format and ownership, acquisition/build ordering, update and recovery path,
 and operator-held label. This supplements the inherited shared workflow map;
 it changes no executable behavior. Operator label is now confirmed on PR323.
+
+### 2026-10-20 — Cold-checkout documentation link correction
+
+The integrated landing suite on c85028e1 failed documentation_spec: the new atlas page linked relatively to an ignored workflow overlay absent from the detached checkout. Replaced that link with the exact approved upstream commit URL, whose target was verified in Git. Existing documentation_spec supplies the regression check; no executable migration changes.
