@@ -16,7 +16,7 @@ local DISPLAY_NS = "parley_diagnostic_virtual_lines"
 local DISPLAY_AUGROUP = "parley_diagnostic_virtual_lines"
 local HEADER_HL = "ParleyDiagnosticVirtualLineHeader"
 local MESSAGE_HL = "ParleyDiagnosticVirtualLine"
-local DISPLAY_COL = 2
+local DISPLAY_MARGIN = 2
 
 local display_ns_id
 local display_augroup
@@ -28,6 +28,7 @@ local tracked_buffers = {}
 -- never brings back a display that was hidden in between.
 local shown = {}
 local lifecycle_registered = false
+local render_error_logged = false
 
 -- Parley's review diagnostic namespace — single-sourced from skill_render (which
 -- owns the namespace) so the identity isn't a duplicated literal (#133 M6 review).
@@ -98,7 +99,7 @@ local function virtual_line_width(buf)
     local width
     for _, win in ipairs(windows_for_buffer(buf)) do
         local info = vim.fn.getwininfo(win)[1] or {}
-        local usable = math.max(2, (info.width or vim.api.nvim_win_get_width(win)) - (info.textoff or 0) - DISPLAY_COL)
+        local usable = math.max(2, (info.width or vim.api.nvim_win_get_width(win)) - (info.textoff or 0) - DISPLAY_MARGIN)
         width = width and math.min(width, usable) or usable
     end
     return width or 76
@@ -210,7 +211,7 @@ local function show_float(buf, diagnostics, win)
     vim.api.nvim_win_set_option(float_win, "winhl", "NormalFloat:NormalFloat,FloatBorder:FloatBorder")
 end
 
-local function render(buf, diagnostics, current_line_only)
+local function render_impl(buf, diagnostics, current_line_only)
     ensure_display()
     if not vim.api.nvim_buf_is_valid(buf) then
         return
@@ -229,10 +230,12 @@ local function render(buf, diagnostics, current_line_only)
         return
     end
 
+    local line_count = vim.api.nvim_buf_line_count(buf)
     local by_line = {}
     local footnote_diagnostics = {}
     for _, diagnostic in ipairs(diagnostics or {}) do
-        if not current_line_only or diagnostic_visible_at(diagnostic, line, col) then
+        if diagnostic.lnum >= 0 and diagnostic.lnum < line_count
+            and (not current_line_only or diagnostic_visible_at(diagnostic, line, col)) then
             if diagnostic.source == "parley-footnote" then
                 table.insert(footnote_diagnostics, diagnostic)
             else
@@ -257,10 +260,24 @@ local function render(buf, diagnostics, current_line_only)
         for _, diagnostic in ipairs(line_diagnostics) do
             vim.list_extend(virt_lines, M.diagnostic_message_lines(diagnostic, width))
         end
-        vim.api.nvim_buf_set_extmark(buf, display_ns_id, lnum, DISPLAY_COL, {
+        vim.api.nvim_buf_set_extmark(buf, display_ns_id, lnum, 0, {
             virt_lines = virt_lines,
             virt_lines_above = false,
         })
+    end
+end
+
+-- Publication, cursor/resize refresh and deferred rewrap share this boundary:
+-- an optional display must not turn an editor event into a blocking error.
+local function render(buf, diagnostics, current_line_only)
+    local ok, err = pcall(render_impl, buf, diagnostics, current_line_only)
+    if not ok then
+        pcall(clear, buf)
+        pcall(close_float)
+        if not render_error_logged then
+            render_error_logged = true
+            require("parley.logger").warning("Review diagnostics display skipped: " .. tostring(err))
+        end
     end
 end
 

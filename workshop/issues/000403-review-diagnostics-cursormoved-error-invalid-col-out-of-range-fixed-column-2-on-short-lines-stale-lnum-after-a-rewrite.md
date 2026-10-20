@@ -73,3 +73,16 @@ module-lifetime warning bit is bounded; failure shows no display for that refres
 logs once, and the next normal refresh retries automatically. Text and original
 diagnostic spans remain untouched. Workflow refresh changes to merge-check.yml
 and local-gates-guard.yml were reverted exactly as the hub instructed (#398).
+
+### 2026-10-19 — red/green display boundary
+
+Five new assertions failed the original module: empty/one-byte lines raised
+Invalid col, a multibyte line retained the wrong anchor, shrink/stale rows raised,
+and an injected partial render escaped. After the fix, all 20 display cases
+pass on preferred Neovim 0.12.5 and stock 0.11.7. The injection starts after
+one extmark is written, checks full cleanup and repeated CursorMoved events,
+asserts one logged warning, then removes the fault and verifies recovery with
+original diagnostics intact. N/2N cases bound native size queries to one per
+render. Lint is clean across 815 files. Broader guard/define/refresh tests are
+running before the recorded suite. Atlas describes the failure boundary and
+traceability now includes the display module/spec in review coverage.
