@@ -1,24 +1,33 @@
 -- The one way a spec drives a child nvim (#401). Every request is bounded: a
 -- child that never answers is killed by pid and the request fails naming its
--- method, well before the harness's idle kill (180 s) ends the spec with no
--- cause. tests/arch/embedded_rpc_spec.lua refuses a raw vim.rpcrequest elsewhere.
-local arrival = require("tests.helpers.arrival")
+-- method, before the spec runner's idle kill ends the spec with no cause.
+-- tests/arch/embedded_rpc_spec.lua refuses a raw vim.rpcrequest elsewhere.
 local uv = vim.uv or vim.loop
 
 local M = {}
 
--- A legitimate request stretched by the harness's load factor (at most 4)
--- still fits; a wedged child is named long before the idle kill.
-M.REQUEST_MS = 4 * arrival.MS
+-- A spec may set this to shorten the bound; nil derives it (M.request_ms).
+M.REQUEST_MS = nil
+
+--- A request's bound: half the spec's idle budget, which spec_runner passes
+--- load-scaled as PARLEY_SPEC_IDLE_MS (its DEFAULT_TIMEOUT when absent). Half
+--- leaves the rest of the budget for the case's other work, so a wedged child
+--- is named before the runner kills the spec.
+--- @return integer
+function M.request_ms()
+    if M.REQUEST_MS then return M.REQUEST_MS end
+    local idle = tonumber(vim.env.PARLEY_SPEC_IDLE_MS) or require("tests.helpers.spec_runner").DEFAULT_TIMEOUT
+    return math.floor(idle / 2)
+end
 
 local Child = {}
 Child.__index = Child
 
---- Send one request; raise if the child doesn't answer within M.REQUEST_MS.
+--- Send one request; raise if the child doesn't answer within M.request_ms().
 --- The deadline kills the child from a libuv callback, where jobstop isn't
 --- allowed; the pending request then fails on the closed channel.
 function Child:request(method, ...)
-    local ms, fired = M.REQUEST_MS, false
+    local ms, fired = M.request_ms(), false
     local timer = uv.new_timer()
     timer:start(ms, 0, function()
         fired = true

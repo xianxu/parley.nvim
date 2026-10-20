@@ -291,10 +291,11 @@ full-suite, and direct `PlenaryBustedFile` invocations.
 ### Driving a child nvim (#401)
 
 A spec that drives an embedded nvim does it through `tests/helpers/embedded_nvim.lua`
-(`start`, `exec`, `request`, `input`, `stop`). Every request is bounded by
-`REQUEST_MS` (4 × the arrival budget). A child that never answers is killed by pid,
-and the request fails naming its method, well before the runner's idle kill ends the spec
-with no cause. `tests/arch/embedded_rpc_spec.lua` refuses a raw `vim.rpcrequest` or
+(`start`, `exec`, `request`, `input`, `stop`). `start` puts the repository on the
+child's runtimepath. Every request is bounded by `request_ms()`: half the spec's idle
+budget, which `spec_runner` passes to the spec child, load-scaled, as `PARLEY_SPEC_IDLE_MS`.
+A child that never answers is killed by pid, and the request fails naming its method,
+before the runner's idle kill ends the spec with no cause. `tests/arch/embedded_rpc_spec.lua` refuses a raw `vim.rpcrequest` or
 `--embed` spawn anywhere else.
 
 ### Deadlines, load, and the Neovim under test (#294)

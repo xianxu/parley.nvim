@@ -58,6 +58,13 @@ Steps:
   - The helper's timeout: a child blocked in `exec` (a busy loop) fails, naming the method, after a short bound; checked against an injected `REQUEST_MS`.
   - Both retirement cases now take seconds; measured before and after on both runtimes, and the numbers logged.
 
+## Revisions
+
+- 2026-10-19, close review round 2 (REWORK, a Critical finding):
+  - The plan's bound, `REQUEST_MS` = 4 × `arrival.MS` (60 s), assumed the 180 s run-alone budget. Every helper user actually runs on `spec_runner`'s default 50 s × load factor, so on a quiet machine a wedged child still died by the runner's unnamed kill.
+  - The bound is now derived. `spec_runner` passes each spec child its load-scaled idle budget as `PARLEY_SPEC_IDLE_MS`, and the helper's `request_ms()` takes half of it (the runner's `DEFAULT_TIMEOUT` when absent). `REQUEST_MS` stays only as a spec override.
+  - The plan's "appends the repo to the child's runtimepath" now holds (round-1 BR-1).
+
 ## Log
 
 ### 2026-10-19
@@ -80,4 +87,9 @@ Steps:
   - Minor: `tool_folds` comments name `M.INTERACTIVE_ROWS`.
   - Minor: under suite load, measured in the recorded suite on c676e97 (parallel jobs, other slots' suites), the retirement specs took 1 s and 2 s against the 50 s budget.
 - That suite run failed only `jit_tuning_spec` 'keeps unrelated JIT traces active while protecting the entire document pipeline': the #395 flake (the foreign trace count is 0 under load). It's unrelated to this branch, and it isn't registered, because no same-head pass followed: the branch moved to the fixes first.
+- Close review round 2: REWORK. Fixed:
+  - The bound is derived from the runner's idle budget (see Revisions).
+  - A failed-setup test: a bad UI attach raises, and the child is reaped.
+  - A runner-level test: a wedged child inside a real `spec_runner.execute` (20 s budget) fails naming `nvim_exec_lua within 10000 ms`, with no DEADLINE. It's red when the runner doesn't pass the budget.
+  - Comments name their source (`request_ms`, `PARLEY_SPEC_IDLE_MS`, `DEFAULT_TIMEOUT`), not values.
 

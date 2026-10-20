@@ -888,3 +888,10 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   answers only when the test says. Keep the real-process test for the
   boundary, with a deadline load can only slow, and with lower bounds the
   fixture enforces, not guesses.
+
+- #401: An inner deadline that exists to beat an outer one must derive from
+  it, not from a number that happened to look big enough. The helper's 60 s
+  bound assumed the 180 s run-alone budget, while every helper user ran on the
+  default 50 s; the close review caught it. Pass the outer budget to where the
+  inner one is computed, and pin the relation with a test that runs through
+  the real outer mechanism.

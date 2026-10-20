@@ -114,3 +114,117 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2ef97936-8c5b-470d-be8c-a555a1167992","repository":"github.com/xianxu/parley.nvim","issue_id":"000401","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/f529fa537503d4c9","reviewed_head":"c676e97c0e62e3c2dd6b8aad947c979d8bd1ff59","slot":"parley.nvim:3","requested_at":"2026-10-20T01:23:16.664057Z"},"phase":"finished","pid":28415,"started_at":"2026-10-20T01:23:16.751915Z","finished_at":"2026-10-20T01:25:00.232673Z","session_id":"4a1286f6-da49-41b9-8ae2-e5d80c370fcc","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T18:38:17-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 401 — document_fold_retirement_spec: silent 43 s case stalls under suite load |
+| repo | parley.nvim |
+| issue file | workshop/issues/000401-document-fold-retirement-spec-silent-43-s-case-stalls-under-suite-load.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 7c99d689403ce315f1eca1dc5f5ba1924ac8d167..08c40cc09b69f2eb922f80eedc31c87ee3de2c99 |
+| command | sdlc close --issue 401 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T18:38:17-07:00 |
+| verdict | REWORK |
+
+## Review
+
+I'm checking the prior-round fixes and testing whether the helper's 60 s request bound fires before the runner's 50 s idle kill.
+
+Confirmed: under normal load, the runner kills a wedged child at 50 s, before the helper's 60 s bound fires. Next I'm checking the remaining prior findings.
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The helper sweep is in good shape. All nine specs now drive their child through `tests/helpers/embedded_nvim.lua`, the arch guard catches the forms round 1 named, and both retirement specs now take about 2 s. One problem blocks shipping: the issue's second Done-when clause ("a wedged embedded child fails the case with a named cause, not a harness kill") does not hold on a quiet machine. The helper's request bound is `REQUEST_MS = 4 × arrival.MS` = 60 s. Every spec that uses the helper runs on the runner's default budget of 50 s × load factor. The two retirement specs only joined that budget in this same change, which removed them from the 180 s list. So when the load factor is below 1.2, the runner kills the spec before the helper's bound can fire. I ran a temporary spec whose child spins forever (`zz_wedge_probe_spec.lua`, deleted afterwards) through the real runner at load 10 on 12 CPUs. The result was `DEADLINE: … stalled after 0 completed case(s); idle 50000ms`, with no method named. That is exactly the silent harness kill this issue was opened to remove.
+
+**1. Strengths**
+- `tests/helpers/embedded_nvim.lua:20-35`: the libuv timer kills the child by pid (`uv.kill`), because `jobstop` is not allowed in that callback, and the pending request is then failed. This is sound and has a test (`embedded_nvim_spec.lua:19-31`).
+- ARCH-DRY: there is now one place that spawns and drives a child, nine near-identical setup blocks are gone, and `start()` puts the repository on the child's runtimepath. No restatement is left except the `rtp = "prepend"` option for `stream_view`.
+- The arch guard really goes red. I appended `pcall(vim.rpcrequest, 0, "x")` to `stream_view_spec.lua` and it failed, naming the line. The user floor excludes the guard and the helper spec, so it counts exactly the 9 real users.
+- `tool_folds.INTERACTIVE_ROWS` as a module field lets the retirement specs cross the threshold with a 1,210-line fixture. The log says that removing the override makes both cases fail with 'did not suspend', so the small fixture still tests suspension. I re-ran both specs at load about 11 on 12 CPUs: 2 s each, green.
+
+**2. Critical findings**
+- **The helper's bound (60 s) is longer than the runner's idle budget on a quiet machine (50 s), so a wedged child still dies by harness kill with no cause** (`tests/helpers/embedded_nvim.lua:12`, against `tests/helpers/spec_runner.lua:22` and `spec_deadline.lua:27,34`).
+  - **Instances of the same class:**
+    - The header comment at `embedded_nvim.lua:1-4` says "well before the harness's idle kill (180 s)".
+    - `embedded_nvim.lua:9-10` says "named long before the idle kill".
+    - `atlas/infra/test_harness.md:296-297` says "well before the runner's idle kill".
+    - The Plan says "named well before the 180 s idle kill".
+    - All 9 helper users are on the 50 s default budget; none of the 180 s specs use the helper.
+  - **Fix:** derive the bound from the deadline it has to beat. The runner can pass its idle budget to the spec child, for example through an environment variable. The helper then sets `REQUEST_MS` to a fraction of it, about ½, which leaves room for the case's earlier work.
+  - **Tests:** add a test that pins `REQUEST_MS` below the runner's idle budget at load factor 1. Also add a `spec_runner.execute` test that runs a fixture spec whose child spins forever and asserts the output names `nvim_exec_lua`, not `DEADLINE`.
+  - **Docs:** correct the comments, the atlas text and the Plan.
+
+**3. Important findings**
+- None.
+
+**4. Minor findings**
+- Comments in the helper restate the value of a constant instead of naming it. This is the 2nd finding in family `comment-restates-constant`.
+  - **Rule:** a comment names the source of a value (field, function, runner option), never the value itself.
+  - **Instances:** `embedded_nvim.lua:3` "(180 s)", which is also wrong for these specs, and `embedded_nvim.lua:9` "(at most 4)", which restates the cap in `Deadline.load_factor`.
+  - **Checked and fine:** the "(nine specs on 2026-10-19)" in the arch spec is dated, so it is not a restatement.
+
+**5. Test coverage notes**
+- The helper's timeout test only runs with an injected 500 ms bound. Nothing checks the real `REQUEST_MS` against the real runner budget, and that gap is how the Critical finding shipped.
+- BR-2's fix (stopping the child when setup fails) has no test. No test sends a setup that fails, such as a bad `nvim_ui_attach`, and checks the child is reaped.
+
+**6. Architectural notes**
+- **ARCH-DRY: pass.** One helper with nine users.
+- **ARCH-PURE: pass.** This is test-harness IO glue; there is no business logic.
+- **ARCH-PURPOSE: flag.** The bound is the purpose of the issue, and it only beats the harness when the load factor is about 1.2 or more. That is the Critical finding above.
+- **ARCH-EVOLVE: pass.** No persisted format changes.
+
+**7. Plan revision recommendations**
+- Add a `## Revisions` entry. The rationale "named well before the 180 s idle kill" stopped being true once the retirement specs moved to the 50 s budget. `REQUEST_MS` should be derived from the runner's idle budget at the current load factor, and pinned below it by a test.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      M.start appends (or prepends) cwd at embedded_nvim.lua:67; grep finds no rtp restatement left in the nine specs; their existing require('parley...') behavior is the evidence.
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      The pcall/stop in M.start (embedded_nvim.lua:62-71) is plausible, but no test drives a failed setup and asserts the child is reaped, so there is no regression evidence.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Red-checked: appending pcall(vim.rpcrequest, 0, "x") to stream_view_spec fails the guard naming the line; NOT_USERS excludes both non-users, so the floor counts exactly 9.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Log records 1 s and 2 s in the recorded parallel suite on c676e97; I reproduced 2 s each at load 11 on 12 CPUs.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      tool_folds.lua:19 and :263-264 now name M.INTERACTIVE_ROWS; prose-only.
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: inner-deadline-derives-from-outer
+    title: |
+      REQUEST_MS (60 s) exceeds the runner's 50 s quiet-machine idle budget, so a wedged child still dies by an unnamed harness kill
+    detail: |
+      embedded_nvim.lua:12 sets 4*arrival.MS = 60 s, but every helper user runs on spec_runner DEFAULT_TIMEOUT 50 s times load_factor (1 to 4). The retirement specs left the 180 s list in this same change. A probe spec spinning its child forever, run through the real runner at load 10 on 12 CPUs, ended "DEADLINE ... stalled after 0 completed case(s); idle 50000ms" with no method named, so Done-when clause 2 fails whenever load_factor is below about 1.2. Instances: helper comments :1-4 ("180 s") and :9-10, atlas/infra/test_harness.md:296-297, and the Plan's REQUEST_MS rationale. Fix: derive REQUEST_MS from the runner's idle budget (for example, the runner exports it to the spec child and the helper uses about half), pin it below that budget with a test, add a spec_runner.execute test where a spinning child's failure names nvim_exec_lua rather than DEADLINE, and correct the comments, atlas and plan.
+  - id: new
+    severity: Minor
+    kind: defect
+    family: comment-restates-constant
+    title: |
+      Helper comments restate harness values (180 s, at most 4) instead of naming their source
+    detail: |
+      This is the 2nd finding in family comment-restates-constant. Rule: a comment names the source of a value (field, function, runner option), never the value itself. Instances in this window: embedded_nvim.lua:3 "(180 s)", already wrong for every helper user, and embedded_nvim.lua:9 "(at most 4)", which restates the Deadline.load_factor cap. Checked and fine: the dated "(nine specs on 2026-10-19)" in embedded_rpc_spec.lua.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"52c2925f-38c7-4a13-9a4b-c96f2a2bdb1a","repository":"github.com/xianxu/parley.nvim","issue_id":"000401","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/f1f8f9ffa319cce7","reviewed_head":"08c40cc09b69f2eb922f80eedc31c87ee3de2c99","slot":"parley.nvim:3","requested_at":"2026-10-20T01:34:58.306301Z"},"phase":"finished","pid":46162,"started_at":"2026-10-20T01:34:58.397947Z","finished_at":"2026-10-20T01:38:16.51042Z","session_id":"06a9602d-565b-4347-a8e3-e2d987660102","outcome":"returned"}] -->

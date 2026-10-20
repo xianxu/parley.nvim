@@ -20,6 +20,7 @@ local INIT='tests/minimal_init.vim'
 -- Keep the quiet-machine hang budget and bounded load scaling. It applies to
 -- completed-case inactivity; the independent absolute ceiling is base x4.
 local DEFAULT_TIMEOUT=50000 -- plenary.test_harness's own default
+M.DEFAULT_TIMEOUT=DEFAULT_TIMEOUT
 M.load_factor = Deadline.load_factor
 
 -- This headless adapter owns one child and its timer through observed exit.
@@ -48,6 +49,9 @@ function M.execute(path, options)
     local timer = uv.new_timer()
     local ok, err = pcall(function()
         child = vim.system(command, {
+            -- The child's own idle budget, load-scaled, so the helpers inside it
+            -- can bound their waits below it (tests/helpers/embedded_nvim.lua, #401).
+            env = { PARLEY_SPEC_IDLE_MS = tostring(math.floor(Deadline.snapshot(state).idle_ms)) },
             stdout = function(_, data) if data then reader.feed(data) end end,
             stderr = function(_, data) if data then output("stderr", data) end end,
         }, function(exited)
