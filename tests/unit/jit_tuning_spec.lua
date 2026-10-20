@@ -90,15 +90,28 @@ describe("module-scoped compiler protection in a real VM", function()
             -- Exercise the affected policy on every host, with the real compiler.
             policy.requires_interpreter = function() return true end
             local D = require('parley.document')
-            local starts = { own = 0, foreign = 0 }
-            local foreign_trace
-            jit.attach(function(what, trace, fn)
-                if what == 'stop' and trace == foreign_trace then starts.foreign = starts.foreign + 1 end
-                if what == 'abort' or what == 'flush' then foreign_trace = nil end
+            -- Every foreign trace by id (#395): a flush or another source's start
+            -- must not hide a later stop. Aborts keep their reason, because an
+            -- old LuaJIT without the arm64 mcode fix (#294) can fail to place
+            -- every trace while the compiler is plainly on.
+            local starts = { own = 0, foreign = 0, foreign_stops = 0, aborts = {} }
+            local foreign_traces = {}
+            local traceerr = require('jit.vmdef').traceerr
+            jit.attach(function(what, trace, fn, _, otr, oex)
+                if what == 'stop' and foreign_traces[trace] then starts.foreign_stops = starts.foreign_stops + 1 end
+                if what == 'abort' and foreign_traces[trace] then
+                    local reason = type(otr) == 'number' and traceerr[otr] or tostring(otr)
+                    starts.aborts[#starts.aborts + 1] = type(oex) == 'number' and reason:format(oex) or reason
+                end
+                if what == 'stop' or what == 'abort' then foreign_traces[trace] = nil end
+                if what == 'flush' then foreign_traces = {} end
                 if what ~= 'start' then return end
                 local source = debug.getinfo(fn, 'S').source
                 if source:find('/lua/parley/document/', 1, true) then starts.own = starts.own + 1 end
-                foreign_trace = source == '@unrelated-plugin' and trace or nil
+                if source == '@unrelated-plugin' then
+                    starts.foreign = starts.foreign + 1
+                    foreign_traces[trace] = true
+                end
             end, 'trace')
             local foreign = assert(loadstring('local sum=0; for i=1,10000 do sum=sum+i end; return sum', '@unrelated-plugin'))
             local sum = foreign()
@@ -110,8 +123,8 @@ describe("module-scoped compiler protection in a real VM", function()
             local result = D.drain(doc, 10000, { rows=256, bytes=65536, nodes=65536, entries=65536 })
             D.detach(doc); vim.api.nvim_buf_delete(buf, { force = true })
             jit.attach(function() end, 'trace')
-            print(vim.json.encode({ enabled = jit.status(), own = starts.own,
-                foreign = starts.foreign, sum = sum, status = result.status }))
+            print(vim.json.encode({ enabled = jit.status(), own = starts.own, foreign = starts.foreign,
+                foreign_stops = starts.foreign_stops, aborts = starts.aborts, sum = sum, status = result.status }))
         ]=]
         local path = vim.fn.tempname() .. '.lua'
         vim.fn.writefile(vim.split(source, '\n', { plain = true }), path)
@@ -121,9 +134,19 @@ describe("module-scoped compiler protection in a real VM", function()
         vim.fn.delete(path)
         assert.equals(0, child.code, child.stderr)
         local result = vim.json.decode((child.stdout .. child.stderr):match('({[^\n]+})'))
-        assert.is_true(result.enabled)
-        assert.equals(0, result.own)
-        assert.is_true(result.foreign > 0)
+        local seen = vim.inspect({ own = result.own, foreign = result.foreign, foreign_stops = result.foreign_stops,
+            aborts = vim.list_slice(result.aborts, 1, 5), abort_count = #result.aborts })
+        assert.is_true(result.enabled, seen)
+        assert.equals(0, result.own, seen)
+        -- The compiler is on for unrelated code: it starts their traces.
+        assert.is_true(result.foreign > 0, seen)
+        -- And completes one, unless the LuaJIT could place no machine code at all:
+        -- every foreign abort is the mcode-allocation error (#294's arm64 defect).
+        local unplaceable = #result.aborts > 0 and vim.iter(result.aborts):all(function(reason)
+            return reason == 'failed to allocate mcode memory'
+        end)
+        assert.is_true(result.foreign_stops > 0 or unplaceable,
+            "no foreign trace completed, and not every abort was #294's mcode-allocation defect: " .. seen)
         assert.equals(50005000, result.sum)
         assert.equals('idle', result.status)
     end)
