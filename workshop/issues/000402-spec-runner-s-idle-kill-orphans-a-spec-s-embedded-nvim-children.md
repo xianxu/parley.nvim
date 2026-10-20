@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6cf6ecd0", done: "49d8cdf7"}
 ---
 
 # spec_runner's idle kill orphans a spec's embedded nvim children
@@ -43,15 +44,34 @@ Measured (2026-10-19), with an nvim that starts a detached `sh` whose `sleep` gr
 - `vim.system{detach = true}` passes `detached` to `uv.spawn` on both runtimes, so the child becomes a process-group leader (pgid = pid) and keeps its pipes.
 
 Steps:
-- [ ] `spec_runner.execute` starts the spec child with `detach = true`, so the child and everything it starts (embedded nvims inherit the group) form one group the runner owns.
-- [ ] On the deadline, and when the child's exit isn't observed: SIGTERM to the group, a grace of `GRACE_MS` (1 s) for the child to exit, then SIGKILL to the group. Survivors are killed even if the leader exits on TERM.
-- [ ] While a spec runs, the runner watches its own SIGTERM and SIGINT. On either, it sends TERM to the group, sleeps `GRACE_MS`, then sends KILL, and nvim's own handling then ends the runner. The watchers close when `execute` returns.
-- [ ] Tests in `spec_runner_native_spec`, each recording the embedded pid through a file and SIGKILLing any survivor itself:
+- [x] `spec_runner.execute` starts the spec child with `detach = true`, so the child and everything it starts (embedded nvims inherit the group) form one group the runner owns.
+- [x] On the deadline, and when the child's exit isn't observed: SIGTERM to the group, a grace of `GRACE_MS` (1 s) for the child to exit, then SIGKILL to the group. Survivors are killed even if the leader exits on TERM.
+- [x] While a spec runs, the runner watches its own SIGTERM and SIGINT. On either, it sends TERM to the group, sleeps `GRACE_MS`, then sends KILL, and nvim's own handling then ends the runner. The watchers close when `execute` returns.
+- [x] Tests in `spec_runner_native_spec`, each recording the embedded pid through a file and SIGKILLing any survivor itself:
   - Idle kill: a fixture spins an embedded child that only the runner can end; after `execute` reports `stalled`, the child is gone.
   - Runner killed: an outer nvim runs `execute` on the same fixture; the test sends it SIGTERM, then (in a second case) SIGINT, and the embedded child is gone.
   - Red checks: without `detach`, the idle case fails; without the watchers, the runner-killed cases fail.
 - At most 4 test processes at once (the hub's cap); each case uses three.
 
+## Revisions
+
+- 2026-10-19, design delta 1 (approved by the hub): the red tests failed against the group kill. Measured: Neovim's `jobstart` starts every job in its own process group (pgid = the job's pid) on both runtimes, out of reach of a signal to the spec child's group.
+  - Kept: `detach` for `vim.system` and `uv.spawn` descendants.
+  - Added: a per-spec `jobstart` registry, installed from one place (`tests/minimal_init.vim`) in spec children only. It records each job's pid with its start time.
+  - The runner signals a recorded job's group only while the start time still matches; a reused pid is skipped and logged. The hub's guard, with its own test.
+
 ## Log
 
 ### 2026-10-19
+
+### 2026-10-19 (implementation)
+
+- `proc_pidinfo(PROC_PIDTBSDINFO)` through LuaJIT's FFI gives a start time and pgid on macOS (136-byte struct, checked against the running nvim); Linux reads field 22 of `/proc/<pid>/stat`. No `ps`, which the sandbox denies.
+- Red then green: with only the group kill, all three process-group tests failed (the embedded nvim survived). With the registry, they pass: the idle deadline, the runner's SIGTERM, and the runner's SIGINT.
+- Red checks:
+  - Without the identity match, the reused-pid tests fail, both the unit test and the live-process one.
+  - Without the runner's signal watchers, both runner-killed tests fail.
+- Every case SIGKILLs any surviving embedded child itself, so no red run left a spinner.
+- Targeted runs green: `infra/test_harness`, `modes/session_sync`, `chat/document`.
+- Stress respected the hub's cap: each case runs at most four nvims at once.
+
