@@ -56,7 +56,7 @@ on pin acquisition/build failure. Preserve bootstrap, setup and check ordering.
 
 - [x] Regenerate the two workflow files with weave refresh on this clean issue branch; add the exact approved compiler pin outside the manifest (ARCH-DRY, ARCH-SECURE).
 - [x] Verify generated workflow equality with the reviewed upstream template, pin grammar/fetch/build/provenance failure propagation and PATH precedence using upstream actual-block conformance; build the exact pin and run cold ownership/tamper conformance. Confirm compile retains the authored pin.
-- [ ] Record the required suite result.
+- [x] Record the required suite result.
 
 Close review follows verification. Report the PR, compiler identity and real CI result to the hub for operator-held local-gates verification; normal landing follows the label and green gates.
 
@@ -72,6 +72,8 @@ operator own implementation and acceptance.
 
 - Started from a clean issue branch. Plain weave refresh refused the local issue commits without changing refs; used its documented issue-branch mode, weave refresh --substrate, preserving this branch/HEAD. It regenerated exactly .github/workflows/merge-check.yml and local-gates-guard.yml. Both match the reviewed upstream templates byte-for-byte; no handwritten workflow variant. Added the Spec's exact pin plus newline, absent from construct/base.manifest. A subsequent weave compile passed and preserved both workflows and the authored pin.
 - make -k conformance `/tmp/parley398-conformance.log` passed: upstream portable-ci actual Bash blocks reject malformed pins, fetch/build/source/metadata/dirty failures and an older PATH weave, preserve bootstrap/setup/check ordering; the workflow bytes here equal the tested template. Isolated clean clone at approved63d6bfd86509d97649e10d7a5dd1e9a06db17d21 built successfully (local Go1.27.1; real CI selects Go from pinned go.mod1.26.3). go version -m reports vcs.revision=63d6bfd86509d97649e10d7a5dd1e9a06db17d21 and vcs.modified=false. Real pinned compiler conformance passes changed-cold and no-drift cold consumers across6 noun exports, plus tampered/missing/malformed/symlink/undeclared refusal controls without losing bytes. Fixture also preserves its authored pin. Log SHA256 f485f0a83b5301dab0ec63a3b8bbb2166fee20b77bc6c71050b136534966cbdb. Scratch `/Volumes/TestScratch/tmp/parley.nvim-slot2/parley398.CMM4Ii`; binary lives outside its clean source clone. Whitespace checks clean. Required consumer suite and real GitHub CI remain pending; operator alone applies the local-gates-verified label.
+
+- Recorded suite passed on 46a1132cf7c1fd7c82c004b0ba9c98336c433eca, attempt 0293e2d95ffdc19d1ec8cc6989c23d4d, exit0 in304.50s; SHA256 4d7b805c3c0827c41d4fddf4f347ccee04568e5c0017ddfb234bd96c3794a2b8. GitHub merge-check run39370460605 passed: actual log confirms Go1.26.3 linux/amd64, binary vcs.revision=63d6bfd86509d97649e10d7a5dd1e9a06db17d21 and vcs.modified=false before bootstrap, followed by setup and both merge checks passing. PR https://github.com/xianxu/parley.nvim/pull/323 reported to the hub with compiler identity and conformance evidence. Operator local-gates-verified label requested through the hub; its guard remains correctly blocked pending approval. Existing atlas/workflow/ci-merge-check.md already maps the imported pin contract, so no new architectural surface needs another atlas change.
 
 ## Revisions
 
