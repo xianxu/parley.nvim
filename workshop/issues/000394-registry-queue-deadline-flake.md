@@ -67,4 +67,7 @@ Failed evidence: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed
 - The deterministic test stubs `couch.run`, holds request 5 in the queue for three times its deadline, then answers it in the call that starts it.
 - Red check: with the deadline timer armed at admission, the deterministic test fails, while the real-process test still passes (the red check is the deterministic test's job). With the real code, both pass.
 - `make test-spec SPEC=modes/session_sync` is green (28 files, 0 failed).
+- Merge suite on 59b6cd14 (attempt 2e99c5ad): `document_fold_retirement_spec` stalled in the compat pass with 0 cases completed and was killed at the 180 s idle deadline; it passed in the same run's preferred pass. Not this branch's change, which touches only `document_registry_spec`.
+  - Its one silent case takes 43 s alone and has no bound on its requests to the child nvim. Filed as #401, unclaimed.
+  - The unchanged rerun on the same head passed every file, but sdlc judged the stall unattributable and won't record that pass. This entry lands as a new commit whose recorded suite must pass.
 
