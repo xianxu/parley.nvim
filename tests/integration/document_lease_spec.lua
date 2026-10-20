@@ -13,7 +13,6 @@ describe('kernel document migration lease', function()
     local function editor()
         local child = Embedded.start()
         children[#children + 1] = child
-        child:exec('vim.opt.runtimepath:append(...)', vim.fn.getcwd())
         return child
     end
     local function remote(child, code, args)

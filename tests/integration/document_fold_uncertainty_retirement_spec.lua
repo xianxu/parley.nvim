@@ -4,7 +4,6 @@ describe('native suspended fold retirement',function()
     local function exec(code,...)return child:exec(code,...)end
     before_each(function()
         child=Embedded.start({ui={80,24}})
-        exec("vim.opt.rtp:append(...)",vim.fn.getcwd())
     end)
     after_each(function()child:stop()end)
     it('restores the operator preference and view when detach interrupts suspended uncertainty',function()

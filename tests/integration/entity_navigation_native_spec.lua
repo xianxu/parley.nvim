@@ -24,8 +24,7 @@ describe("entity navigation native input", function()
         vim.fn.writefile({ "# Answer", "The destination is a real file." }, target)
         child = Embedded.start({ ui = { 100, 30 } })
         exec([[
-            local runtime, root = ...
-            vim.opt.rtp:append(runtime)
+            local root = ...
             vim.cmd("cd " .. vim.fn.fnameescape(root))
             vim.env.PARLEY_REPO_MODE = "0"
             vim.o.swapfile = false
@@ -38,7 +37,7 @@ describe("entity navigation native input", function()
                 providers = {},
                 api_keys = {},
             })
-        ]], vim.fn.getcwd(), root)
+        ]], root)
     end)
 
     after_each(function()

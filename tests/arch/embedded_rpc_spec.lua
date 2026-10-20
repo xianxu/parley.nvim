@@ -6,7 +6,10 @@ local arch = require("tests.arch.arch_helper")
 
 local SCOPE = { "tests/*.lua" } -- git pathspec: * crosses /
 local HELPER = "tests/helpers/embedded_nvim.lua"
-local RAW = { "rpcrequest%(", "['\"]%-%-embed['\"]" }
+-- The guard and the helper's own spec name the helper without being users.
+local NOT_USERS = { "tests/arch/embedded_rpc_spec.lua", "tests/integration/embedded_nvim_spec.lua" }
+-- Any reference to the RPC calls (a pcall wraps them as a value), and an --embed spawn.
+local RAW = { "rpcrequest", "rpcnotify", "['\"]%-%-embed['\"]" }
 
 local function scan(visit)
     for _, file in ipairs(arch.worktree_files(SCOPE)) do
@@ -24,7 +27,8 @@ describe("arch: embedded nvim requests go through the bounded helper (#401)", fu
     it("scans the suite, including the helper's own users", function()
         local users = 0
         for _, file in ipairs(arch.worktree_files(SCOPE)) do
-            for _, line in ipairs(vim.fn.readfile(file)) do
+            local own = vim.iter(NOT_USERS):any(function(path) return vim.endswith(file, path) end)
+            for _, line in ipairs(own and {} or vim.fn.readfile(file)) do
                 if line:find("tests.helpers.embedded_nvim", 1, true) then users = users + 1; break end
             end
         end

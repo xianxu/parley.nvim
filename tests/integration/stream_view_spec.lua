@@ -7,8 +7,7 @@ describe("stream fold maintenance preserves each window view", function()
     end
 
     before_each(function()
-        child = Embedded.start({ ui = { 100, 30 } })
-        exec("vim.opt.runtimepath:prepend(...)", vim.fn.getcwd())
+        child = Embedded.start({ ui = { 100, 30 }, rtp = "prepend" })
         exec([[
             folds = require("parley.tool_folds")
             function fixture(thinking, wrapped)

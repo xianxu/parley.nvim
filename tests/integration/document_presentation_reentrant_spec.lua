@@ -5,7 +5,6 @@ describe('native presentation publication ownership',function()
     local function exec(code,...)return child:exec(code,...)end
     before_each(function()
         child=Embedded.start({ui={80,24}})
-        exec("vim.opt.rtp:append(...)",vim.fn.getcwd())
     end)
     after_each(function()child:stop()end)
     it('does not clear newer fold work after an OptionSet callback edits and repairs',function()

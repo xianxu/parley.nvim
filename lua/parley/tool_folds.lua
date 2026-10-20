@@ -16,7 +16,7 @@ local function invalidate(s)
 end
 local function notify(event) if M._observer then M._observer(event) end end
 local restore_window=Native.restore_window
--- The >50k-row paths still delete via the native walk.
+-- Paths past M.INTERACTIVE_ROWS still delete via the native walk.
 local function clear_folds_in_span(buf,win,first_0,last_0,command_limit,remember,current,owner)
     local next_row,done=Native.walk(buf,win,first_0,last_0,command_limit,remember,current,owner)
     M._last_clear_iters=Native.last_iters
@@ -260,8 +260,8 @@ local function apply(buf,s,plan)
                     if plan.last-plan.first>M.INTERACTIVE_ROWS then window.suspended=true end
                 end
             elseif window.phase=='inventory' then
-                -- Read the native folds without changing any (#264). At most 50k
-                -- affected rows keep the single-walk exception; larger scopes page.
+                -- Read the native folds without changing any (#264). At most
+                -- M.INTERACTIVE_ROWS affected rows keep the single-walk exception; larger scopes page.
                 local folds,next_row,done=Native.walk(buf,win,window.inventory_row,plan.last-1,
                     window.suspended and BATCH_GROUPS*2 or nil,nil,current,window,'inventory')
                 if not current() or not folds then return end

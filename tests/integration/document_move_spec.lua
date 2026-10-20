@@ -420,7 +420,6 @@ describe('durable leased document migration', function()
         local operation = assert(begin())
         local child = Embedded.start()
         children[#children + 1] = child
-        child:exec('vim.opt.rtp:append(...)', vim.fn.getcwd())
         local result = child:exec([[
             local root,old,new=...; local M=require('parley.document_move')
             local op,err=M.begin('ns',{ID='stable-id',File=old,Owner='owner'},new,{root=root,destination_registered=false})

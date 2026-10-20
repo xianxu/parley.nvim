@@ -96,8 +96,7 @@ describe("session-sync native edits", function()
         require("tests.helpers.fake_couch").write(root, sent_file, root .. "/argv")
         child = Embedded.start({ ui = { 100, 30 } })
         exec([[
-            local runtime, root = ...
-            vim.opt.rtp:append(runtime)
+            local root = ...
             -- Capture notifications without builtin vim.notify's hit-enter UI;
             -- foreign-write warnings are asserted through the fake owner's log.
             _G.notifications = {}
@@ -107,7 +106,7 @@ describe("session-sync native edits", function()
             vim.env.FAKE_COUCH_STATUS = nil
             vim.env.FAKE_COUCH_LOG_DELAY = "0.1"
             vim.env.FAKE_COUCH_ACTORS = '{"Actors":[]}'
-        ]], vim.fn.getcwd(), root)
+        ]], root)
     end)
     after_each(function()
         child:stop()
@@ -679,8 +678,7 @@ describe("session-sync native edits", function()
         child:stop()
         child = Embedded.start({ ui = { 100, 30 } })
         exec([[
-            local runtime, root, destination, proof = ...
-            vim.opt.rtp:append(runtime)
+            local root, destination, proof = ...
             vim.env.PATH = root .. "/bin:" .. vim.env.PATH
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
             vim.env.FAKE_COUCH_STATUS = nil
@@ -691,7 +689,7 @@ describe("session-sync native edits", function()
             ss.POLL_MS = 60000
             _G.restored_token = assert(ss.restore_move(0, proof.identity, destination, proof.protection))
             _G.original_identity = proof.identity
-        ]], vim.fn.getcwd(), root, destination, proof)
+        ]], root, destination, proof)
         assert.is_not_nil(vim.uv.fs_stat(file .. ".lock"))
         exec([[
             local destination = ...

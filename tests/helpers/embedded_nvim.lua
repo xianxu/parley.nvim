@@ -50,14 +50,24 @@ function Child:stop()
     vim.fn.jobwait({ self.channel }, 1000)
 end
 
---- Start a clean embedded nvim. `options.ui = { width, height }` attaches a UI.
+--- Start a clean embedded nvim with this repository on its runtimepath.
+--- `options.ui = { width, height }` attaches a UI; `options.rtp = "prepend"`
+--- puts the repository first (default: appended).
 function M.start(options)
     options = options or {}
     local channel = vim.fn.jobstart({ vim.v.progpath, "--clean", "--embed", "--headless", "-i", "NONE" }, { rpc = true })
     assert(channel > 0, "could not start an embedded nvim")
     local child = setmetatable({ channel = channel, pid = vim.fn.jobpid(channel) }, Child)
-    if options.ui then
-        child:request("nvim_ui_attach", options.ui[1], options.ui[2], { rgb = true })
+    -- A failed setup still ends the child: the caller never got it to stop.
+    local ok, err = pcall(function()
+        if options.ui then
+            child:request("nvim_ui_attach", options.ui[1], options.ui[2], { rgb = true })
+        end
+        child:exec(options.rtp == "prepend" and "vim.opt.rtp:prepend(...)" or "vim.opt.rtp:append(...)", vim.fn.getcwd())
+    end)
+    if not ok then
+        child:stop()
+        error(err, 2)
     end
     return child
 end
