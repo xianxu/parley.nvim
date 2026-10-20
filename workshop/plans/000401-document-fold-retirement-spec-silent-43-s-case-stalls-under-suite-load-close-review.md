@@ -228,3 +228,87 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"52c2925f-38c7-4a13-9a4b-c96f2a2bdb1a","repository":"github.com/xianxu/parley.nvim","issue_id":"000401","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/f1f8f9ffa319cce7","reviewed_head":"08c40cc09b69f2eb922f80eedc31c87ee3de2c99","slot":"parley.nvim:3","requested_at":"2026-10-20T01:34:58.306301Z"},"phase":"finished","pid":46162,"started_at":"2026-10-20T01:34:58.397947Z","finished_at":"2026-10-20T01:38:16.51042Z","session_id":"06a9602d-565b-4347-a8e3-e2d987660102","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T18:56:22-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 401 — document_fold_retirement_spec: silent 43 s case stalls under suite load |
+| repo | parley.nvim |
+| issue file | workshop/issues/000401-document-fold-retirement-spec-silent-43-s-case-stalls-under-suite-load.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 7c99d689403ce315f1eca1dc5f5ba1924ac8d167..1d168ccaa7afba31b643dfb743400cb5b9a75bd5 |
+| command | sdlc close --issue 401 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T18:56:22-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Verifying the round-2 fixes now: checking what `Deadline.snapshot(...).idle_ms` actually means, then running the helper and arch specs.
+
+Specs refuse to run outside the isolated harness; switching to `make test-spec` for the infra/test_harness feature.
+
+Helper and arch specs pass; the scratch_placement failures come from where this checkout lives, not from this diff. Next, I'll revert the runner's env pass to confirm the runner-level test goes red.
+
+The runner-level test fails when the env pass is removed and passes when it's restored, so it is real regression evidence. One last check: whether `idle_ms` stays fixed after spawn.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This change adds a bounded embedded-nvim helper and moves all nine child-driving specs onto it. Each RPC request is now limited by `request_ms()`, which is half of the load-scaled idle budget that `spec_runner` passes to the spec child as `PARLEY_SPEC_IDLE_MS`. That fixes BR-6 properly: the limit now comes from the runner's own budget instead of a fixed 60 s. I confirmed it in the disposable checkout. With the `env = { PARLEY_SPEC_IDLE_MS … }` line commented out of `tests/helpers/spec_runner.lua`, the runner-level test `names a wedged child before the runner's idle kill` fails (`embedded_nvim_spec.lua:77`). With the line restored it passes, along with the other four helper cases and both arch-guard cases, under `make test-spec SPEC=infra/test_harness`. That run's only failures are in `tests/arch/scratch_placement_spec.lua`. That file is unchanged in this window, and it fails because the review checkout sits under `/Volumes/TestScratch`, not because of this diff. Nothing blocks SHIP.
+
+Done-when: current — the Spec still has two bullets (bounded cost, bounded and named failure), and each maps to a Done-when clause. Round 2 only changed how the bound is derived, not the scope. The cost clause is backed by the logged under-load timings (1 s and 2 s against the 50 s budget). The named-failure clause is now pinned by a test that runs through the real `spec_runner.execute` and asserts there is no `DEADLINE` and that `nvim_exec_lua` is named.
+
+1. **Strengths**
+   - `tests/helpers/spec_runner.lua:52-54` passes the exact value that `Deadline.new` fixes as `idle_ms`, which never changes after spawn (`spec_deadline.lua:30-33`). So the inner bound comes from the actual outer budget, not an estimate.
+   - The runner-level test in `tests/integration/embedded_nvim_spec.lua:59-80` uses the real outer mechanism with a 20 s base. I checked that it fails without the fix.
+   - `tests/helpers/embedded_nvim.lua:68-80`: a failed setup stops the child and re-raises (BR-2). It is tested with a real failing `nvim_ui_attach` (`ui = {-1,-1}`), and the test asserts the child was reaped.
+   - The sweep is complete: the arch guard scans `tests/*.lua` for `rpcrequest`, `rpcnotify` and quoted `--embed`. Its floor of 9 matches the nine migrated specs exactly.
+   - `M.INTERACTIVE_ROWS` is read at every use in `tool_folds.lua` (lines 143, 154, 260), so the small fixture really crosses the suspension threshold. The log records a check that removing the override fails both retirement cases.
+
+2. **Critical findings** — none.
+
+3. **Important findings** — none.
+
+4. **Minor findings** — none raised. Two small things, not findings:
+   - `embedded_rpc_spec.lua` names its own path twice, in `NOT_USERS` and in `scan`.
+   - In `Child:request`, if the timer fires inside the same loop turn as a successful reply, the request would be reported as "did not answer". This only happens exactly at the limit.
+
+5. **Test coverage notes**
+   - `request_ms()` is tested both with the env var set and with it absent (falls back to `DEFAULT_TIMEOUT/2`).
+   - The wedge test is covered at the helper level (500 ms override) and through the runner (10 s derived bound).
+   - The spec_runner unit test now asserts that both retirement specs have left the 180 s list.
+
+6. **Architectural notes**
+   - ARCH-DRY: pass. Nine copies of the jobstart/attach/runtimepath setup collapse into `Embedded.start`, and `DEFAULT_TIMEOUT` is exported, not restated.
+   - ARCH-PURE: pass. `request_ms()` is a small derivation tested directly; the timer and kill code stays in the thin `Child:request` layer.
+   - ARCH-PURPOSE: pass. The whole class was swept: every raw request site was migrated and an arch guard stops new ones.
+   - ARCH-EVOLVE: not applicable. Nothing persisted changes; `PARLEY_SPEC_IDLE_MS` is runtime environment only.
+   - Future work: the "half the idle budget" bound is a heuristic. If one case spends more than half the budget on other work before a request wedges, the runner's unnamed kill can still win. If that ever shows up, the child could compute the remaining budget since the last completed case instead of using a fixed half.
+
+7. **Plan revision recommendations** — none. The `## Revisions` entry already supersedes the old Steps text ("4 × arrival.MS (60 s)") and records the derived bound.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      embedded_nvim.lua:68-80 pcalls the setup (ui attach and rtp), stops the child, and re-raises; embedded_nvim_spec "stops the child when its setup fails" asserts the child is reaped after a real failing nvim_ui_attach.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      spec_runner passes the fixed load-scaled Deadline idle_ms as PARLEY_SPEC_IDLE_MS and request_ms() takes half of it; the runner-level wedge test went red when the env pass was commented out and passes at head; atlas and the plan Revisions entry are corrected.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Helper comments now name their sources (request_ms, PARLEY_SPEC_IDLE_MS, DEFAULT_TIMEOUT) with no restated 180 s or 4x values; the only literal left is the dated floor note in the arch spec, already ruled fine.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ac50ec62-5e08-4bec-92a6-472f0197b328","repository":"github.com/xianxu/parley.nvim","issue_id":"000401","recipe":"small-diff-review","round":3,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/e39b3505390ae340","reviewed_head":"1d168ccaa7afba31b643dfb743400cb5b9a75bd5","slot":"parley.nvim:3","requested_at":"2026-10-20T01:49:48.804228Z"},"phase":"finished","pid":94433,"started_at":"2026-10-20T01:49:49.035403Z","finished_at":"2026-10-20T01:56:21.834631Z","session_id":"bf7f1706-75e6-45d8-8a7e-7e272a49f98f","outcome":"returned"}] -->

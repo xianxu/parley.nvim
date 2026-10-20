@@ -68,6 +68,7 @@ Steps:
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Round 2 REWORK fixed in 1d168cca. The request bound is derived: spec_runner passes the spec child its load-scaled idle budget (PARLEY_SPEC_IDLE_MS) and the helper bounds each request at half. A test through the real spec_runner.execute (20 s budget) shows a wedged child failing with "nvim_exec_lua within 10000 ms" and no DEADLINE; it is red when the runner does not pass the budget. The BR-2 failed-setup test shows a bad UI attach raising and the child reaped. Comments name their sources; Revisions record the corrected plan. Earlier evidence holds: under suite load the retirement specs take 1-2 s (from 30-43 s); removing the seam fails both; a raw or pcall-wrapped rpcrequest fails the guard. All affected groups green: infra/test_harness, chat/document, chat/exchange_model, context/file_references, modes/session_sync. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 ### 2026-10-19 (implementation)
 

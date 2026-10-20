@@ -212,6 +212,98 @@ rounds:
       recipe: small-diff-review
       isolation: checkout
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: ac50ec62-5e08-4bec-92a6-472f0197b328
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000401"
+            recipe: small-diff-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Volumes/TestScratch/review-checkouts/e39b3505390ae340
+            reviewed_head: 1d168ccaa7afba31b643dfb743400cb5b9a75bd5
+            slot: parley.nvim:3
+            requested_at: "2026-10-20T01:49:48.804228Z"
+          phase: finished
+          pid: 94433
+          started_at: "2026-10-20T01:49:49.035403Z"
+          finished_at: "2026-10-20T01:56:21.834631Z"
+          session_id: bf7f1706-75e6-45d8-8a7e-7e272a49f98f
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 1d168ccaa7afba31b643dfb743400cb5b9a75bd5
+        tracker_head: a1ed5460efe8c2e9955045e36b54aabe8156e556
+        branch_point: 7c99d689403ce315f1eca1dc5f5ba1924ac8d167
+        since: "2026-10-19T17:57:41-07:00"
+        until: "2026-10-19T18:49:18-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-19T17:57:41-07:00"
+              end: "2026-10-19T18:49:18-07:00"
+              began: "2026-10-19T17:57:41-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 338ec900-e10b-4fe4-be14-0f0ef1bf7fbd
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 42e84d5fd20810adfa614335d969abf1c077fe711c403b0e96d7d995ca01b34f
+              started: "2026-10-18T22:09:43.273Z"
+              spawned: false
+              bytes: 11316520
+              windows:
+                - start: "2026-10-19T17:57:41-07:00"
+                  end: "2026-10-19T18:49:18-07:00"
+        queue_waits:
+            - attempt_id: f72dafcf8f78d73827f250cfda6acc42
+              slot: parley.nvim:3
+              record_digest: be81c021f47469e6ddca03f1b4f2c4e55778910a126bd4ed99c92cf52fc991c6
+              start: "2026-10-20T01:23:01.648852Z"
+              end: "2026-10-20T01:31:08.786391Z"
+              queue_seconds: 487.137539
+              raw_seconds: 487.137539
+              exact: true
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 27.373783333333336
+        cuts:
+            - dispatched: "2026-10-19T18:23:16-07:00"
+              finalized: "2026-10-19T18:25:00-07:00"
+              finalizing: false
+            - dispatched: "2026-10-19T18:34:58-07:00"
+              finalized: "2026-10-19T18:38:17-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-19T18:56:22-07:00"
+      dispatched: "2026-10-19T18:49:48-07:00"
+      agent: claude
+      reviewer: claude (anthropic; author anthropic)
+      dispose:
+        - id: BR-2
+          disposition: addressed
+          note: embedded_nvim.lua:68-80 pcalls the setup (ui attach and rtp), stops the child, and re-raises; embedded_nvim_spec "stops the child when its setup fails" asserts the child is reaped after a real failing nvim_ui_attach.
+          round: 3
+        - id: BR-6
+          disposition: addressed
+          note: spec_runner passes the fixed load-scaled Deadline idle_ms as PARLEY_SPEC_IDLE_MS and request_ms() takes half of it; the runner-level wedge test went red when the env pass was commented out and passes at head; atlas and the plan Revisions entry are corrected.
+          round: 3
+        - id: BR-7
+          disposition: addressed
+          note: Helper comments now name their sources (request_ms, PARLEY_SPEC_IDLE_MS, DEFAULT_TIMEOUT) with no restated 180 s or 4x values; the only literal left is the dated floor note in the arch spec, already ruled fine.
+          round: 3
+      recipe: small-diff-review
+      isolation: checkout
+      reviewed: 1d168ccaa7afba31b643dfb743400cb5b9a75bd5
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#401 (boundary-review)
@@ -251,8 +343,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Minor] `comment-restates-constant` (kind: defect) Helper comments restate harness values (180 s, at most 4) instead of naming their source
   This is the 2nd finding in family comment-restates-constant. Rule: a comment names the source of a value (field, function, runner option), never the value itself. Instances in this window: embedded_nvim.lua:3 "(180 s)", already wrong for every helper user, and embedded_nvim.lua:9 "(at most 4)", which restates the Deadline.load_factor cap. Checked and fine: the dated "(nine specs on 2026-10-19)" in embedded_rpc_spec.lua.
 
+## Round 3 — 2026-10-19T18:56:22-07:00 (claude) — passed
+
+### Disposed
+
+- BR-2 — addressed — embedded_nvim.lua:68-80 pcalls the setup (ui attach and rtp), stops the child, and re-raises; embedded_nvim_spec "stops the child when its setup fails" asserts the child is reaped after a real failing nvim_ui_attach.
+- BR-6 — addressed — spec_runner passes the fixed load-scaled Deadline idle_ms as PARLEY_SPEC_IDLE_MS and request_ms() takes half of it; the runner-level wedge test went red when the env pass was commented out and passes at head; atlas and the plan Revisions entry are corrected.
+- BR-7 — addressed — Helper comments now name their sources (request_ms, PARLEY_SPEC_IDLE_MS, DEFAULT_TIMEOUT) with no restated 180 s or 4x values; the only literal left is the dated floor note in the arch spec, already ruled fine.
+
 ## Open findings
 
-- **BR-2** [Minor] `spawned-child-ownership` (kind: defect) Embedded.start leaks the spawned child if nvim_ui_attach raises
-- **BR-6** [Critical] `inner-deadline-derives-from-outer` (kind: defect) REQUEST_MS (60 s) exceeds the runner's 50 s quiet-machine idle budget, so a wedged child still dies by an unnamed harness kill
-- **BR-7** [Minor] `comment-restates-constant` (kind: defect) Helper comments restate harness values (180 s, at most 4) instead of naming their source
+(none — every finding has been disposed)
