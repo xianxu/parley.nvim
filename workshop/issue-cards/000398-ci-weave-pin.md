@@ -1,6 +1,6 @@
 ---
 id: 000398
-status: codecomplete
+status: done
 created: 2026-10-19
 updated: 2026-10-20
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 1c11c82768b3a0b8aae34ba504ec62f39ede8c71
         evidence_commit: f90168b4877cc1f509766316b9a7fd43b38e3ab9
+        landed_commit: 1b7319bf81f3b69b6b7833154fe510248e176013
 ---
 
 # CI: build weave from a pinned ariadne commit
