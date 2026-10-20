@@ -319,7 +319,12 @@ cursor is in that edit's region** (`attach_diagnostics` spans
 `lnum..end_lnum`) and hides otherwise. `:ParleyShowDiagnostics` toggles it. The
 built-in `]d`/`[d` (jump) and `<C-W>d` (float, wraps) still work on these
 diagnostics because the underlying diagnostic spans remain unchanged. Composes
-with decoration projection — re-renders on undo/redo.
+with decoration projection — re-renders on undo/redo. Virtual lines anchor at
+column zero, including empty/short lines; cached diagnostics whose start row is
+outside the current buffer are skipped after rewrites. Publication, cursor/resize
+refresh and deferred rewrap share one failure boundary: a failed refresh clears
+its display, logs one warning per module lifetime, and retries on the next
+refresh. It does not change the underlying diagnostics or document text.
 
 The same controller also renders managed footnote diagnostics; those use a
 centered non-focusable float instead of virtual lines, and show only while the

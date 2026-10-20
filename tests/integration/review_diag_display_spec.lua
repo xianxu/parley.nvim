@@ -470,3 +470,94 @@ describe("review.diag_display", function()
         assert.are.equal(1, #display_marks(buf), "span diagnostic should show on final line")
     end)
 end)
+
+-- #403: exercise the real extmark API and shared renderer from publication,
+-- cached refresh and an autocmd. Only unexpected failure is injected.
+describe("review display after document rewrites (#403)", function()
+    local buf, diag_ns, handler, original_mark, original_warning
+    before_each(function()
+        buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "original line", "second line" })
+        dd.set(true)
+        diag_ns = require("parley.skill_render").diag_namespace()
+        handler = vim.diagnostic.handlers["parley/virtual_lines"]
+        original_mark = vim.api.nvim_buf_set_extmark
+        original_warning = require("parley.logger").warning
+    end)
+    after_each(function()
+        vim.api.nvim_buf_set_extmark = original_mark
+        require("parley.logger").warning = original_warning
+        if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
+    end)
+    local function diagnostic(row)
+        return { lnum = row, col = 0, end_lnum = row, end_col = 1,
+            message = "review explanation", severity = vim.diagnostic.severity.INFO, source = "parley-skill" }
+    end
+    local function show_all(diagnostics)
+        handler.show(diag_ns, buf, diagnostics, { ["parley/virtual_lines"] = { current_line = false } })
+    end
+    for _, text in ipairs({ "", "x", "界" }) do
+        it("renders at column zero on a line of " .. #text .. " bytes", function()
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
+            assert.has_no.errors(function() vim.diagnostic.set(diag_ns, buf, { diagnostic(0) }) end)
+            local marks = display_marks(buf)
+            assert.equals(1, #marks)
+            assert.equals(0, marks[1][3])
+            assert.equals("review explanation", virtual_rows(marks[1])[1])
+            assert.has_no.errors(function() vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf }) end)
+        end)
+    end
+    it("skips stale rows after shrink while retaining the live row and cached CursorMoved refresh", function()
+        local cached = { diagnostic(0), diagnostic(1), diagnostic(8) }
+        vim.diagnostic.set(diag_ns, buf, { cached[1], cached[2] })
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
+        local before = vim.deepcopy(cached)
+        assert.has_no.errors(function() show_all(cached) end)
+        local marks = display_marks(buf)
+        assert.equals(1, #marks)
+        assert.equals(0, marks[1][2])
+        assert.same(before, cached)
+        assert.has_no.errors(function() vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf }) end)
+        assert.equals(1, #display_marks(buf))
+    end)
+    it("clears a partial failed refresh, warns once, and retries on the next cursor move", function()
+        local cached = { diagnostic(0), diagnostic(1) }
+        vim.diagnostic.set(diag_ns, buf, cached)
+        local calls, warnings, fail = 0, {}, true
+        local display_ns = vim.api.nvim_create_namespace("parley_diagnostic_virtual_lines")
+        vim.api.nvim_buf_set_extmark = function(b, namespace, ...)
+            if namespace == display_ns then
+                calls = calls + 1
+                if fail and calls >= 2 then error("injected review render failure") end
+            end
+            return original_mark(b, namespace, ...)
+        end
+        require("parley.logger").warning = function(message) warnings[#warnings + 1] = message end
+        assert.has_no.errors(function() show_all(cached) end)
+        assert.equals(0, #display_marks(buf), "partial render remained visible")
+        for _ = 1, 3 do
+            assert.has_no.errors(function() vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf }) end)
+        end
+        assert.equals(1, #warnings)
+        assert.matches("injected review render failure", warnings[1])
+        fail = false
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        assert.equals(1, #display_marks(buf), "next refresh did not recover")
+        assert.equals(2, #vim.diagnostic.get(buf, { namespace = diag_ns }))
+    end)
+    it("checks buffer size once per render at N and 2N diagnostics", function()
+        for _, n in ipairs({ 16, 32 }) do
+            local lines, diagnostics = {}, {}
+            for i = 1, n do lines[i] = "text"; diagnostics[i] = diagnostic(i - 1) end
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+            local native, reads = vim.api.nvim_buf_line_count, 0
+            vim.api.nvim_buf_line_count = function(b) reads = reads + 1; return native(b) end
+            local ok, err = pcall(show_all, diagnostics)
+            vim.api.nvim_buf_line_count = native
+            assert.is_true(ok, tostring(err))
+            assert.is_true(reads <= 1, "buffer bounds queried per diagnostic")
+            assert.equals(n, #display_marks(buf))
+        end
+    end)
+end)

@@ -707,6 +707,8 @@ atlas:
       - tests/helpers/ready_port.lua
       - tests/helpers/await.lua
       - tests/helpers/jit_oracle.lua
+      - tests/helpers/spec_jobs.lua
+      - tests/helpers/process_identity.lua
       - tests/helpers/embedded_nvim.lua
       - tests/helpers/spec_runner.lua
       - tests/helpers/spec_deadline.lua
@@ -753,6 +755,7 @@ atlas:
       - tests/integration/chat_progress_process_spec.lua
       - tests/integration/embedded_nvim_spec.lua
       - tests/arch/embedded_rpc_spec.lua
+      - tests/unit/spec_jobs_spec.lua
 
   infra/vault:
     code:
@@ -764,6 +767,7 @@ atlas:
 
   modes/review:
     code:
+      - lua/parley/skills/review/diag_display.lua
       - lua/parley/skills/review/collaboration.lua
       - lua/parley/skills/review/collaboration_value.lua
       - scripts/sync-review-protocol.py
@@ -794,6 +798,7 @@ atlas:
       - tests/unit/comment_thread_spec.lua
       - tests/unit/drill_in_spec.lua
       - tests/unit/review_spec.lua
+      - tests/integration/review_diag_display_spec.lua
       - tests/integration/comment_render_spec.lua
       - tests/integration/comment_attach_spec.lua
       - tests/integration/comment_float_spec.lua

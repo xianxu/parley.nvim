@@ -96,6 +96,9 @@ vim.api.nvim_create_autocmd("VimLeavePre", { callback = drop_query_dir })
 -- skips VimLeavePre, so the query dir's removal is handed to it as well: one
 -- definition, two triggers.
 require("tests.helpers.exit_with_parent").install(nil, drop_query_dir)
+-- #402: in a spec child, record each jobstart child so the runner can end it
+-- (Neovim gives every job its own process group, out of the spec's reach).
+require("tests.helpers.spec_jobs").install()
 
 -- #294: one large mcode area where LuaJIT's allocator makes that safe (arm64
 -- macOS with the 2025-11 fix); see lua/parley/jit_tuning.lua for why.
