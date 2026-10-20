@@ -95,25 +95,63 @@ describe("document registry process boundary", function()
     end)
 
     -- #382: the deadline bounds the child from spawn. Time queued behind
-    -- MAX_ACTIVE others is not Couch being slow: eight lookups the fake answers
-    -- in 0.6 s each, with a 1 s deadline, all answer, though the last four
-    -- finish about 1.2 s after they were asked.
+    -- MAX_ACTIVE others is not Couch being slow. Controlled scheduling (#394):
+    -- no child answers until the test says, so the result can't depend on load.
+    -- A deadline started at admission would be due about 300 ms into request 5's
+    -- 900 ms hold, so the hold's own event loop runs it (libuv's truncated clock
+    -- may fire it about 1 ms early). Its spawn-time deadline never comes into play,
+    -- because its answer arrives in the call that starts it.
     it("starts a request's deadline when its child spawns, not when it queues", function()
         local file = root .. "/queued.md"
         vim.fn.writefile({ "plain" }, file)
-        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "0.6"
+        local couch = require("parley.couch")
+        local real_run, held, results = couch.run, {}, {}
+        local absent = { code = 0, stdout = vim.json.encode({ Code = "ok", Error = "", Registration = vim.NIL, Changed = false }) }
+        couch.run = function(_, cb)
+            held[#held + 1] = cb
+            if #held == 5 then cb(absent) end
+            return {}
+        end
+        local ok, err = pcall(function()
+            for n = 1, 4 do
+                client.request("lookup", { file }, {}, function(result) results[n] = result end, { timeout_ms = arrival.MS })
+            end
+            client.request("lookup", { file }, {}, function(result) results[5] = result end, { timeout_ms = 300 })
+            assert.equals(4, #held)
+            vim.wait(900) -- bound: three times request 5's deadline, held in the queue
+            assert.equals(4, #held)
+            assert.is_nil(results[5], vim.inspect(results[5]))
+            held[1](absent)
+            assert.is_true(vim.wait(arrival.MS, function() return results[5] ~= nil end, 10))
+        end)
+        couch.run = real_run
+        client.shutdown()
+        assert(ok, err)
+        assert.equals(5, #held)
+        assert.equals("absent", results[5].kind, vim.inspect(results[5]))
+        assert.is_true(results[5].queued_ms >= 900, vim.inspect(results[5]))
+    end)
+
+    -- The same queue across the real process boundary (#394): eight lookups
+    -- through the Python fake, each 0.2 s, with the arrival deadline, so load
+    -- only slows them. A queued lookup waits for a child that sleeps 0.2 s, so
+    -- its queued time has a structural floor.
+    it("queues real lookups past MAX_ACTIVE, and every one answers", function()
+        local file = root .. "/queued-real.md"
+        vim.fn.writefile({ "plain" }, file)
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "0.2"
         local results, count = {}, 0
         for n = 1, 8 do
             client.request("lookup", { file }, {}, function(result) results[n] = result; count = count + 1 end,
-                { timeout_ms = 1000 })
+                { timeout_ms = arrival.MS })
         end
-        local done = vim.wait(arrival.MS, function() return count == 8 end, 10)
+        local done = vim.wait(2 * arrival.MS, function() return count == 8 end, 10)
         vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
         assert.is_true(done)
         local queued = 0
         for n = 1, 8 do
             assert.equals("absent", results[n].kind, n .. ": " .. vim.inspect(results[n]))
-            if results[n].queued_ms >= 300 then queued = queued + 1 end
+            if results[n].queued_ms >= 150 then queued = queued + 1 end
         end
         assert.is_true(queued >= 4, "the later lookups never waited in the queue: " .. vim.inspect(results))
     end)
