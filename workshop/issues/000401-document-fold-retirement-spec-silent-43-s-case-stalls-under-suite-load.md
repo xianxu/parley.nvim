@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "134144a6", done: "1ebb975b"}
 ---
 
 # document_fold_retirement_spec: silent 43 s case stalls under suite load
@@ -46,17 +47,30 @@ Measured (2026-10-19), with the case's code run directly in a headless nvim:
 - Nine specs drive an embedded nvim through `vim.rpcrequest`, 21 call sites, none of them bounded. This is the class to fix (ARCH-PURPOSE).
 
 Steps:
-- [ ] `tests/helpers/embedded_nvim.lua`, the one way a spec drives a child nvim (ARCH-DRY):
+- [x] `tests/helpers/embedded_nvim.lua`, the one way a spec drives a child nvim (ARCH-DRY):
   - `start({ ui = { w, h } })` spawns `--clean --embed --headless -i NONE`, optionally attaches a UI, and appends the repo to the child's runtimepath.
   - `request(method, ...)`, `exec(code, ...)`, `input(keys)`, `stop()`.
   - Every request is bounded by `REQUEST_MS`. On expiry a libuv timer kills the child by pid; the timer runs in a fast callback, where `jobstop` isn't allowed. The pending `rpcrequest` then errors on the closed channel, and the helper raises `embedded nvim did not answer <method> within N ms; killed pid P`.
   - `REQUEST_MS` is 4 × `arrival.MS` (60 s): a request stretched up to the harness's load factor (at most 4) still fits, and a wedged child is named well before the 180 s idle kill.
-- [ ] Sweep all nine specs onto the helper. No `vim.rpcrequest` left in `tests/integration`; an arch spec refuses a new one outside the helper (the mistake-class rule).
-- [ ] `tool_folds.INTERACTIVE_ROWS` becomes a module field, read at each use (the repo's `POLL_MS` pattern). The two retirement specs set it to 500 in the child and build a fixture just past it, so each case drains a few hundred lines, not 50k. The real 50,000 threshold stays covered by `document_fold_batches_spec` and the perf spec, which keep the constant.
-- [ ] Tests:
+- [x] Sweep all nine specs onto the helper. No `vim.rpcrequest` left in `tests/integration`; an arch spec refuses a new one outside the helper (the mistake-class rule).
+- [x] `tool_folds.INTERACTIVE_ROWS` becomes a module field, read at each use (the repo's `POLL_MS` pattern). The two retirement specs set it to 500 in the child and build a fixture just past it, so each case drains a few hundred lines, not 50k. The real 50,000 threshold stays covered by `document_fold_batches_spec` and the perf spec, which keep the constant.
+- [x] Tests:
   - The helper's timeout: a child blocked in `exec` (a busy loop) fails, naming the method, after a short bound; checked against an injected `REQUEST_MS`.
   - Both retirement cases now take seconds; measured before and after on both runtimes, and the numbers logged.
 
 ## Log
 
 ### 2026-10-19
+
+### 2026-10-19 (implementation)
+
+- Prototype: a libuv timer that kills the child by pid unblocks a pending `vim.rpcrequest` ("ch N was closed by the peer") on both runtimes. `jobstop` isn't allowed in that fast callback; `uv.kill` is.
+- Sweep: all nine specs now drive their child through `tests/helpers/embedded_nvim.lua`; no `vim.rpcrequest` or `--embed` spawn is left outside it.
+- Scope addition (same class): both retirement specs came off `spec_runner`'s 180 s run-alone list; they now run in 1–2 s under the default 50 s budget. The fold batches and semantic corpora keep the long budget and the real 50k threshold.
+- Measured, each retirement spec alone: 30–43 s before, 1–2 s after, on both the preferred runtime and 0.11.7.
+- Red checks:
+  - A raw `vim.rpcrequest` added to `stream_view_spec` fails the arch guard.
+  - Removing `F.INTERACTIVE_ROWS=500` fails both retirement cases ('did not suspend'), so the small fixture still exercises suspension.
+- Helper spec: a busy child fails its request, naming `nvim_exec_lua`, the 500 ms bound and its pid, and the child is reaped.
+- Targeted runs green: `infra/test_harness`, `chat/document`, `chat/exchange_model`, `context/file_references`, `modes/session_sync`.
+
