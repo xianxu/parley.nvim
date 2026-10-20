@@ -182,3 +182,72 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"c9b2349a-e256-4734-8b8c-c699526d0e02","repository":"github.com/xianxu/parley.nvim","issue_id":"000395","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/5b837d3d6d089701","reviewed_head":"79d1cbd13dbe865767200a65aa3cf374d2919e80","slot":"parley.nvim:3","requested_at":"2026-10-20T03:10:18.552403Z"},"phase":"finished","pid":91588,"started_at":"2026-10-20T03:10:18.812845Z","finished_at":"2026-10-20T03:18:01.214176Z","session_id":"a8595b15-95a1-4a7e-ad4c-309569412c5c","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T20:31:47-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 395 — jit_tuning_spec foreign JIT trace count is 0 under suite load (flake) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000395-jit-tuning-spec-foreign-jit-trace-count-is-0-under-suite-load-flake.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 354a7f0927f5ba76c3fe12ce4cbf12db5dd54678..96f7806da80eb48ea99ca06024aa634a81cc36b5 |
+| command | sdlc close --issue 395 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T20:31:47-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This window changes test code only, and it answers BR-4 for the whole class it names, not just the cited line. A new helper, `jit_oracle.abort_reason(otr, oex)` (`tests/helpers/jit_oracle.lua:13-17`), now decodes trace-abort reasons. Both child-VM trace hooks call it: `jit_tuning_spec.lua:99,103` and `document_sequence_spec.lua:663,668`. No inline `traceerr[otr]` decode is left in those hooks. The child VMs load the helper with `require('tests.helpers.jit_oracle')`. That works because each child starts with the repo root as its working directory. Both child-VM oracles passed when I ran them, so the require does resolve inside the children:
+- **`make test-spec SPEC=infra/test_harness`:** `jit_oracle_spec` passed 3/3 and `jit_tuning_spec` passed 9/9. It also reported 8 failures in the `arch: harness scratch stays out of the repo tree` spec. They come from where this review checkout sits (`/Volumes/TestScratch`); the previous round saw the same 8, and none of the touched files cause them.
+- **`make test-spec SPEC=chat/document`:** all passed, including the `document sequence` JIT and memory oracle.
+
+The issue diff in this window only adds a close Log line and updates metadata. `## Spec`, `## Revisions` and `## Done when` are unchanged, so scope did not move. No conflict resolutions are listed.
+
+Done-when: current. This window changes no behavior. It only moves a decode into a shared helper, so the Done-when clause ("passes under a loaded full suite") covers it exactly as before.
+
+1. **Strengths**
+   - `tests/helpers/jit_oracle.lua:13-17`: one place now decodes abort reasons. The comment records the cwd assumption that lets the child VMs require the helper (ARCH-DRY).
+   - `tests/unit/jit_oracle_spec.lua:9-20` checks the helper against the running LuaJIT's own `jit.vmdef.traceerr`, both a plain message and one with a detail filled in, rather than against hard-coded copies.
+   - Both trace hooks are now one-liners, and the abort data still reaches `mcode_blocked` in the same form as before.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings**
+   - `jit_oracle_spec.lua:14-19`: the check of the detail-filling path loops over `traceerr` looking for a `%d` message. If a LuaJIT build had no such message, that check would pass without asserting anything. Current builds do have one (for example the "NYI: bytecode %d" message), so this is not a finding.
+
+5. **Test coverage notes:** the helper is unit-tested with no IO. Both child-VM consumers ran green, which proves the require from inside a child works.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** The duplicated decode is gone.
+   - **ARCH-PURE: pass.** `abort_reason` is a pure function and is tested directly.
+   - **ARCH-PURPOSE: pass.** The shadow-sweep found exactly 2 trace hooks that decode aborts, and both now use the helper. That is the whole class BR-4 named.
+   - **ARCH-EVOLVE: pass.** No persisted format changes.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: not-addressed
+    note: |
+      Still Minor and non-blocking. The close Log line says the loaded full suite is recorded via local-check on 79d1cbd1, but this window contains no record of that run to inspect; the 120-way stress proxy remains the evidence in the tracker.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      jit_oracle.abort_reason (tests/helpers/jit_oracle.lua:13-17) now holds the decode. Both child hooks (jit_tuning_spec.lua:99,103 and document_sequence_spec.lua:663,668) require it, it is pinned in jit_oracle_spec.lua:9-20 against jit.vmdef.traceerr, and both child-VM oracles pass, which proves the require resolves in the child.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ee23834f-adae-400d-8a16-7a9e619aa712","repository":"github.com/xianxu/parley.nvim","issue_id":"000395","recipe":"fix-review","round":3,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/618ad6d1f6a72242","reviewed_head":"96f7806da80eb48ea99ca06024aa634a81cc36b5","slot":"parley.nvim:3","requested_at":"2026-10-20T03:26:01.514122Z"},"phase":"finished","pid":19920,"started_at":"2026-10-20T03:26:01.768716Z","finished_at":"2026-10-20T03:31:47.060288Z","session_id":"340ebb1f-9d1d-474a-9333-effcc8a13e3f","outcome":"returned"}] -->
