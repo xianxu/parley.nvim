@@ -106,3 +106,12 @@ exit 0 (log /tmp/parley-403-guards.log). Recorded suite attempt
 sdlc stage placed that exact head on parley.nvim:0; the hub has the printed
 stage result and will coordinate the operator's restart/check. No live
 acceptance is claimed yet.
+
+### 2026-10-19 — live acceptance
+
+The hub reported the operator reloaded Neovim on staged 2dd15196 and the
+error did not appear (Couch delivery 4713d65f-9747-4f1a-aa48-cc99d280e469,
+verified submitted). Landing is authorized once the recorded suite passes.
+Close review returned SHIP with no findings, independently confirming five
+red failures against the base renderer and 20 passing cases with the fix.
+The suite remains queued, now first in line.
