@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "6386f544", done: "a4d38aa0"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # CI: build weave from a pinned ariadne commit
@@ -64,6 +64,10 @@ Actions: review/bump pin, rerun CI, operator labels verified PR. Pin acquisition
 
 ## Log
 
+
+
+- 2026-10-19: closed — BR-1 fixed with README contributor guidance and indexed repository-owned atlas compiler map; checked pin ownership, format, update/recovery, ordering and operator approval against workflow. git diff --check clean. Executable content unchanged since recorded suite success on46a1132c (attempt0293e2d95ffdc19d1ec8cc6989c23d4d); actual-block and real compiler conformance passed. Hosted merge-check39370460605 passed with Go1.26.3 and exact clean compiler63d6bfd86509d97649e10d7a5dd1e9a06db17d21. Operator local-gates-verified label confirmed onPR323. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+- 2026-10-19: flow upgraded quick → full — 139 added lines in code files (limit 100); an earlier round of this close already ran the full review
 Filed under explicit hub authorization from this repository's primary :0
 checkout, unclaimed, depending on ariadne#459. Source class C; inventory:
 [verified active GitHub consumers](https://github.com/xianxu/ariadne/blob/000459-weave-release-downstream-ci-still-runs-weave-0-1-0-pre-422-vocabulary-changes-break-every-downstream-merge-check/workshop/plans/000459-downstream-compiler-inventory.md).
