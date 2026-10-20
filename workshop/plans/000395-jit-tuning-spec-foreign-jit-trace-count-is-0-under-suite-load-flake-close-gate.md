@@ -93,6 +93,92 @@ rounds:
       isolation: checkout
       reviewed: f674d4f0ac1eae1be97f5ff3fdb72fac3ea50a66
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: c9b2349a-e256-4734-8b8c-c699526d0e02
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000395"
+            recipe: fix-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Volumes/TestScratch/review-checkouts/5b837d3d6d089701
+            reviewed_head: 79d1cbd13dbe865767200a65aa3cf374d2919e80
+            slot: parley.nvim:3
+            requested_at: "2026-10-20T03:10:18.552403Z"
+          phase: finished
+          pid: 91588
+          started_at: "2026-10-20T03:10:18.812845Z"
+          finished_at: "2026-10-20T03:18:01.214176Z"
+          session_id: a8595b15-95a1-4a7e-ad4c-309569412c5c
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 79d1cbd13dbe865767200a65aa3cf374d2919e80
+        tracker_head: 4ba38c55dc1da1ec577889cd4c1dbb33d276f75f
+        branch_point: 877d904c4a29b424734a845e2a863edaba152deb
+        since: "2026-10-19T19:32:05-07:00"
+        until: "2026-10-19T20:09:36-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-19T19:32:05-07:00"
+              end: "2026-10-19T20:09:36-07:00"
+              began: "2026-10-19T19:32:05-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 338ec900-e10b-4fe4-be14-0f0ef1bf7fbd
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: b873a795a184b575dc0d924a6f5da27f89cb882e215678ccc39aaa4f675b34bd
+              started: "2026-10-18T22:09:43.273Z"
+              spawned: false
+              bytes: 12121112
+              windows:
+                - start: "2026-10-19T19:32:05-07:00"
+                  end: "2026-10-19T20:09:36-07:00"
+        cuts:
+            - dispatched: "2026-10-19T19:46:10-07:00"
+              finalized: "2026-10-19T19:52:14-07:00"
+              finalizing: true
+      "n": 2
+      timestamp: "2026-10-19T20:18:02-07:00"
+      dispatched: "2026-10-19T20:10:18-07:00"
+      agent: claude
+      reviewer: claude (anthropic; author anthropic)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: document_sequence_spec.lua:703-714 retries up to 3 fresh VMs only on Oracle.mcode_blocked, and compiled > 0 is still asserted; a local run reproduced a 0-compiled defect VM that the predicate classifies correctly.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: The predicate moved to tests/helpers/jit_oracle.lua, and tests/unit/jit_oracle_spec.lua pins it without load, plus the error text against jit.vmdef.traceerr. Both consumers derive from it.
+          round: 2
+        - id: BR-3
+          disposition: not-addressed
+          note: Still Minor and non-blocking. No loaded full-suite pass is recorded, and the sibling's residual failure rate with retries is unmeasured (1 of 6 unloaded runs were defect VMs locally).
+          round: 2
+      findings:
+        - kind: defect
+          id: BR-4
+          severity: Minor
+          title: The abort-reason decode is copy-pasted into both child-VM trace hooks instead of living in jit_oracle
+          detail: jit_tuning_spec.lua:102-103 and document_sequence_spec.lua:668-669 hold the same traceerr[otr]/format(oex) logic. A jit_oracle.abort_reason(otr, oex) helper, required from the child (whose cwd is the repo root), would make it one source.
+          family: shared-helper-partial-extraction
+          round: 2
+      recipe: fix-review
+      isolation: checkout
+      reviewed: 79d1cbd13dbe865767200a65aa3cf374d2919e80
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#395 (boundary-review)
@@ -115,8 +201,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   The Log records stress runs and isolated make test-spec runs on both runtimes. No loaded full-suite pass is
   recorded. Acceptable as a proxy; noted for the close record.
 
+## Round 2 — 2026-10-19T20:18:02-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — document_sequence_spec.lua:703-714 retries up to 3 fresh VMs only on Oracle.mcode_blocked, and compiled > 0 is still asserted; a local run reproduced a 0-compiled defect VM that the predicate classifies correctly.
+- BR-2 — addressed — The predicate moved to tests/helpers/jit_oracle.lua, and tests/unit/jit_oracle_spec.lua pins it without load, plus the error text against jit.vmdef.traceerr. Both consumers derive from it.
+- BR-3 — not-addressed — Still Minor and non-blocking. No loaded full-suite pass is recorded, and the sibling's residual failure rate with retries is unmeasured (1 of 6 unloaded runs were defect VMs locally).
+
+### Raised
+
+- **BR-4** [Minor] `shared-helper-partial-extraction` (kind: defect) The abort-reason decode is copy-pasted into both child-VM trace hooks instead of living in jit_oracle
+  jit_tuning_spec.lua:102-103 and document_sequence_spec.lua:668-669 hold the same traceerr[otr]/format(oex) logic. A jit_oracle.abort_reason(otr, oex) helper, required from the child (whose cwd is the repo root), would make it one source.
+
 ## Open findings
 
-- **BR-1** [Minor] `jit-trace-oracle-ignores-mcode-defect` (kind: defect) Sibling child-VM oracle document_sequence_spec.lua:697 asserts compiled > 0 with no mcode-allocation exemption
-- **BR-2** [Minor] `exemption-branch-without-fixture` (kind: defect) The unplaceable (#294) exemption predicate at jit_tuning_spec.lua:145-149 is reached only under real load
 - **BR-3** [Minor] `done-when-evidence-proxy` (kind: defect) The Done-when clause about a loaded full suite is evidenced by a 120-way child-script stress, not a full-suite run
+- **BR-4** [Minor] `shared-helper-partial-extraction` (kind: defect) The abort-reason decode is copy-pasted into both child-VM trace hooks instead of living in jit_oracle
