@@ -1,13 +1,23 @@
 ---
 id: 000403
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'c59f4b05935c9a694a7fb066444b7ecc7504e7ec' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '7e9b69e19795624dc759ae74422a58ef95af1443' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-19T22:31:29-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "b7b4ba3b", done: "60533640"}
+actual_hours: 0.14
 ---
 
 # review diagnostics: CursorMoved error 'Invalid col: out of range' (fixed column 2 on short lines; stale lnum after a rewrite)
@@ -45,8 +55,63 @@ end of the buffer or at a now-short line.
 
 ## Plan
 
-- [ ]
+- [x] Red tests through real extmarks/handler/CursorMoved: empty, one-byte and multibyte lines; stale cached start rows after shrink; injected partial-render failure, one warning and recovery.
+- [x] Anchor at column 0 with existing visual padding unchanged; validate start rows using one current line count; shared render boundary clears failed refreshes and warns once per module lifetime (ARCH-DRY).
+- [x] Count row-boundary lookup at N/2N, run focused/architecture guards, update atlas, queue the recorded suite, and stage the tested commit for the hub to coordinate the required live check. Suite and live acceptance remain landing gates (Revision below).
 
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Red-first native extmark tests reproduced short-line/stale-row failures; all 20 display cases pass on Neovim 0.12.5 and 0.11.7, including partial failure cleanup and recovery; N/2N size lookup bounded to one; architecture/define/refresh/reentrancy guards pass; lint clean across 815 files. Recorded suite 97f542a62ca6572feb43aa83deff9a13 queued and operator live check staged at 2dd15196: both remain required before landing, per worker overlap policy and hub instruction. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+
+### 2026-10-19 — scoped design
+
+The real module is lua/parley/skills/review/diag_display.lua. Its shared renderer
+serves handler show, CursorMoved/resize refresh and scheduled rewrap; guard that
+one boundary rather than patching each callback. Existing scan cost stays O(D)
+plus message wrapping; one native line-count lookup per render, O(1) row checks,
+with N/2N counted coverage. No new worker, timer, queue or durable data. A single
+module-lifetime warning bit is bounded; failure shows no display for that refresh,
+logs once, and the next normal refresh retries automatically. Text and original
+diagnostic spans remain untouched. Workflow refresh changes to merge-check.yml
+and local-gates-guard.yml were reverted exactly as the hub instructed (#398).
+
+### 2026-10-19 — red/green display boundary
+
+Five new assertions failed the original module: empty/one-byte lines raised
+Invalid col, a multibyte line retained the wrong anchor, shrink/stale rows raised,
+and an injected partial render escaped. After the fix, all 20 display cases
+pass on preferred Neovim 0.12.5 and stock 0.11.7. The injection starts after
+one extmark is written, checks full cleanup and repeated CursorMoved events,
+asserts one logged warning, then removes the fault and verifies recovery with
+original diagnostics intact. N/2N cases bound native size queries to one per
+render. Lint is clean across 815 files. Broader guard/define/refresh tests are
+running before the recorded suite. Atlas describes the failure boundary and
+traceability now includes the display module/spec in review coverage.
+
+## Revisions
+
+### 2026-10-19 — overlap review with queued verification
+
+The original third step included completing the recorded suite before review.
+Per the worker contract and the hub's instruction, close review overlaps the
+queued suite and live check. The code and acceptance contract do not change:
+landing still requires the recorded suite to pass and the operator's OK.
+
+### 2026-10-19 — verification in progress
+
+Architecture/define/diagnostic refresh and reentrancy guards completed with
+exit 0 (log /tmp/parley-403-guards.log). Recorded suite attempt
+97f542a62ca6572feb43aa83deff9a13 is queued on code head 2dd15196.
+sdlc stage placed that exact head on parley.nvim:0; the hub has the printed
+stage result and will coordinate the operator's restart/check. No live
+acceptance is claimed yet.
+
+### 2026-10-19 — live acceptance
+
+The hub reported the operator reloaded Neovim on staged 2dd15196 and the
+error did not appear (Couch delivery 4713d65f-9747-4f1a-aa48-cc99d280e469,
+verified submitted). Landing is authorized once the recorded suite passes.
+Close review returned SHIP with no findings, independently confirming five
+red failures against the base renderer and 20 passing cases with the fix.
+The suite remains queued, now first in line.
