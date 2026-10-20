@@ -162,3 +162,61 @@ Done-when: current — it still covers exact compiler selection, cold regenerati
    None. The existing BR-1 revision accurately records the documentation repair.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"8f15ebb9-55c8-4d9f-a6f2-cd13d671240f","repository":"github.com/xianxu/parley.nvim","issue_id":"000398","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/c2cf284fc7281b86","reviewed_head":"79b7328ce077d82d381dd838beaae10ce514774f","slot":"parley.nvim:2","requested_at":"2026-10-20T05:57:05.648329Z"},"phase":"finished","pid":20939,"started_at":"2026-10-20T05:57:06.042072Z","finished_at":"2026-10-20T05:58:30.944807Z","session_id":"01a157e2-8a40-7380-9206-6973682c626c","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-20T10:59:34-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 398 — CI: build weave from a pinned ariadne commit |
+| repo | parley.nvim |
+| issue file | workshop/issues/000398-ci-weave-pin.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a1e40a149cd817b350d776b626a24011d313bb08..1c11c82768b3a0b8aae34ba504ec62f39ede8c71 |
+| command | sdlc close --issue 398 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-20T10:59:34-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The interdiff repairs the cold-checkout documentation link and records prior review results. The replacement targets an existing page at the approved upstream commit. The added revision records this repair without changing scope. No blocking defects found.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      README.md:190–193 and indexed atlas/infra/ci_compiler.md retain the compiler configuration guidance. The corrected link at atlas/infra/ci_compiler.md:28 targets atlas/workflow/ci-merge-check.md, verified through git show at approved Ariadne commit 63d6bfd86509d97649e10d7a5dd1e9a06db17d21. This is a prose-only correction.
+```
+
+1. **Strengths**
+   - The immutable upstream link removes dependence on an ignored local overlay.
+   - The revision and lesson accurately explain the cold-checkout failure.
+   - No executable migration changes enter this window.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes:** Independently ran the atlas relative-link check successfully. Confirmed the old relative target is absent and the replacement exists in upstream Git. `git diff --check` passed. The full suite was not rerun.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** references the existing upstream contract.
+   - **ARCH-PURE — pass:** no business logic or IO changes.
+   - **ARCH-PURPOSE — pass:** repairs documentation retrieval within the existing scope.
+   - **ARCH-EVOLVE — pass:** no persisted-format semantics or reader/writer changes.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"5973844c-31e9-4dda-8e15-2be3bfb54330","repository":"github.com/xianxu/parley.nvim","issue_id":"000398","recipe":"fix-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/9140259d91cb3567","reviewed_head":"1c11c82768b3a0b8aae34ba504ec62f39ede8c71","slot":"parley.nvim:2","requested_at":"2026-10-20T17:58:31.616538Z"},"phase":"finished","pid":43349,"started_at":"2026-10-20T17:58:31.823977Z","finished_at":"2026-10-20T17:59:33.855145Z","session_id":"01a15a77-0603-7393-9dc9-cad9f3964ecd","outcome":"returned"}] -->

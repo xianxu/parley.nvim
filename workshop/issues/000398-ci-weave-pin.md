@@ -67,6 +67,8 @@ Actions: review/bump pin, rerun CI, operator labels verified PR. Pin acquisition
 
 
 
+
+- 2026-10-20: closed — Fixed cold-checkout broken atlas link by referencing verified exact upstream compiler revision URL. make -k test-spec SPEC=infra/starter passed including documentation_spec4/4; git diff --check passed. Recorded sdlc-local/suite passed on1c11c82768b3a0b8aae34ba504ec62f39ede8c71; hosted merge-check and operator local-gates guard green. No executable workflow or compiler pin changed since prior SHIP; existing cold compiler and actual-block conformance evidence retained. (fixed-then-ship); review verdict: SHIP
 - 2026-10-19: closed — BR-1 fixed with README contributor guidance and indexed repository-owned atlas compiler map; checked pin ownership, format, update/recovery, ordering and operator approval against workflow. git diff --check clean. Executable content unchanged since recorded suite success on46a1132c (attempt0293e2d95ffdc19d1ec8cc6989c23d4d); actual-block and real compiler conformance passed. Hosted merge-check39370460605 passed with Go1.26.3 and exact clean compiler63d6bfd86509d97649e10d7a5dd1e9a06db17d21. Operator local-gates-verified label confirmed onPR323. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 - 2026-10-19: flow upgraded quick → full — 139 added lines in code files (limit 100); an earlier round of this close already ran the full review
 Filed under explicit hub authorization from this repository's primary :0
