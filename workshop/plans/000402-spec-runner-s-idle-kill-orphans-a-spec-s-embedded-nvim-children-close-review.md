@@ -111,3 +111,93 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"184c0dcb-071c-414a-abe5-a32867a3e902","repository":"github.com/xianxu/parley.nvim","issue_id":"000402","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/421fa4b390a3fb20","reviewed_head":"d07a3ac51f57971f3bb17587629aeeab85806978","slot":"parley.nvim:3","requested_at":"2026-10-20T04:57:59.823456Z"},"phase":"finished","pid":33968,"started_at":"2026-10-20T04:57:59.950006Z","finished_at":"2026-10-20T05:02:42.800631Z","session_id":"efe05a62-49c8-4c82-b849-d42ddfc81f33","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T22:16:08-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 402 — spec_runner's idle kill orphans a spec's embedded nvim children |
+| repo | parley.nvim |
+| issue file | workshop/issues/000402-spec-runner-s-idle-kill-orphans-a-spec-s-embedded-nvim-children.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 45ec2ab101bd9644318e25145d6638773391b96e..1be85079cb8976ba54b34f92d2c120a0af4936b7 |
+| command | sdlc close --issue 402 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T22:16:08-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking the deadline state machine, then running the #402 tests and a revert check on `detach`.
+
+Setting up the isolated test environment to run the integration spec directly.
+
+Green at head. Now reverting `detach = true` to confirm the new vim.system-grandchild test goes red.
+
+I've reviewed #402 (base `45ec2ab1` to head `1be85079`). The verdict is **SHIP**: three of the four earlier findings are fixed and checked, and the fourth (BR-2) is a minor, non-blocking finding that I'm keeping open.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Done-when: current. The revisions changed how the fix works (a recorded list of `jobstart` jobs, a start-time check before signalling, and handling of the runner's own SIGTERM and SIGINT). They did not change what must be true at the end: after the idle kill the embedded child is gone, and a spec that ends normally is left alone. The code meets both. Signals are only sent when the spec did not finish normally (`expiring = status ~= "completed"`, `tests/helpers/spec_runner.lua:115-116`). On a normal exit the runner signals nothing.
+
+**Summary.** I ran `tests/integration/spec_runner_native_spec.lua` in the harness's isolated environment and all 12 tests passed; `tests/unit/spec_jobs_spec.lua` passed 3 of 3. I then removed `detach = true`: the new `vim.system`-grandchild test failed ("vim.system grandchild … outlived the idle kill"), and the other 11 still passed. After restoring the line, no `sleep 600` process was left running. That closes BR-1. BR-3 and BR-4 are fixed as described. For BR-2, the guard and the fallback are now in place, but no test fails if they're removed, so I'm keeping it open as Minor. Nothing blocks SHIP.
+
+### 1. Strengths
+- **Pure decision, separate from IO:** `spec_jobs.may_signal` and `spec_jobs.targets` are pure functions that take the start-time lookup as an argument (`tests/helpers/spec_jobs.lua:62-81`), so the unit test can check "same process, gone, or reused pid" with a table of fake values.
+- **One escalation path:** a single `escalate(wait)` function (`spec_runner.lua:72-76`) handles TERM, the grace period and KILL. Its comment explains why the wait differs: `uv.sleep` inside a signal callback, `vim.wait` on the main loop.
+- **Safe failing tests:** every new integration test SIGKILLs any process that survives, so a failing run doesn't leave a spinning nvim behind. I confirmed this during the revert run.
+- **No `ps` needed:** `process_identity` reads start times directly (`proc_pidinfo` on macOS, `/proc/<pid>/stat` on Linux). The Linux field index is correct: `fields[20]` is field 22. It can run inside a libuv callback.
+- **Docs updated:** `atlas/infra/test_harness.md` has a #402 section that states its limits accurately, and `atlas/traceability.yaml` maps the new files.
+
+### 2. Critical findings
+None.
+
+### 3. Important findings
+None.
+
+### 4. Minor findings
+- **BR-2 stays open (not-addressed)** — see the findings block below. No new findings.
+
+### 5. Test coverage notes
+- With `detach` removed, the new test at `spec_runner_native_spec.lua:160-173` is now the only one that fails. That matches the corrected red check in the plan.
+- The five older deadline tests now pass even without `detach`, because `signal_group` falls back to the bare pid.
+- "A spec that ends normally is unaffected" has no dedicated test. It is covered by the code path (no signals when status is `completed`) and by every other spec that runs through the runner. That's acceptable.
+
+### 6. Architectural notes
+- **ARCH-DRY: pass.** The escalation is shared, and the spec child reuses `Jobs.may_signal` and `Jobs.signal_group`. `process_identity` deliberately doesn't reuse the `ps lstart` parsing in `lua/parley/cliproxy_auth.lua`, because the sandbox denies `ps` and this code must run inside libuv callbacks.
+  - One more step is possible: treat the spec child as one more record passed to `Jobs.targets`, so the child goes through the same tested path (see BR-2).
+- **ARCH-PURE: pass.** The decisions are pure and the identity lookup is passed in. Reading the ledger and sending signals happen at the edges.
+- **ARCH-PURPOSE: pass.** All three kinds of descendant are covered, each by a test that fails without its mechanism: `jobstart` jobs (the recorded list), `vim.system`/`uv.spawn` children (`detach`), and the runner itself being killed (the signal watchers).
+- **ARCH-EVOLVE: pass.** The job ledger is a temporary file that lives only for one spec run and is never migrated. Bad lines are dropped and tested.
+
+### 7. Plan revision recommendations
+None. The Revisions entry for round 1 matches the code. The plan's red check for `detach` is now accurate, and I reproduced it.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      New vim.system-grandchild test (spec_runner_native_spec.lua:160-173); verified red with detach removed (11 pass, 1 fail), green at head; Plan red-check corrected in Revisions.
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      Guard and fallback now exist (spec_runner.lua:62-68), but no test fails with the child-site guard or the bare-pid fallback removed at head; route the child through Jobs.targets as a record so the tested path covers it.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Single escalate(wait) at spec_runner.lua:72-76, used by the signal watchers (uv.sleep) and the main path (vim.wait); refactor with no behavior change, and the integration suite is green.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      atlas/infra/test_harness.md 402 section and spec_jobs.lua:7-8 both state the wrapper covers vim.fn.jobstart only, naming termopen, Vimscript jobstart() and nvim_call_function.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"f963659d-8a33-48e1-b67d-98055cda0151","repository":"github.com/xianxu/parley.nvim","issue_id":"000402","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/3eb9cb1c2425e235","reviewed_head":"1be85079cb8976ba54b34f92d2c120a0af4936b7","slot":"parley.nvim:3","requested_at":"2026-10-20T05:10:24.895415Z"},"phase":"finished","pid":71769,"started_at":"2026-10-20T05:10:25.068026Z","finished_at":"2026-10-20T05:16:07.994219Z","session_id":"024b7dcd-58a5-4daf-852d-caeef7003f42","outcome":"returned"}] -->

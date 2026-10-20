@@ -92,6 +92,88 @@ rounds:
       recipe: small-diff-review
       isolation: checkout
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: f963659d-8a33-48e1-b67d-98055cda0151
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000402"
+            recipe: small-diff-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Volumes/TestScratch/review-checkouts/3eb9cb1c2425e235
+            reviewed_head: 1be85079cb8976ba54b34f92d2c120a0af4936b7
+            slot: parley.nvim:3
+            requested_at: "2026-10-20T05:10:24.895415Z"
+          phase: finished
+          pid: 71769
+          started_at: "2026-10-20T05:10:25.068026Z"
+          finished_at: "2026-10-20T05:16:07.994219Z"
+          session_id: 024b7dcd-58a5-4daf-852d-caeef7003f42
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 1be85079cb8976ba54b34f92d2c120a0af4936b7
+        tracker_head: 12a9548fb7ca1a9b3ef88c4526d83b21e9b3bd64
+        branch_point: 45ec2ab101bd9644318e25145d6638773391b96e
+        since: "2026-10-19T21:37:00-07:00"
+        until: "2026-10-19T22:09:53-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-19T21:37:00-07:00"
+              end: "2026-10-19T22:09:53-07:00"
+              began: "2026-10-19T21:37:00-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 338ec900-e10b-4fe4-be14-0f0ef1bf7fbd
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: eb3d0d959728186a400aeb4b6eedb3f16e564b3fbb902bf41b0c66691f397869
+              started: "2026-10-18T22:09:43.273Z"
+              spawned: false
+              bytes: 13179629
+              windows:
+                - start: "2026-10-19T21:37:00-07:00"
+                  end: "2026-10-19T22:09:53-07:00"
+        cuts:
+            - dispatched: "2026-10-19T21:57:59-07:00"
+              finalized: "2026-10-19T22:02:43-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-19T22:16:09-07:00"
+      dispatched: "2026-10-19T22:10:24-07:00"
+      agent: claude
+      reviewer: claude (anthropic; author anthropic)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: New vim.system-grandchild test (spec_runner_native_spec.lua:160-173); verified red with detach removed (11 pass, 1 fail), green at head; Plan red-check corrected in Revisions.
+          round: 2
+        - id: BR-2
+          disposition: not-addressed
+          note: Guard and fallback now exist (spec_runner.lua:62-68), but no test fails with the child-site guard or the bare-pid fallback removed at head; route the child through Jobs.targets as a record so the tested path covers it.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: Single escalate(wait) at spec_runner.lua:72-76, used by the signal watchers (uv.sleep) and the main path (vim.wait); refactor with no behavior change, and the integration suite is green.
+          round: 2
+        - id: BR-4
+          disposition: addressed
+          note: atlas/infra/test_harness.md 402 section and spec_jobs.lua:7-8 both state the wrapper covers vim.fn.jobstart only, naming termopen, Vimscript jobstart() and nvim_call_function.
+          round: 2
+      recipe: small-diff-review
+      isolation: checkout
+      reviewed: 1be85079cb8976ba54b34f92d2c120a0af4936b7
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#402 (boundary-review)
@@ -112,9 +194,15 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Minor] `doc-scope-claim` (kind: defect) Atlas and the spec_jobs comment don't say the registry only covers vim.fn.jobstart
   termopen, nvim_call_function("jobstart") and Vimscript jobstart() skip the wrapper. None are used today; say so in atlas/infra/test_harness.md under the #402 section.
 
+## Round 2 — 2026-10-19T22:16:09-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — New vim.system-grandchild test (spec_runner_native_spec.lua:160-173); verified red with detach removed (11 pass, 1 fail), green at head; Plan red-check corrected in Revisions.
+- BR-2 — not-addressed — Guard and fallback now exist (spec_runner.lua:62-68), but no test fails with the child-site guard or the bare-pid fallback removed at head; route the child through Jobs.targets as a record so the tested path covers it.
+- BR-3 — addressed — Single escalate(wait) at spec_runner.lua:72-76, used by the signal watchers (uv.sleep) and the main path (vim.wait); refactor with no behavior change, and the integration suite is green.
+- BR-4 — addressed — atlas/infra/test_harness.md 402 section and spec_jobs.lua:7-8 both state the wrapper covers vim.fn.jobstart only, naming termopen, Vimscript jobstart() and nvim_call_function.
+
 ## Open findings
 
-- **BR-1** [Important] `kept-mechanism-untested` (kind: defect) detach=true's grandchild-group purpose has no regression test; the #402 tests pass without it
 - **BR-2** [Minor] `signal-target-guard-asymmetry` (kind: defect) Leader group is signalled without the bare-pid fallback or identity guard that recorded jobs get
-- **BR-3** [Minor] `duplicated-escalation-sequence` (kind: defect) TERM, grace, KILL escalation written twice (end_group with uv.sleep vs the main path with vim.wait)
-- **BR-4** [Minor] `doc-scope-claim` (kind: defect) Atlas and the spec_jobs comment don't say the registry only covers vim.fn.jobstart

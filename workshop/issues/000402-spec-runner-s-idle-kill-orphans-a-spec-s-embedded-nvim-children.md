@@ -70,6 +70,7 @@ Steps:
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Round-1 fixes in 1be85079. Important: a new case gives the spec a vim.system grandchild that only the spec group reaches; it passes, and fails with detach removed (verified, survivor self-killed). The plan red-check line is corrected under Revisions. Minor: the spec child group uses the same start-time guard (spec_jobs.may_signal: the same process or no holder signals, a reused pid skips and logs) and the group-else-pid fallback as each job; the TERM, grace, KILL escalation is one function given its wait; the docs say only vim.fn.jobstart is wrapped. Earlier evidence holds: the idle, runner SIGTERM and runner SIGINT cases go red without the registry or watchers; the reused-pid unit and live tests go red without the guard. infra/test_harness, modes/session_sync and chat/document green. Full suite recorded via local-check. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 ### 2026-10-19 (implementation)
 
