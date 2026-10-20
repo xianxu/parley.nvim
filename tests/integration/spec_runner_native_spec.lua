@@ -122,4 +122,84 @@ describe("owned headless spec execution", function()
         assert.equals("ESRCH", gone)
         assert.matches("BODY COMPLETED", output, 1, true)
     end)
+
+    -- #402: everything a spec started dies with it. Each fixture spins an
+    -- embedded nvim that only the runner can end (a spinning nvim ignores
+    -- SIGTERM); each case SIGKILLs any survivor itself, so a red run leaves none.
+    local function spinner(pidfile)
+        return {
+            'local Embedded = require("tests.helpers.embedded_nvim")',
+            'describe("orphan", function() it("spins", function()',
+            '    Embedded.REQUEST_MS = 600000',
+            '    local child = Embedded.start()',
+            '    vim.fn.writefile({ tostring(child.pid) }, ' .. vim.inspect(pidfile) .. ')',
+            '    child:exec("while true do end")',
+            'end) end)',
+        }
+    end
+    local function alive(pid) return pid ~= nil and select(3, vim.uv.kill(pid, 0)) == nil end
+    local function embedded_pid(pidfile)
+        assert.is_true(vim.wait(require("tests.helpers.arrival").MS,
+            function() return vim.fn.filereadable(pidfile) == 1 end, 20), "the fixture never started its embedded nvim")
+        return tonumber(vim.fn.readfile(pidfile)[1])
+    end
+    local function gone(pid)
+        local ended = vim.wait(require("tests.helpers.arrival").MS, function() return not alive(pid) end, 20)
+        if not ended then vim.uv.kill(pid, "sigkill") end -- never leave a spinner behind
+        return ended
+    end
+
+    it("ends the spec's whole process group at the idle deadline", function()
+        local pidfile = root .. "/pid"
+        local result = run(spinner(pidfile), { base_ms = 3000 })
+        local pid = embedded_pid(pidfile)
+        assert.equals("stalled", result.reason)
+        assert.is_true(gone(pid), "embedded nvim " .. pid .. " outlived the idle kill")
+    end)
+
+    -- A vim.system grandchild isn't a job: only the spec child's own process
+    -- group (detach) reaches it.
+    it("ends a spec's vim.system grandchild at the idle deadline", function()
+        local pidfile = root .. "/pid"
+        local result = run({
+            'describe("orphan", function() it("hangs", function()',
+            '    local sleeper = vim.system({ "sleep", "600" })',
+            '    vim.fn.writefile({ tostring(sleeper.pid) }, ' .. vim.inspect(pidfile) .. ')',
+            '    vim.wait(600000, function() return false end, 50)',
+            'end) end)',
+        }, { base_ms = 3000 })
+        local pid = embedded_pid(pidfile)
+        assert.equals("stalled", result.reason)
+        assert.is_true(gone(pid), "vim.system grandchild " .. pid .. " outlived the idle kill")
+    end)
+
+    for _, signal in ipairs({ "sigterm", "sigint" }) do
+        it("takes its spec's process group with it when the runner gets " .. signal, function()
+            local pidfile, path = root .. "/pid", root .. "/fixture.lua"
+            vim.fn.writefile(spinner(pidfile), path)
+            local runner = vim.system({ vim.v.progpath, "--headless", "--noplugin", "-n", "-i", "NONE",
+                "-u", "tests/minimal_init.vim", "-c",
+                ("lua require('tests.helpers.spec_runner').execute(%q, { base_ms = 600000, output = function() end })")
+                    :format(path), "-c", "qa!" })
+            local pid = embedded_pid(pidfile)
+            vim.uv.kill(runner.pid, signal)
+            local exited = runner:wait(require("tests.helpers.arrival").MS)
+            assert.is_true(gone(pid), "embedded nvim " .. pid .. " outlived its runner's " .. signal)
+            assert.is_not_nil(exited.code)
+        end)
+    end
+
+    it("signals no recorded job whose pid now names another process", function()
+        local Jobs = require("tests.helpers.spec_jobs")
+        local live = vim.system({ "sleep", "30" })
+        vim.fn.writefile({ live.pid .. " 1.000000" }, root .. "/jobs") -- a start time it never had
+        local logged = {}
+        Jobs.signal(root, "sigkill", function(message) logged[#logged + 1] = message end)
+        local survived = alive(live.pid)
+        live:kill(9)
+        live:wait()
+        assert.is_true(survived, "a mismatched record was signalled")
+        assert.equals(1, #logged)
+        assert.matches("spec job not signalled: pid " .. live.pid .. " reused", logged[1])
+    end)
 end)
