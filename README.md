@@ -187,6 +187,11 @@ development processes. Roughly:
    I use [pair and couch](https://github.com/xianxu/pair), which provides a much
    stronger local development environment while leveraging other coding agents.
 
+CI builds weave from the exact Ariadne commit in `.sdlc/weave-compiler-ref`
+(one lowercase 40-character SHA plus newline). Compiler updates use a reviewed
+PR and require the operator’s `local-gates-verified` label. See the
+[CI compiler guide](atlas/infra/ci_compiler.md) for validation and recovery.
+
 Before sending pull request, you should file an issue first, focusing on the feature
 you want to create and getting alignment with maintainer first. All pull request without
 agreement won't be checked. After all, in the era of AI coding, it's easy to write 

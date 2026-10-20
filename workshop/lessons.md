@@ -895,3 +895,7 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   default 50 s; the close review caught it. Pass the outer budget to where the
   inner one is computed, and pin the relation with a test that runs through
   the real outer mechanism.
+
+- #398: Importing a generated CI workflow can still introduce authored consumer configuration. Document its ownership, update and failure recovery in repository-owned README and indexed atlas guidance; an ignored inherited workflow page does not satisfy that surface.
+
+- #398 landing: shipped atlas prose must not link relatively into ignored weave overlays. Use a pinned upstream link for inherited contracts and run documentation_spec after adding atlas links; warm-checkout existence hides cold-checkout failures.

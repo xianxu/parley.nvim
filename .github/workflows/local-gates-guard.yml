@@ -58,6 +58,7 @@ jobs:
             'scripts/run-merge-checks.sh'
             'scripts/merge-checks.d/*'
             'scripts/ci-setup.sh'
+            'scripts/ci/*'
             'scripts/pre-merge-checks.sh'
             'scripts/parallel-checks.sh'
             'bootstrap.sh'

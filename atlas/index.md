@@ -84,6 +84,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [External dependencies](infra/dependencies.md)
 - [OpenShell Sandbox](infra/openshell.md): Optional maintainer infrastructure, outside the app release.
 - [AI Workflow](infra/workflow.md): Optional maintainer development workflow.
+- [CI Compiler Pin](infra/ci_compiler.md): Exact weave source, update procedure and failure recovery.
 
 ## 8. Skill System & Special Modes
 - [Skill System](skills/skill-system.md): Review, voice application, and term definition.

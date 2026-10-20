@@ -1,37 +1,164 @@
 # Seeded as a real file because GitHub Actions does not discover symlinked
-# workflows. Compile first: generated helpers must exist before checks run.
+# workflows. Consumer compiler pins are authored separately, never seeded.
 name: merge-check
 
 on:
   pull_request:
     branches: [main]
-  # #309: main carries a CI status too; a push run checks before..after.
   push:
     branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   merge-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: Homebrew/actions/setup-homebrew@main
-      - name: Build candidate gateway for ariadne source CI
+      - name: Resolve exact compiler sources
+        id: gateway
+        env:
+          CI_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # The source repo tests this change's CLI before it is published.
-          # Consumer repos install the published formula through bootstrap.sh.
-          if [ -f go.mod ] && grep -Eq '^module[[:space:]]+github.com/xianxu/ariadne[[:space:]]*$' go.mod; then
-            brew bundle --file=Brewfile
-            mkdir -p "$RUNNER_TEMP/weave-candidate"
-            go build -o "$RUNNER_TEMP/weave-candidate/weave" ./cmd/weave
-            echo "$RUNNER_TEMP/weave-candidate" >> "$GITHUB_PATH"
+          private="$RUNNER_TEMP/weave-ci"
+          mkdir -p "$private"
+          source_ci=false
+          if [ "$CI_REPOSITORY" = xianxu/ariadne ]; then
+            source_ci=true
+            grep -Eq '^module[[:space:]]+github.com/xianxu/ariadne[[:space:]]*$' go.mod
           fi
+          # This validator lives in the workflow: consumers have not bootstrapped
+          # Ariadne's helpers yet. No tag, branch, extra record or shell text.
+          selected="$(python3 - <<'PY'
+          import pathlib,re,sys
+          path=pathlib.Path('.sdlc/weave-compiler-ref')
+          try:
+              with path.open('rb') as stream:
+                  raw=stream.read(42)
+          except OSError as error:
+              sys.exit(f'compiler pin: create/review {path}: {error}')
+          if not re.fullmatch(rb'[0-9a-f]{40}\n',raw):
+              sys.exit('compiler pin: expected exactly one lowercase full SHA and newline')
+          print(raw.decode().strip())
+          PY
+          )"
+          refs=("$selected")
+          if [ "$source_ci" = true ]; then
+            python3 scripts/ci/weave-compatibility.py refs --selected .sdlc/weave-compiler-ref --supported .sdlc/weave-compiler-refs > "$private/refs"
+            refs=()
+            while IFS= read -r ref; do refs+=("$ref"); done < "$private/refs"
+          fi
+          [ "${#refs[@]}" -ge 1 ] && [ "${#refs[@]}" -le 2 ]
+          checkout() {
+            local pin="$1" destination="$2"
+            git init -q "$destination"
+            git -C "$destination" remote add origin https://github.com/xianxu/ariadne.git
+            git -C "$destination" fetch --no-tags --depth=1 origin "$pin"
+            git -C "$destination" checkout -q --detach FETCH_HEAD
+            [ "$(git -C "$destination" rev-parse HEAD)" = "$pin" ] || { echo 'compiler source identity mismatch' >&2; exit 1; }
+          }
+          for index in "${!refs[@]}"; do
+            slot="pin$((index+1))"
+            checkout "${refs[$index]}" "$private/$slot"
+            printf '%s=%s\n' "$slot" "${refs[$index]}" >> "$GITHUB_OUTPUT"
+          done
+          printf 'source_ci=%s\n' "$source_ci" >> "$GITHUB_OUTPUT"
+          if [ "$source_ci" = true ]; then
+            checkout 4de31b2de32c8143d61abe17bbe7f7654503cd42 "$private/old"
+          fi
+          # One build rule is shared by the bounded setup-go slots below.
+          cat > "$private/build.sh" <<'BUILD'
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/weave-ci/$PIN_SLOT"
+          output="$RUNNER_TEMP/weave-ci/bin-$PIN_SLOT"
+          [ "$(git -C "$source_dir" rev-parse HEAD)" = "$PIN_REF" ]
+          mkdir -p "$output"
+          (
+            cd "$source_dir"
+            GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$output/weave" ./cmd/weave
+          )
+          go version
+          metadata="$(go version -m "$output/weave")"
+          printf 'compiler source: %s\n%s\n' "$PIN_REF" "$metadata"
+          printf '%s\n' "$metadata" | grep -Eq "build[[:space:]]+vcs.revision=$PIN_REF$"
+          printf '%s\n' "$metadata" | grep -Eq 'build[[:space:]]+vcs.modified=false$'
+          BUILD
+      - name: Select first pinned toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ runner.temp }}/weave-ci/pin1/go.mod
+          cache-dependency-path: ${{ runner.temp }}/weave-ci/pin1/go.sum
+      - name: Build first pinned compiler
+        env:
+          PIN_SLOT: pin1
+          PIN_REF: ${{ steps.gateway.outputs.pin1 }}
+          SOURCE_CI: ${{ steps.gateway.outputs.source_ci }}
+        run: |
+          set -euo pipefail
+          bash "$RUNNER_TEMP/weave-ci/build.sh"
+          if [ "$SOURCE_CI" = false ]; then
+            echo "$RUNNER_TEMP/weave-ci/bin-pin1" >> "$GITHUB_PATH"
+          fi
+      - name: Select second pinned toolchain
+        if: steps.gateway.outputs.pin2 != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ runner.temp }}/weave-ci/pin2/go.mod
+          cache-dependency-path: ${{ runner.temp }}/weave-ci/pin2/go.sum
+      - name: Build second pinned compiler
+        if: steps.gateway.outputs.pin2 != ''
+        env:
+          PIN_SLOT: pin2
+          PIN_REF: ${{ steps.gateway.outputs.pin2 }}
+        run: |
+          set -euo pipefail
+          bash "$RUNNER_TEMP/weave-ci/build.sh"
+      - name: Select candidate toolchain
+        if: steps.gateway.outputs.source_ci == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build candidate gateway and vocabulary for ariadne source CI
+        if: steps.gateway.outputs.source_ci == 'true'
+        run: |
+          set -euo pipefail
+          brew bundle --file=Brewfile
+          mkdir -p "$RUNNER_TEMP/weave-candidate"
+          GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/weave-candidate/weave" ./cmd/weave
+          GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/weave-candidate/vocabulary" ./cmd/vocabulary
+          echo "$RUNNER_TEMP/weave-candidate" >> "$GITHUB_PATH"
       - name: Prepare dependencies and compile composition
         run: |
           set -euo pipefail
           ./bootstrap.sh
+      - name: Check supported downstream compilers against candidate exports
+        if: steps.gateway.outputs.source_ci == 'true'
+        run: |
+          set -euo pipefail
+          index=0
+          while IFS= read -r pin; do
+            index=$((index+1))
+            echo "Checking supported compiler $pin"
+            python3 scripts/ci/weave-compatibility.py check --compiler "$RUNNER_TEMP/weave-ci/bin-pin$index/weave" --candidate "$GITHUB_WORKSPACE"
+          done < "$RUNNER_TEMP/weave-ci/refs"
+          # The always-changed cold control must actually reach old compile,
+          # not pass by rejecting its identity before execution.
+          PIN_SLOT=old PIN_REF=4de31b2de32c8143d61abe17bbe7f7654503cd42 bash "$RUNNER_TEMP/weave-ci/build.sh"
+          old_log="$RUNNER_TEMP/weave-ci/old-ownership.log"
+          if python3 scripts/ci/weave-compatibility.py check --compiler "$RUNNER_TEMP/weave-ci/bin-old/weave" --candidate "$GITHUB_WORKSPACE" > "$old_log" 2>&1; then
+            cat "$old_log"
+            echo 'old compiler unexpectedly accepted changed cold ownership control' >&2
+            exit 1
+          fi
+          cat "$old_log"
+          grep -Fq 'preserving authored replacement' "$old_log"
+          grep -Fxq 'compatibility: COLD-REFUSAL-PRESERVED' "$old_log"
       - name: Set up repository checks
         run: |
           set -euo pipefail
@@ -50,7 +177,6 @@ jobs:
           if [ "$EVENT" = push ]; then
             base_tip="$PUSH_BEFORE"
             head="$PUSH_AFTER"
-            # A new ref has an all-zero before: nothing to compare against.
             case "$base_tip" in
               *[!0]*) ;;
               *) echo "merge-check: push without a previous main, nothing to compare"; exit 0 ;;
