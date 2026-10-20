@@ -17,6 +17,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "e0848ff7"}
 ---
 
 # jit_tuning_spec foreign JIT trace count is 0 under suite load (flake)
@@ -41,16 +42,28 @@ Reproduced (2026-10-19) by running the case's child script 120 times in parallel
 
 So the compiler stays on for the unrelated code, which keeps starting traces, but that LuaJIT can't place machine code. This is the #294 defect, not the policy. The test's other gap: one `foreign_trace` slot, which any start from another source, any abort, or any flush resets.
 
-- [ ] Track every foreign trace id (a set), and record each foreign abort's reason through `jit.vmdef.traceerr`.
-- [ ] Assert, at no loss of strength:
+- [x] Track every foreign trace id (a set), and record each foreign abort's reason through `jit.vmdef.traceerr`.
+- [x] Assert, at no loss of strength:
   - `own == 0` starts: the document pipeline never compiles (unchanged).
   - `foreign_starts > 0`: the compiler is on for unrelated code. This is the same measure `own` uses; a global `jit.off()` would make it 0.
   - `foreign_stops > 0`, unless every foreign abort was `failed to allocate mcode memory` (the #294 LuaJIT defect, matched by its `traceerr` text). Then the test records it and still requires the starts.
   - A failure message carries the counts and up to five abort reasons.
-- [ ] Tests:
+- [x] Tests:
   - Re-run the 120-way stress on both runtimes, using the spec's child script, and log the outcome.
   - Red checks: a global `jit.off()` in the child fails the starts assertion; a policy that compiles the document pipeline fails `own == 0`.
 
 ## Log
 
 ### 2026-10-19
+- Implemented:
+  - Foreign trace ids are kept in a set, so another source's start, an abort or a flush no longer hides a later stop.
+  - Abort reasons come from `jit.vmdef.traceerr`.
+  - Assertions: `own == 0` starts; `foreign > 0` starts; `foreign_stops > 0` unless every foreign abort is #294's mcode-allocation error, with a message that cites #294 and carries the counts and up to five reasons.
+- Stress with the spec's child script, 120 parallel runs per runtime, under the new rule:
+  - Preferred runtime: 120 of 120 pass.
+  - nvim 0.11.7: 112 pass outright and 8 pass through the mcode exemption (foreign starts > 0, every abort the mcode error).
+- Red checks:
+  - `jit.off(foreign, true)` (the compiler off for only the unrelated chunk, global status still on) fails the starts assertion.
+  - Removing the forced `requires_interpreter` lets the pipeline compile, and the case fails.
+- `make test-spec SPEC=infra/test_harness` is green on both runtimes.
+
