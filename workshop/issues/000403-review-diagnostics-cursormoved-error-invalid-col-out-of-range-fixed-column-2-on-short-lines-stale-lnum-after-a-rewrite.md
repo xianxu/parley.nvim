@@ -54,9 +54,9 @@ end of the buffer or at a now-short line.
 
 ## Plan
 
-- [ ] Red tests through real extmarks/handler/CursorMoved: empty, one-byte and multibyte lines; stale cached start rows after shrink; injected partial-render failure, one warning and recovery.
-- [ ] Anchor at column 0 with existing visual padding unchanged; validate start rows using one current line count; shared render boundary clears failed refreshes and warns once per module lifetime (ARCH-DRY).
-- [ ] Count row-boundary lookup at N/2N, run focused/architecture guards and recorded suite, update atlas, send tested commit to hub for the required live check before landing.
+- [x] Red tests through real extmarks/handler/CursorMoved: empty, one-byte and multibyte lines; stale cached start rows after shrink; injected partial-render failure, one warning and recovery.
+- [x] Anchor at column 0 with existing visual padding unchanged; validate start rows using one current line count; shared render boundary clears failed refreshes and warns once per module lifetime (ARCH-DRY).
+- [x] Count row-boundary lookup at N/2N, run focused/architecture guards, update atlas, queue the recorded suite, and stage the tested commit for the hub to coordinate the required live check. Suite and live acceptance remain landing gates (Revision below).
 
 ## Log
 
@@ -86,3 +86,21 @@ original diagnostics intact. N/2N cases bound native size queries to one per
 render. Lint is clean across 815 files. Broader guard/define/refresh tests are
 running before the recorded suite. Atlas describes the failure boundary and
 traceability now includes the display module/spec in review coverage.
+
+## Revisions
+
+### 2026-10-19 — overlap review with queued verification
+
+The original third step included completing the recorded suite before review.
+Per the worker contract and the hub's instruction, close review overlaps the
+queued suite and live check. The code and acceptance contract do not change:
+landing still requires the recorded suite to pass and the operator's OK.
+
+### 2026-10-19 — verification in progress
+
+Architecture/define/diagnostic refresh and reentrancy guards completed with
+exit 0 (log /tmp/parley-403-guards.log). Recorded suite attempt
+97f542a62ca6572feb43aa83deff9a13 is queued on code head 2dd15196.
+sdlc stage placed that exact head on parley.nvim:0; the hub has the printed
+stage result and will coordinate the operator's restart/check. No live
+acceptance is claimed yet.
