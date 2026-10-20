@@ -14,14 +14,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.22
+actual_hours: 0.51
 tracker:
     version: 1
     completion:
-        token: close-523e89520144
+        token: close-795aa96683c7
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: f674d4f0ac1eae1be97f5ff3fdb72fac3ea50a66
-        evidence_commit: 2a86a8c5daac6d0b30b9c95ac84aa490bc853528
+        reviewed_head: 79d1cbd13dbe865767200a65aa3cf374d2919e80
+        evidence_commit: 341238a02617ecdd3d66d94b56f7978fa5c5e88e
 ---
 
 # jit_tuning_spec foreign JIT trace count is 0 under suite load (flake)
