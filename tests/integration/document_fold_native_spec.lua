@@ -1,12 +1,12 @@
 -- Probe the native behavior the incremental fold adapter relies on with a real UI.
+local Embedded=require('tests.helpers.embedded_nvim')
 describe('document native fold adjustment', function()
     local child
     local function exec(code, ...)
-        return vim.rpcrequest(child, 'nvim_exec_lua', code, { ... })
+        return child:exec(code, ...)
     end
     before_each(function()
-        child = vim.fn.jobstart({ vim.v.progpath, '--clean', '--embed', '--headless', '-i', 'NONE' }, { rpc = true })
-        vim.rpcrequest(child, 'nvim_ui_attach', 100, 30, { rgb = true })
+        child = Embedded.start({ ui = { 100, 30 } })
         exec([[
             vim.wo.foldmethod='manual'; vim.wo.foldminlines=0; vim.wo.scrolloff=0
             local lines={'💬: q','🤖: a','🧠: thought','body','🧠:[END]','plain','💬: next','draft'}
@@ -18,8 +18,7 @@ describe('document native fold adjustment', function()
         ]])
     end)
     after_each(function()
-        vim.fn.jobstop(child)
-        vim.fn.jobwait({ child }, 1000)
+        child:stop()
     end)
     it('moves an existing fold on interior insertion without recreating it', function()
         local result=exec([[

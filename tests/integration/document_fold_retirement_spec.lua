@@ -1,20 +1,22 @@
+local Embedded=require('tests.helpers.embedded_nvim')
 describe('native suspended fold retirement',function()
     local child
-    local function exec(code,...)return vim.rpcrequest(child,'nvim_exec_lua',code,{...})end
+    local function exec(code,...)return child:exec(code,...)end
     before_each(function()
-        child=vim.fn.jobstart({vim.v.progpath,'--clean','--embed','--headless','-i','NONE'},{rpc=true})
-        vim.rpcrequest(child,'nvim_ui_attach',80,24,{rgb=true})
-        exec("vim.opt.rtp:append(...)",vim.fn.getcwd())
+        child=Embedded.start({ui={80,24}})
     end)
-    after_each(function()vim.fn.jobstop(child);vim.fn.jobwait({child},1000)end)
+    after_each(function()child:stop()end)
     it('restores the operator preference and view when detach interrupts suspended apply',function()
         local result=exec([[
             local D=require('parley.document');local F=require('parley.tool_folds')
+            -- Cross the suspension threshold with a small fixture (#401): a
+            -- 50k-row drain costs 15-25 s and says nothing more here.
+            F.INTERACTIVE_ROWS=500
             local buf=vim.api.nvim_get_current_buf()
             local lines={'💬: q','🤖: a'}
             for i=1,150 do for _,line in ipairs({'🧠: thought','body','🧠:[END]','plain'}) do lines[#lines+1]=line end end
             lines[#lines+1]='💬: next question'
-            while #lines<50010 do lines[#lines+1]='plain' end
+            while #lines<1210 do lines[#lines+1]='plain' end
             vim.api.nvim_buf_set_lines(buf,0,-1,false,lines)
             local doc=D.attach(buf,{schedule=false})
             assert(D.drain(doc,200000,{rows=256,bytes=65536,nodes=65536,entries=65536}).status=='idle')

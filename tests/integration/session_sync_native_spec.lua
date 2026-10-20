@@ -1,14 +1,15 @@
 -- Real input order matters: the operator's global auto-save is installed before
 -- the session buffer, so TextChanged can save before session-sync sees it (#324).
 local arrival = require("tests.helpers.arrival")
+local Embedded = require("tests.helpers.embedded_nvim")
 describe("session-sync native edits", function()
     local child, root, file, sent_file
     local function exec(code, ...)
-        return vim.rpcrequest(child, "nvim_exec_lua", code, { ... })
+        return child:exec(code, ...)
     end
     local function exists() return vim.uv.fs_stat(file .. ".lock") ~= nil end
     local function keys(value)
-        vim.rpcrequest(child, "nvim_input", value)
+        child:input(value)
     end
     local function wait_for(code)
         assert.is_true(vim.wait(arrival.MS, function() return exec(code) end), code)
@@ -93,11 +94,9 @@ describe("session-sync native edits", function()
         file, sent_file = root .. "/status.md", root .. "/sent"
         vim.fn.writefile({"---", "type: session-sync", "owner: ops:0", "operator: test", "---", "", "## Operator instructions", "first bullet", "second bullet", "third bullet"}, file)
         require("tests.helpers.fake_couch").write(root, sent_file, root .. "/argv")
-        child = vim.fn.jobstart({vim.v.progpath, "--clean", "--embed", "--headless", "-i", "NONE"}, {rpc=true})
-        vim.rpcrequest(child, "nvim_ui_attach", 100, 30, {rgb=true})
+        child = Embedded.start({ ui = { 100, 30 } })
         exec([[
-            local runtime, root = ...
-            vim.opt.rtp:append(runtime)
+            local root = ...
             -- Capture notifications without builtin vim.notify's hit-enter UI;
             -- foreign-write warnings are asserted through the fake owner's log.
             _G.notifications = {}
@@ -107,11 +106,10 @@ describe("session-sync native edits", function()
             vim.env.FAKE_COUCH_STATUS = nil
             vim.env.FAKE_COUCH_LOG_DELAY = "0.1"
             vim.env.FAKE_COUCH_ACTORS = '{"Actors":[]}'
-        ]], vim.fn.getcwd(), root)
+        ]], root)
     end)
     after_each(function()
-        vim.fn.jobstop(child)
-        vim.fn.jobwait({child}, 1000)
+        child:stop()
         vim.fn.delete(root, "rf")
     end)
 
@@ -677,13 +675,10 @@ describe("session-sync native edits", function()
             vim.cmd("saveas " .. vim.fn.fnameescape(destination))
             return { identity=identity, protection=protection }
         ]], destination)
-        vim.fn.jobstop(child)
-        vim.fn.jobwait({child}, 1000)
-        child = vim.fn.jobstart({vim.v.progpath, "--clean", "--embed", "--headless", "-i", "NONE"}, {rpc=true})
-        vim.rpcrequest(child, "nvim_ui_attach", 100, 30, {rgb=true})
+        child:stop()
+        child = Embedded.start({ ui = { 100, 30 } })
         exec([[
-            local runtime, root, destination, proof = ...
-            vim.opt.rtp:append(runtime)
+            local root, destination, proof = ...
             vim.env.PATH = root .. "/bin:" .. vim.env.PATH
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
             vim.env.FAKE_COUCH_STATUS = nil
@@ -694,7 +689,7 @@ describe("session-sync native edits", function()
             ss.POLL_MS = 60000
             _G.restored_token = assert(ss.restore_move(0, proof.identity, destination, proof.protection))
             _G.original_identity = proof.identity
-        ]], vim.fn.getcwd(), root, destination, proof)
+        ]], root, destination, proof)
         assert.is_not_nil(vim.uv.fs_stat(file .. ".lock"))
         exec([[
             local destination = ...

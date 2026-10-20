@@ -1,4 +1,5 @@
 local arrival = require("tests.helpers.arrival")
+local Embedded = require('tests.helpers.embedded_nvim')
 local uv = vim.uv or vim.loop
 
 describe('durable leased document migration', function()
@@ -63,7 +64,7 @@ describe('durable leased document migration', function()
     end)
     after_each(function()
         for _, operation in ipairs(operations) do operation.release() end
-        for _, child in ipairs(children) do pcall(vim.fn.jobstop, child); vim.fn.jobwait({ child }, 1000) end
+        for _, child in ipairs(children) do child:stop() end
         vim.fn.delete(root, 'rf')
     end)
 
@@ -417,15 +418,14 @@ describe('durable leased document migration', function()
 
     it('refuses another editor execution or recovery while the original lease is held', function()
         local operation = assert(begin())
-        local child = vim.fn.jobstart({ vim.v.progpath, '--clean', '--embed', '--headless', '-i', 'NONE' }, { rpc = true })
+        local child = Embedded.start()
         children[#children + 1] = child
-        vim.rpcrequest(child, 'nvim_exec_lua', 'vim.opt.rtp:append(...)', { vim.fn.getcwd() })
-        local result = vim.rpcrequest(child, 'nvim_exec_lua', [[
+        local result = child:exec([[
             local root,old,new=...; local M=require('parley.document_move')
             local op,err=M.begin('ns',{ID='stable-id',File=old,Owner='owner'},new,{root=root,destination_registered=false})
             local recovery,re=M.recover('ns','stable-id',{root=root},function()end)
             return {first=err.kind,second=re.kind,created=op~=nil or recovery~=nil}
-        ]], { root .. '/state', old, new })
+        ]], root .. '/state', old, new)
         assert.same({ first = 'busy', second = 'busy', created = false }, result)
         assert.is_truthy(uv.fs_stat(operation.journal_path)); assert.is_truthy(uv.fs_stat(side))
     end)

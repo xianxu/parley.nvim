@@ -1,15 +1,13 @@
 -- Attached UI is essential: headless-only folds preserve topline accidentally.
+local Embedded = require("tests.helpers.embedded_nvim")
 describe("stream fold maintenance preserves each window view", function()
     local child
     local function exec(source, ...)
-        return vim.rpcrequest(child, "nvim_exec_lua", source, { ... })
+        return child:exec(source, ...)
     end
 
     before_each(function()
-        child = vim.fn.jobstart({ vim.v.progpath, "--clean", "--embed", "--headless", "-i", "NONE" }, { rpc = true })
-        assert.is_true(child > 0)
-        vim.rpcrequest(child, "nvim_ui_attach", 100, 30, { rgb = true })
-        exec("vim.opt.runtimepath:prepend(...)", vim.fn.getcwd())
+        child = Embedded.start({ ui = { 100, 30 }, rtp = "prepend" })
         exec([[
             folds = require("parley.tool_folds")
             function fixture(thinking, wrapped)
@@ -61,10 +59,7 @@ describe("stream fold maintenance preserves each window view", function()
     end)
 
     after_each(function()
-        if child and child > 0 then
-            vim.fn.jobstop(child)
-            vim.fn.jobwait({ child }, 1000)
-        end
+        if child then child:stop() end
     end)
 
     for _, thinking in ipairs({ false, true }) do

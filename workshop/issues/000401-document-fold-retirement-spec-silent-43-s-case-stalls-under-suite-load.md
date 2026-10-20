@@ -1,13 +1,23 @@
 ---
 id: 000401
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '64bf9c4a88b91de40f6099433c26216350186e7b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '9a468b246a068ac9d1cc1a0a5a5765175110692a' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-19T17:57:41-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "134144a6", done: "1ebb975b"}
+actual_hours: 0.72
 ---
 
 # document_fold_retirement_spec: silent 43 s case stalls under suite load
@@ -31,8 +41,57 @@ Make the case's cost and its failure bounded and diagnosable:
 
 ## Plan
 
-- [ ]
+Measured (2026-10-19), with the case's code run directly in a headless nvim:
+- Nearly all of the cost is `D.drain` of the 50,010-line fixture: 14–17 s on the preferred runtime and 25 s on the installed 0.11.7. The fold steps themselves take about 0 s. Drain time is linear (6,250 / 12,500 / 25,000 / 50,010 lines: 1.5 / 3.6 / 7.4 / 16.9 s); that's the parser's cost, which `perf_document_spec` tracks.
+- The fixture has 50,010 lines only to cross `tool_folds`' `INTERACTIVE_ROWS` (50,000), the scope above which folds are suspended.
+- `document_fold_uncertainty_retirement_spec` has the same shape: one silent case of about 30 s, with a 50,010-line drain.
+- Nine specs drive an embedded nvim through `vim.rpcrequest`, 21 call sites, none of them bounded. This is the class to fix (ARCH-PURPOSE).
+
+Steps:
+- [x] `tests/helpers/embedded_nvim.lua`, the one way a spec drives a child nvim (ARCH-DRY):
+  - `start({ ui = { w, h } })` spawns `--clean --embed --headless -i NONE`, optionally attaches a UI, and appends the repo to the child's runtimepath.
+  - `request(method, ...)`, `exec(code, ...)`, `input(keys)`, `stop()`.
+  - Every request is bounded by `REQUEST_MS`. On expiry a libuv timer kills the child by pid; the timer runs in a fast callback, where `jobstop` isn't allowed. The pending `rpcrequest` then errors on the closed channel, and the helper raises `embedded nvim did not answer <method> within N ms; killed pid P`.
+  - `REQUEST_MS` is 4 × `arrival.MS` (60 s): a request stretched up to the harness's load factor (at most 4) still fits, and a wedged child is named well before the 180 s idle kill.
+- [x] Sweep all nine specs onto the helper. No `vim.rpcrequest` left in `tests/integration`; an arch spec refuses a new one outside the helper (the mistake-class rule).
+- [x] `tool_folds.INTERACTIVE_ROWS` becomes a module field, read at each use (the repo's `POLL_MS` pattern). The two retirement specs set it to 500 in the child and build a fixture just past it, so each case drains a few hundred lines, not 50k. The real 50,000 threshold stays covered by `document_fold_batches_spec` and the perf spec, which keep the constant.
+- [x] Tests:
+  - The helper's timeout: a child blocked in `exec` (a busy loop) fails, naming the method, after a short bound; checked against an injected `REQUEST_MS`.
+  - Both retirement cases now take seconds; measured before and after on both runtimes, and the numbers logged.
+
+## Revisions
+
+- 2026-10-19, close review round 2 (REWORK, a Critical finding):
+  - The plan's bound, `REQUEST_MS` = 4 × `arrival.MS` (60 s), assumed the 180 s run-alone budget. Every helper user actually runs on `spec_runner`'s default 50 s × load factor, so on a quiet machine a wedged child still died by the runner's unnamed kill.
+  - The bound is now derived. `spec_runner` passes each spec child its load-scaled idle budget as `PARLEY_SPEC_IDLE_MS`, and the helper's `request_ms()` takes half of it (the runner's `DEFAULT_TIMEOUT` when absent). `REQUEST_MS` stays only as a spec override.
+  - The plan's "appends the repo to the child's runtimepath" now holds (round-1 BR-1).
 
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Round 2 REWORK fixed in 1d168cca. The request bound is derived: spec_runner passes the spec child its load-scaled idle budget (PARLEY_SPEC_IDLE_MS) and the helper bounds each request at half. A test through the real spec_runner.execute (20 s budget) shows a wedged child failing with "nvim_exec_lua within 10000 ms" and no DEADLINE; it is red when the runner does not pass the budget. The BR-2 failed-setup test shows a bad UI attach raising and the child reaped. Comments name their sources; Revisions record the corrected plan. Earlier evidence holds: under suite load the retirement specs take 1-2 s (from 30-43 s); removing the seam fails both; a raw or pcall-wrapped rpcrequest fails the guard. All affected groups green: infra/test_harness, chat/document, chat/exchange_model, context/file_references, modes/session_sync. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+
+### 2026-10-19 (implementation)
+
+- Prototype: a libuv timer that kills the child by pid unblocks a pending `vim.rpcrequest` ("ch N was closed by the peer") on both runtimes. `jobstop` isn't allowed in that fast callback; `uv.kill` is.
+- Sweep: all nine specs now drive their child through `tests/helpers/embedded_nvim.lua`; no `vim.rpcrequest` or `--embed` spawn is left outside it.
+- Scope addition (same class): both retirement specs came off `spec_runner`'s 180 s run-alone list; they now run in 1–2 s under the default 50 s budget. The fold batches and semantic corpora keep the long budget and the real 50k threshold.
+- Measured, each retirement spec alone: 30–43 s before, 1–2 s after, on both the preferred runtime and 0.11.7.
+- Red checks:
+  - A raw `vim.rpcrequest` added to `stream_view_spec` fails the arch guard.
+  - Removing `F.INTERACTIVE_ROWS=500` fails both retirement cases ('did not suspend'), so the small fixture still exercises suspension.
+- Helper spec: a busy child fails its request, naming `nvim_exec_lua`, the 500 ms bound and its pid, and the child is reaped.
+- Targeted runs green: `infra/test_harness`, `chat/document`, `chat/exchange_model`, `context/file_references`, `modes/session_sync`.
+- Close review round 1 (FIX-THEN-SHIP), all five fixed in 72975e29:
+  - BR-1: `start()` puts the repository on the child runtimepath (`rtp = "prepend"` for `stream_view`), and the nine restatements are gone.
+  - Minor: a failed setup stops its child.
+  - Minor: the guard also catches `pcall(vim.rpcrequest, …)` and `rpcnotify`, and counts only real users. Red-checked with a `pcall`-wrapped request.
+  - Minor: `tool_folds` comments name `M.INTERACTIVE_ROWS`.
+  - Minor: under suite load, measured in the recorded suite on c676e97 (parallel jobs, other slots' suites), the retirement specs took 1 s and 2 s against the 50 s budget.
+- That suite run failed only `jit_tuning_spec` 'keeps unrelated JIT traces active while protecting the entire document pipeline': the #395 flake (the foreign trace count is 0 under load). It's unrelated to this branch, and it isn't registered, because no same-head pass followed: the branch moved to the fixes first.
+- Close review round 2: REWORK. Fixed:
+  - The bound is derived from the runner's idle budget (see Revisions).
+  - A failed-setup test: a bad UI attach raises, and the child is reaped.
+  - A runner-level test: a wedged child inside a real `spec_runner.execute` (20 s budget) fails naming `nvim_exec_lua within 10000 ms`, with no DEADLINE. It's red when the runner doesn't pass the budget.
+  - Comments name their source (`request_ms`, `PARLEY_SPEC_IDLE_MS`, `DEFAULT_TIMEOUT`), not values.
+

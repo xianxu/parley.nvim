@@ -1,13 +1,12 @@
 local arrival = require("tests.helpers.arrival")
+local Embedded=require('tests.helpers.embedded_nvim')
 describe('native presentation publication ownership',function()
     local child
-    local function exec(code,...)return vim.rpcrequest(child,'nvim_exec_lua',code,{...})end
+    local function exec(code,...)return child:exec(code,...)end
     before_each(function()
-        child=vim.fn.jobstart({vim.v.progpath,'--clean','--embed','--headless','-i','NONE'},{rpc=true})
-        vim.rpcrequest(child,'nvim_ui_attach',80,24,{rgb=true})
-        exec("vim.opt.rtp:append(...)",vim.fn.getcwd())
+        child=Embedded.start({ui={80,24}})
     end)
-    after_each(function()vim.fn.jobstop(child);vim.fn.jobwait({child},1000)end)
+    after_each(function()child:stop()end)
     it('does not clear newer fold work after an OptionSet callback edits and repairs',function()
         local result=exec([[
             local D=require('parley.document');local F=require('parley.tool_folds')

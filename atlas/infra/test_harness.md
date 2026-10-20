@@ -280,12 +280,23 @@ remains independent of those maintainer tools.
 ### Large native fold conformance
 
 `tests/helpers/spec_runner.lua` keeps a 50-second no-completed-case budget,
-with a 180-second base for the existing large native fold/semantic corpora. The fold spec builds
-a real 50,010-row document to exercise bounded native fold cleanup and window
-preference restoration. The semantic corpus checks Enter/join scaling through 50,000 rows. These index
+with a 180-second base for the existing large native fold/semantic corpora. The fold batches spec builds
+a real 50,010-row document to exercise bounded native fold cleanup. The semantic corpus checks Enter/join scaling through 50,000 rows.
+The two fold retirement specs (window preference restoration) cross `tool_folds.INTERACTIVE_ROWS` with a
+small fixture instead, by lowering the field in their child (#401), so they run in seconds under the default budget. These index
 bootstraps can exceed 50 seconds under parallel load. The override applies to the
 exact repository files and is shared by mapped,
 full-suite, and direct `PlenaryBustedFile` invocations.
+
+### Driving a child nvim (#401)
+
+A spec that drives an embedded nvim does it through `tests/helpers/embedded_nvim.lua`
+(`start`, `exec`, `request`, `input`, `stop`). `start` puts the repository on the
+child's runtimepath. Every request is bounded by `request_ms()`: half the spec's idle
+budget, which `spec_runner` passes to the spec child, load-scaled, as `PARLEY_SPEC_IDLE_MS`.
+A child that never answers is killed by pid, and the request fails naming its method,
+before the runner's idle kill ends the spec with no cause. `tests/arch/embedded_rpc_spec.lua` refuses a raw `vim.rpcrequest` or
+`--embed` spawn anywhere else.
 
 ### Deadlines, load, and the Neovim under test (#294)
 
