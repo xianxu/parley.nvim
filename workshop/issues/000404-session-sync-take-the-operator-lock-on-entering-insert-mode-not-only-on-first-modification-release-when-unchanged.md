@@ -72,6 +72,8 @@ Actions: enter/leave insert, edit/undo, submit; failed release retains the band 
 
 ## Log
 
+
+- 2026-10-21: closed — BR-2 negative control: six native retained-journal cases fail before correction, three outside-insert controls pass. Corrected 7e9b74ba: 111 native cases pass on both Neovim 0.12.5 and installed 0.11.7; 71 buffer cases, all architecture/arch-helper/documentation guards and 18 unit cases pass; lint 818 files and diff-check clean. Refusal leaves OLD/NEW witnesses byte-identical at all three cleanup points and leaving insert permits idempotent recovery. Operator live check accepted staged 5c55f1ef (yes, works), verified hub delivery d5c933fc; stage cleared. Fresh suite lease-2323705263 queued on corrected code; landing still requires recorded pass.; review verdict: SHIP
 ### 2026-10-20
 
 ## Revisions

@@ -159,3 +159,69 @@ None.
 Add a `## Revisions` entry requiring current insert eligibility at every automatic lock-removal boundary, including persisted move recovery and interrupted cleanup. Require native regressions for replay with and without live insert intent before marking that clause complete.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b3c2581e-3ee8-4c00-8b76-9c37643865f1","repository":"github.com/xianxu/parley.nvim","issue_id":"000404","recipe":"small-diff-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/c4011392ea6befbc","reviewed_head":"27c43e6abd779c5416890256793e33524c379bb5","slot":"parley.nvim:1","requested_at":"2026-10-21T16:11:13.956803Z"},"phase":"finished","pid":73591,"started_at":"2026-10-21T16:11:14.13063Z","finished_at":"2026-10-21T16:16:09.216848Z","session_id":"01a15f3b-26c9-7df1-ad4d-b561bdc21f99","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-21T10:41:06-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 404 — session-sync: take the operator lock on entering insert mode, not only on first modification; release when unchanged |
+| repo | parley.nvim |
+| issue file | workshop/issues/000404-session-sync-take-the-operator-lock-on-entering-insert-mode-not-only-on-first-modification-release-when-unchanged.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 0fdc27987dd8174c82f7486b9ec8620c87cb5b83..f808cfd7000fe927812ce1c54a33a91b0fcd9b5e |
+| command | sdlc close --issue 404 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-21T10:41:06-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The implementation matches the revised Spec and Plan. BR-2 is verified addressed: recovery admission and cleanup recheck current insert intent while preserving ownership proofs and interrupted replay. No new findings.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      session_sync.lua:987 and :1154 guard recovery admission and destructive cleanup. Native regressions at session_sync_native_spec.lua:698 cover all three cleanup points, insert entry before/after restore, and outside-insert convergence. Removing the fix in a disposable checkout produced six expected failures and 105 passes; pinned-head native tests pass all 111 cases on Neovim 0.12.5 and 0.11.7.
+```
+
+1. **Strengths**
+
+   - Shared `take_turn` acquisition preserves baseline and disk-race handling (`lua/parley/session_sync.lua:588`).
+   - One departure handler covers Escape and Ctrl-C with deferred reconciliation (`:610`).
+   - Replay tests verify unchanged lock bytes on refusal and successful convergence afterward.
+   - README and atlas describe the changed lifecycle and recovery action.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+
+   - `make test-spec SPEC=modes/session_sync` passed, including 111 native, 71 buffer, and 18 session-sync unit cases.
+   - Native tests also passed on installed Neovim 0.11.7.
+   - Mutation verification confirmed six regressions fail without the replay fix.
+   - Diff-check passed; tracked checkout remained clean. Disposable checkout removed.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY: pass** — shared acquisition and insert-intent policy.
+   - **ARCH-PURE: pass** — changes stay within the existing editor/IO boundary.
+   - **ARCH-PURPOSE: pass** — inspected baseline release, snapshot creation, recovery admission, and protection/retire cleanup. Legacy move completion removes OLD while retaining NEW; explicit submit remains the intended exception.
+   - **ARCH-EVOLVE: pass** — no persisted format changes.
+
+7. **Plan revisions:** None needed. Existing revisions describe the delivered behavior; no Core concepts table requires cross-checking.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"3dbdcc1d-8199-4c46-b9bd-33e755720d07","repository":"github.com/xianxu/parley.nvim","issue_id":"000404","recipe":"small-diff-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/a4c52a1a81e0f353","reviewed_head":"f808cfd7000fe927812ce1c54a33a91b0fcd9b5e","slot":"parley.nvim:1","requested_at":"2026-10-21T17:37:53.450932Z"},"phase":"finished","pid":42585,"started_at":"2026-10-21T17:37:53.631491Z","finished_at":"2026-10-21T17:41:06.574521Z","session_id":"01a15f8a-7da1-7e83-a190-5ee9cf87d27d","outcome":"returned"}] -->
