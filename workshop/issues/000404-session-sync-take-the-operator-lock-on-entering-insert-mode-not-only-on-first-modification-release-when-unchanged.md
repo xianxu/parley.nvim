@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "903492ed", done: "52e7b97d"}
 ---
 
 # session-sync: take the operator lock on entering insert mode, not only on first modification; release when unchanged
