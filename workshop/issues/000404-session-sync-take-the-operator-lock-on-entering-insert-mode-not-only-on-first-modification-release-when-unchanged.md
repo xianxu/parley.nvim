@@ -55,7 +55,7 @@ iPhone view, showing the keyboard maps to the same thing.
 
 - [x] BR-1: one mode-departure handler for ModeChanged/InsertLeave, shared automatic-release eligibility including move finalization, native red/green matrix, renewed verification and suite.
 
-- [ ] BR-2: revalidate live intent at persisted cleanup/recovery boundaries; native replay before cleanup, after OLD cleanup and after NEW cleanup, with outside-insert convergence controls on both runtimes.
+- [x] BR-2: revalidate live intent at persisted cleanup/recovery boundaries; native replay before cleanup, after OLD cleanup and after NEW cleanup, with outside-insert convergence controls on both runtimes.
 
 Landing gates: recorded suite pass, close review, hub's live acceptance, merge and report. Review may overlap a queued suite.
 
@@ -223,3 +223,14 @@ unchanged and gives the approved leave-insert-and-reopen action. All 111 native
 cases pass on Neovim 0.12.5; lint is clean across 818 files and diff-check passes.
 The operator's earlier live acceptance stays recorded above; this replay-only
 correction is being verified on both runtimes before renewed suite and review.
+
+### 2026-10-21 — BR-2 targeted verification complete
+
+Code head 7e9b74ba passes all 111 native cases on both Neovim 0.12.5 and installed
+0.11.7, including the nine retained-journal cases (three cleanup points × entry
+before restore / entry after restore / outside insert). Each refusal checks
+byte-identical OLD/NEW protection, then leaving insert permits replay to converge.
+All 71 buffer cases, architecture/arch-helper/documentation guards and 18 unit
+cases pass; lint 818 files and diff-check are clean. Fresh recorded suite
+attempt efa95c06053178e086dd6672142ba1d0, run lease-2323705263, is queued on
+7e9b74ba; no recorded pass is claimed. PR #327 is updated; stage remains clear.
