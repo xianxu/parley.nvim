@@ -46,9 +46,9 @@ iPhone view, showing the keyboard maps to the same thing.
 
 ## Plan
 
-- [ ] Add red real-headless insert/escape cases for registered parent and side docs, changed auto-save/re-entry, insert undo, late attach and pre-existing/foreign locks; preserve non-insert edit coverage.
-- [ ] Share existing first-edit acquisition and deferred race handling with InsertEnter; retain one acquisition baseline; InsertLeave reuses owned baseline release. No watcher/timer (ARCH-DRY).
-- [ ] Verify counted hash work at 4/8 mode pairs, focused/native tests, architecture guards and atlas; queue recorded suite and request the live check from the hub.
+- [x] Add red real-headless insert/escape cases for registered parent and side docs, changed auto-save/re-entry, insert undo, late attach and pre-existing/foreign locks; preserve non-insert edit coverage.
+- [x] Share existing first-edit acquisition and deferred race handling with InsertEnter; retain one acquisition baseline; InsertLeave reuses owned baseline release. No watcher/timer (ARCH-DRY).
+- [x] Verify counted hash work at 4/8 mode pairs, focused/native tests, architecture guards and atlas; queue recorded suite and request the live check from the hub.
 
 Landing gates: recorded suite pass, close review, hub's live acceptance, merge and report. Review may overlap a queued suite.
 
@@ -118,3 +118,13 @@ per pair). Lint is clean across 818 files and diff-check passes. Native tests
 on installed Neovim 0.11.7 and architecture/docs guards follow before the
 recorded suite. The README/atlas describe immediate entry and unchanged exit,
 continued normal-mode protection, preserved auto-save baseline and no timer.
+
+### 2026-10-21 — targeted verification complete; acceptance pending
+
+All 85 native cases pass on Neovim 0.12.5 and installed 0.11.7. All 71 buffer
+cases, architecture/arch-helper/documentation guards and 18 unit cases pass;
+lint is clean across 818 files. PR #327 is open, code head f6dfc739. The recorded
+suite is started on that pushed head. No pass is claimed until its record
+completes. Requested live staging from the hub; the hub has asked the operator
+whether to stage or land on tests, and explicitly holds staging meanwhile
+(Couch 15033a2b-b627-4fa4-a894-6d2b851b53df). No :0 change was made.
