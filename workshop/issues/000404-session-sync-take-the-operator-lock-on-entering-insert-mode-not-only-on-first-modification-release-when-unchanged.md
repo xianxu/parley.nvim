@@ -174,3 +174,21 @@ exact output (submitted receipt 76f99538-63f4-4cf7-b42b-e625414dee8f). Await the
 operator's verdict, then clear the stage. PR #327 is updated. Fresh recorded
 suite attempt 2b6e01107afb196736b9f9eed53ff068, run lease-2669494922, is queued
 on that code head; no pass is claimed. Close review may overlap that queue.
+
+### 2026-10-21 — live acceptance and BR-2 replay boundary
+
+The hub reported the operator's live acceptance of staged 5c55f1ef: "yes, works"
+(Couch d5c933fc-e753-40e7-a190-f61cda9662ef, verified submitted). Cleared the stage
+through sdlc; parley.nvim:0 is back on clean main. The hub will fast-forward the
+operator's checkout after landing.
+
+Close round 2 returned REWORK, disposed BR-1 and raised Critical BR-2 in the
+same insert-intent-must-follow-mode family. A persisted release snapshot can
+bypass current intent in prepare_move_finalization after restore_move. This is
+the second family finding: the earlier sweep missed the destructive replay
+boundary. Cancelled only superseded suite lease-2669494922; it was still queued
+and recorded no pass. Sent the complete boundary-sweep design to the hub
+(receipt 6af94643-691c-4956-83c7-56ae2a3c030f, submitted) before further code:
+revalidate current eligibility before automatic lock removal, preserve journal
+proofs and interruption recovery, test retained journals before and after each
+cleanup effect with live insert and outside-insert convergence controls.
