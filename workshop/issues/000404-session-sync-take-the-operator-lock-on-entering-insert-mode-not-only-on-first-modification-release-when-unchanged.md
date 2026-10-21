@@ -55,6 +55,8 @@ iPhone view, showing the keyboard maps to the same thing.
 
 - [x] BR-1: one mode-departure handler for ModeChanged/InsertLeave, shared automatic-release eligibility including move finalization, native red/green matrix, renewed verification and suite.
 
+- [ ] BR-2: revalidate live intent at persisted cleanup/recovery boundaries; native replay before cleanup, after OLD cleanup and after NEW cleanup, with outside-insert convergence controls on both runtimes.
+
 Landing gates: recorded suite pass, close review, hub's live acceptance, merge and report. Review may overlap a queued suite.
 
 Actions: enter/leave insert, edit/undo, submit; failed release retains the band and existing submit recovery.
@@ -192,3 +194,20 @@ and recorded no pass. Sent the complete boundary-sweep design to the hub
 revalidate current eligibility before automatic lock removal, preserve journal
 proofs and interruption recovery, test retained journals before and after each
 cleanup effect with live insert and outside-insert convergence controls.
+
+### 2026-10-21 — BR-2 approved release-boundary rule
+
+Hub approval 8a16df6c-691b-4373-a4c7-d95bf786f5ea (verified submitted): every
+automatic destructive release revalidates current insert intent; persisted
+release permission never overrides fresh intent. Cleanup during insert refuses
+with "leave insert mode and reopen <destination> to finish this move". Preserve
+the journal format and exact ownership/after-state witnesses. Include recovery
+attachment in the pre-effect sweep, so entering insert before restoration cannot
+create obsolete protection on OLD while validating an already-cleaned journal.
+Enumerated sites: release_if_baseline; move_finalization_snapshot; restored
+release admission; prepare_move_finalization protection/retire replay. Legacy
+finish_move removes only OLD while NEW remains held; explicit submit remains
+the intentional exception. Native tests cover retained journals at all three
+cleanup points, entry before and after restore, plus outside-insert replay.
+If close raises a third finding in this family, stop and re-plan the entire lock
+lifecycle as one state table, as the hub requires. ARCH-PURPOSE/ARCH-DRY.
