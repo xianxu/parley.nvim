@@ -162,6 +162,7 @@ return {
                 end
                 vim.fn.writefile({ vim.json.encode({ runtime = runtime, lockfile = opts.lockfile,
                     relative = relative, windows = #vim.api.nvim_list_wins(),
+                    preview_port = vim.g.mkdp_port,
                     appearance = appearance, restored = restored }) },
                     vim.env.BOOTSTRAP_RESULT)
             end }

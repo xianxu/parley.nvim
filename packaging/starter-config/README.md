@@ -175,7 +175,8 @@ Use `:ParleyProxy connect` to connect another account explicitly.
 The app includes `iamcco/markdown-preview.nvim`, pinned with the other editor
 plugins. In a Markdown chat, run `:MarkdownPreview` to open a live browser preview.
 Use `:MarkdownPreviewToggle` to toggle it and `:MarkdownPreviewStop` to stop it.
-Preview starts only when requested and listens on localhost.
+Preview starts only when requested and listens on localhost port 18999.
+If startup reports `EADDRINUSE` or `refreshPage`, set `vim.g.mkdp_port` to a different free port in your profile and restart Neovim; the upstream random port range can hit Syncthing on 8384.
 
 The app ships the checksummed upstream prebuilt preview server; Node and Yarn
 are not required, and bundled startup runs no Preview install hook. App upgrades

@@ -205,6 +205,8 @@ local ok, err = xpcall(function()
             init = function()
                 vim.g.mkdp_auto_start = 0
                 vim.g.mkdp_open_to_the_world = 0
+                -- Avoid the timestamp-selected range colliding with Syncthing (8384).
+                vim.g.mkdp_port = 18999
             end,
             build = function(plugin)
                 local info = vim.json.decode(table.concat(vim.fn.readfile(plugin.dir .. "/package.json"), "\n"))

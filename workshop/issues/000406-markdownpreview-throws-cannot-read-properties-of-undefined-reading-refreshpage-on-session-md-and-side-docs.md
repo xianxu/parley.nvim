@@ -51,8 +51,11 @@ third-party plugin edits, or Parley/session-sync reload changes (ARCH-PURPOSE).
 
 - [x] Trace the installed preview server and reproduce the reported failure with Parley absent.
 - [x] Resolve scope with the hub: configuration in the shipped starter, no fork.
-- [ ] Add a red startup port regression; set the fixed port and troubleshooting note; verify real preview external rewrites, guards and recorded suite.
-- [ ] Close review and land; report the merge to the hub. Review may overlap a queued suite; landing requires its pass.
+- [x] Add a red startup port regression; set the fixed port and troubleshooting note; verify real preview external rewrites and architecture/docs guards.
+- [ ] Queue the recorded suite on the pushed head.
+
+Landing gates: recorded suite pass, close review, then merge and report to the
+hub. Review may overlap a queued suite under the worker contract.
 
 ## Log
 
@@ -96,3 +99,25 @@ registry, not configuration. Replace the initial Spec/Done-when's page-registrat
 assumption with the confirmed cause and starter-config regression above. No
 startup state machine or dependency fork. A fixed port can still be occupied;
 explicitly document choosing a different free port and restarting Neovim.
+
+### 2026-10-20 — red/green and real dependency check
+
+The bootstrap regression failed before the config edit (expected 18999, got
+nil), with the other 20 cases passing. After adding the fixed port, all 21
+bootstrap cases pass. Existing lazy loading, localhost-only and auto-start-off
+assertions remain exercised. Architecture/documentation/arch-helper guards
+passed, lint reports zero warnings/errors across 818 files, and diff-check is
+clean. The fixed port was verified free by a real bind before testing.
+
+A disposable installed Neovim 0.11.7 loaded the actual pinned MarkdownPreview
+plugin/server with port 18999 and a browser callback that captured the URL
+instead of opening a window. A real HTTP Socket.IO polling client received
+initial contents and then updated contents for both session.md and
+session.side/discussion.md after external disk writes, native checktime and
+CursorMoved. No TypeError/EADDRINUSE appeared. The check used only scratch
+files, no live documents, provider credentials or operator config. Script and
+evidence live beside the reproduction (live.py / live.log).
+
+Review/landing are recorded as acceptance gates outside implementation checkboxes
+so they can overlap the recorded suite queue without claiming a pending pass.
+The operator's separate config remains with the hub as approved.
