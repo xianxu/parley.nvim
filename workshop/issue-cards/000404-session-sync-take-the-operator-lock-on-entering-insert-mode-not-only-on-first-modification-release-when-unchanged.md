@@ -1,6 +1,6 @@
 ---
 id: 000404
-status: codecomplete
+status: done
 created: 2026-10-20
 updated: 2026-10-21
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: f808cfd7000fe927812ce1c54a33a91b0fcd9b5e
         evidence_commit: 5dc0ef648b15a42b853448cfdc3524c356ac9380
+        landed_commit: c5089a7235b8d27a593a973be077649e7d0e56a9
 ---
 
 # session-sync: take the operator lock on entering insert mode, not only on first modification; release when unchanged
