@@ -1,6 +1,6 @@
 ---
 id: 000406
-status: working
+status: codecomplete
 created: 2026-10-20
 updated: 2026-10-20
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.13
+tracker:
+    version: 1
+    completion:
+        token: close-c498addd0e16
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 790a2dbdd6de6d878cfe6816d5521bdcfdae1919
+        evidence_commit: 5fd69d52f47b6abad1e76b9d1c5409b23572bd2c
 ---
 
 # MarkdownPreview throws 'Cannot read properties of undefined (reading refreshPage)' on session.md and side docs
