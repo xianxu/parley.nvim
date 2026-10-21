@@ -28,10 +28,13 @@ Follow-up to #404, requested by the operator through the hub (Couch 61805ff7-ac9
 
 On InsertEnter for a registered session file or side doc, operator protection must be effective before the first edit applies. Once acquisition is confirmed, run an unconditional freshness check; if the file changed while the buffer is still unmodified, reload silently before admitting edits. Preserve modified-buffer conflict safety, existing ownership checks and unchanged-exit/submit lifecycle. No two-phase protocol. Check Couch's writer for atomic exclusion against acquisition at write time; coordinate any producer fix rather than asserting a local sidecar write excludes an in-flight writer.
 
+Held-lock refusal or malformed/mismatched acknowledgment blocks edits visibly; pending keys are not applied and the notice says so. Couch unreachable or a bounded 500 ms timeout permits editing with "not locked: Couch unreachable; edits may conflict"; concurrent disk changes use the existing clobber-copy path. Unknown ownership never authorizes unlock. This approved exception refines the confirmed-acquisition guarantee above (Revision below).
+
 ## Done when
 
 - Deterministic native races cover an external write during InsertEnter acquisition, queued first input and silent reload of an unmodified buffer; parent/side docs and both supported Neovim versions agree.
 - Replace the old clobber expectation at session_sync_native_spec.lua's insert-entry race where the new contract applies; modified-buffer and genuine post-acquisition violations remain safe.
+- Named 500 ms acquisition bound is measured; unreachable/timeout applies queued edits with warning and preserves concurrent copies, while held refusal/invalid ack blocks edits without guessing ownership.
 - Producer write-side exclusion and acknowledgment semantics are documented and tested, or a blocking producer issue is linked before claiming the end-to-end guarantee.
 
 ## Plan
@@ -59,3 +62,16 @@ preceded X. A guarded native edit! reread completed inside the callback on both.
 These are feasibility observations, not the regression proof: plan requires
 first-edit ordering with stateful fake acquire, clean/dirty cases and native
 read-completion evidence. Probe files live only under the existing scratch root.
+
+## Revisions
+
+### 2026-10-21 — editable unavailable mode approved
+
+The hub approved #408's design with one failure-policy correction (Couch
+ba2623c0-aa38-4941-81ed-66909e97aef2, verified submitted): refusal of a held lock
+and invalid ack blocks edits, but unreachable Couch or timeout must not lock the
+operator out. Use the exact unconfirmed warning, allow editing, preserve
+concurrent changes through the existing clobber-copy path, and use a named,
+measured 500 ms wait. Updated Spec/Done when and the durable plan's state table
+and tests; no producer assumptions or code changes. Await pair#777's pinned
+contract through the hub.
