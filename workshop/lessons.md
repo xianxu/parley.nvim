@@ -899,3 +899,9 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #398: Importing a generated CI workflow can still introduce authored consumer configuration. Document its ownership, update and failure recovery in repository-owned README and indexed atlas guidance; an ignored inherited workflow page does not satisfy that surface.
 
 - #398 landing: shipped atlas prose must not link relatively into ignored weave overlays. Use a pinned upstream link for inherited contracts and run documentation_spec after adding atlas links; warm-checkout existence hides cold-checkout failures.
+
+- #404 close BR-1: Neovim skips InsertLeave on Ctrl-C. State representing an
+  actual editor mode must follow ModeChanged too, through one departure
+  handler, with native tests for every exit family rather than Escape alone.
+  Enumerate every automatic release consumer (including move finalization)
+  before claiming that an intent stays protected for its full lifetime.

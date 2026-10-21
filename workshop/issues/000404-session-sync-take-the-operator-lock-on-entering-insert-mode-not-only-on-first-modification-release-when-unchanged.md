@@ -37,18 +37,23 @@ iPhone view, showing the keyboard maps to the same thing.
   lock was taken. No idle timer: immediate unchanged exit release covers the intended forgotten-insert case
   (Revision below). Changed content keeps the lock through saves until submit or full undo, as today.
 - The lock indicator in the statusline shows it the moment insert mode starts.
+- Actual insert departure, including Ctrl-C which skips InsertLeave, ends unchanged intent. Automatic move
+  finalization also retains a live insert intent; only explicit submit may release during that intent.
 
 ## Done when
 
 - Tests pin: insert takes the lock and paints the band without a change; unchanged escape releases it; changed
   content retains it through auto-save and insert re-entry until submit/full undo; undo while inserting stays
-  protected until exit. Existing/foreign locks, disk-write races and plain Markdown remain safe.
+  protected until exit. Ctrl-C/full-undo is covered across parent/side docs, early/late attachment and auto-save
+  on/off; moves preserve live intent. Existing/foreign locks, disk-write races and plain Markdown remain safe.
 
 ## Plan
 
 - [x] Add red real-headless insert/escape cases for registered parent and side docs, changed auto-save/re-entry, insert undo, late attach and pre-existing/foreign locks; preserve non-insert edit coverage.
 - [x] Share existing first-edit acquisition and deferred race handling with InsertEnter; retain one acquisition baseline; InsertLeave reuses owned baseline release. No watcher/timer (ARCH-DRY).
 - [x] Verify counted hash work at 4/8 mode pairs, focused/native tests, architecture guards and atlas; queue recorded suite and request the live check from the hub.
+
+- [ ] BR-1: one mode-departure handler for ModeChanged/InsertLeave, shared automatic-release eligibility including move finalization, native red/green matrix, renewed verification and suite.
 
 Landing gates: recorded suite pass, close review, hub's live acceptance, merge and report. Review may overlap a queued suite.
 
@@ -128,3 +133,22 @@ suite is started on that pushed head. No pass is claimed until its record
 completes. Requested live staging from the hub; the hub has asked the operator
 whether to stage or land on tests, and explicitly holds staging meanwhile
 (Couch 15033a2b-b627-4fa4-a894-6d2b851b53df). No :0 change was made.
+
+### 2026-10-21 — BR-1: actual mode lifecycle and all automatic releases
+
+Close round 1 returned REWORK: InsertLeave is skipped on Ctrl-C, stranding the
+insert flag and preventing unchanged exit/full undo. The hub approved the
+correction (Couch 295b743f-027e-4122-8fbd-a00deed06b04): one handler observes
+ModeChanged and InsertLeave, ignores insert-family destinations and defers
+owned-baseline reconciliation as before. Early entry and late attach use the
+same lifecycle. The automatic-release policy must also guard move finalization,
+which has its own baseline equality decision; no journal format change.
+
+Native regression matrix covers parent/side × auto-save off/on × early/late
+attachment × unchanged Ctrl-C / changed Ctrl-C then full undo. A native move
+sequence asserts live unchanged intent stays held through finalization and
+releases on actual exit. This generalizes BR-1's family
+insert-intent-must-follow-mode (ARCH-PURPOSE). Original suite
+lease-4273173816 was cancelled through sdlc local-check cancel by that exact
+owned run ID; no unrelated runner was touched and the corrected head requires
+fresh recorded verification. Staging remains held pending the operator.

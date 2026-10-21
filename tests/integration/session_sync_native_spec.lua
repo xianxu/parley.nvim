@@ -235,6 +235,73 @@ describe("session-sync native edits", function()
         assert.equals("first bullet", vim.fn.readfile(file)[8])
     end)
 
+    for _, side in ipairs({false, true}) do
+        for _, autosave in ipairs({false, true}) do
+            for _, late in ipairs({false, true}) do
+                for _, changed in ipairs({false, true}) do
+                    it(("Ctrl-C releases %s %s late=%s autosave=%s (#404 BR-1)"):format(
+                        side and "side doc" or "parent", changed and "after full undo" or "unchanged",
+                        tostring(late), tostring(autosave)), function()
+                        if side then
+                            local original = file
+                            file = root .. "/session.side/note.md"
+                            vim.fn.mkdir(root .. "/session.side", "p")
+                            local lines = vim.fn.readfile(original)
+                            lines[2] = "type: prose"
+                            vim.fn.writefile(lines, file)
+                        end
+                        open(autosave, false, true, true)
+                        if late then exec("require('parley.session_sync').detach(0)") end
+                        keys("i")
+                        wait_for("return vim.fn.mode() == 'i'")
+                        if late then exec("require('parley.session_sync').attach(0,{ID='doc-1',File=path,Owner='ops:0'})") end
+                        assert.is_true(exists())
+                        keys(changed and "X<C-c>" or "<C-c>")
+                        wait_for("return vim.fn.mode() == 'n'")
+                        if changed then
+                            assert.is_true(exists(), "changed exit lost protection")
+                            keys("u")
+                            wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1] == 'first bullet'")
+                        end
+                        exec("vim.schedule(function() _G.ctrl_c_settled=true end)")
+                        wait_for("return _G.ctrl_c_settled == true")
+                        assert.is_false(exists(), "actual mode departure stranded insert intent")
+                        assert.is_nil(vim.uv.fs_stat(sent_file))
+                    end)
+                end
+            end
+        end
+    end
+
+    it("automatic move finalization preserves live unchanged insert intent (#404)", function()
+        open(false, false, true, true)
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        assert.is_true(exists())
+        local destination = root .. '/renamed.md'
+        exec([[
+            local destination = ...
+            local ss=require('parley.session_sync')
+            local identity=ss.identity(0)
+            local token=assert(ss.begin_move(0))
+            assert(ss.install_move_lock(0,token,destination))
+            vim.api.nvim_buf_set_name(0,destination)
+            vim.cmd('silent write')
+            assert(vim.fn.mode()=='i', 'probe must preserve actual insert mode')
+            local ok,intent=ss.move_finalization_snapshot(0,token)
+            assert(ok,intent)
+            assert(intent.new_lock_after==intent.new_lock_before, 'finalization dropped live insert intent')
+            intent.stage='protection'
+            assert(ss.prepare_move_finalization(0,token,intent))
+            identity.File=destination
+            assert(ss.retire_move(0,token,identity))
+        ]],destination)
+        file=destination
+        assert.is_true(exists())
+        keys('<Esc>')
+        assert.is_true(vim.wait(arrival.MS,function() return not exists() end))
+    end)
+
     local function feedback(message, is_error)
         return exec([[
             local message, is_error = ...
