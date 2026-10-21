@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "c2b0ba90", done: "c3f2cd0b"}
 ---
 
 # session-sync: fence insert admission and reload after lock acquisition
