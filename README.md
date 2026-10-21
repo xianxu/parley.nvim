@@ -66,8 +66,10 @@ rename back first.
 An explicit `couch-owner:` overrides the default; a business `owner:` does not
 (`owner:` remains a fallback only for legacy `type: session-sync` files).
 [Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:
-the first edit takes your turn before auto-save, undo back to the pre-edit
-baseline releases it, and redo takes it again. Saves never move that baseline.
+entering insert mode takes your turn immediately, before typing; leaving
+unchanged releases it. Normal-mode edits also take the turn before auto-save.
+Undo back to the acquisition baseline releases it outside insert mode, and redo
+takes it again. Saves never move that baseline.
 Leaving a document with an unsubmitted turn gives three short red winbar pulses
 and a file-named `unsubmitted: Alt+Return to submit` reminder. Navigation stays
 free; after a same-window file switch the destination bar names the file left

@@ -113,6 +113,128 @@ describe("session-sync native edits", function()
         vim.fn.delete(root, "rf")
     end)
 
+    for _, kind in ipairs({"registered session", "registered side doc"}) do
+        it(kind .. " locks on actual insert entry and releases unchanged escape (#404)", function()
+            if kind == "registered side doc" then
+                local original = file
+                file = root .. "/session.side/discussion.md"
+                vim.fn.mkdir(root .. "/session.side", "p")
+                vim.fn.writefile(vim.fn.readfile(original), file)
+                local lines = vim.fn.readfile(file)
+                lines[2] = "type: prose"
+                vim.fn.writefile(lines, file)
+            end
+            open(true, false, true, true)
+            keys("i")
+            wait_for("return vim.fn.mode() == 'i'")
+            assert.is_true(exists(), "insert turn was not protected")
+            locked()
+            assert.is_false(exec("return vim.bo.modified"))
+            assert.is_true(exec("return vim.wo.winbar:find('yours',1,true) ~= nil"))
+            keys("<Esc>")
+            wait_for("return vim.fn.mode() == 'n'")
+            assert.is_true(vim.wait(arrival.MS, function() return not exists() end), "unchanged escape kept lock")
+            assert.is_nil(vim.uv.fs_stat(sent_file), "unchanged exit sent a submission")
+        end)
+    end
+
+    it("insert intent stays locked after typing back to the baseline until escape (#404)", function()
+        open(true, false, true, true)
+        keys("ix<C-h>")
+        wait_for("return vim.fn.mode() == 'i' and vim.api.nvim_buf_get_lines(0,7,8,false)[1] == 'first bullet'")
+        exec("vim.schedule(function() _G.insert_settled=true end)")
+        wait_for("return _G.insert_settled == true")
+        assert.is_true(exists(), "insert turn was not protected")
+        locked()
+        keys("<Esc>")
+        assert.is_true(vim.wait(arrival.MS, function() return not exists() end))
+    end)
+
+    it("auto-saved changes survive escape and insert re-entry until submit (#404)", function()
+        open(true, false, true, true)
+        keys("iX<Esc>")
+        wait_for("return vim.fn.mode() == 'n' and not vim.bo.modified")
+        assert.is_true(exists(), "insert turn was not protected")
+        locked()
+        keys("i<Esc>")
+        exec("vim.schedule(function() _G.insert_settled=true end)")
+        wait_for("return _G.insert_settled == true")
+        assert.is_true(exists(), "insert turn was not protected")
+        locked()
+        exec("require('parley.session_sync').submit(0)")
+        assert.is_true(vim.wait(arrival.MS, function() return not exists() end))
+        notified("submitted")
+    end)
+
+    it("late registration during insert takes the turn before any keystroke (#404)", function()
+        open(false, false, true, true)
+        exec("require('parley.session_sync').detach(0)")
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        assert.is_false(exists())
+        exec("require('parley.session_sync').attach(0,{ID='doc-1',File=path,Owner='ops:0'})")
+        assert.is_true(exists(), "insert turn was not protected")
+        locked()
+        keys("<Esc>")
+        assert.is_true(vim.wait(arrival.MS, function() return not exists() end))
+    end)
+
+    for _, replacement in ipairs({false, true}) do
+        it("unchanged escape preserves " .. (replacement and "replacement" or "pre-existing") .. " lock (#404)", function()
+            local foreign = {"holder: operator", "time: 2000-01-01T00:00:00Z", "foreign: true"}
+            if not replacement then vim.fn.writefile(foreign, file .. '.lock') end
+            open(false, false, true, true)
+            keys("i")
+            wait_for("return vim.fn.mode() == 'i'")
+            if replacement then vim.fn.writefile(foreign, file .. '.lock') end
+            keys("<Esc>")
+            wait_for("return vim.fn.mode() == 'n'")
+            assert.same(foreign, vim.fn.readfile(file .. '.lock'))
+        end)
+    end
+
+    it("insert entry reconciles a write racing the loaded buffer without blocking (#404)", function()
+        open(false, false, true, true)
+        local foreign = vim.fn.readfile(file)
+        foreign[8] = "foreign before insert"
+        vim.fn.writefile(foreign, file)
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        assert.is_true(exists(), "insert entry did not protect the loaded buffer")
+        notified("session-sync violation")
+        assert.equals("foreign before insert", vim.fn.readfile(file .. '.clobbered')[8])
+        assert.equals("first bullet", exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        keys("<Esc>")
+    end)
+
+    it("plain unregistered Markdown never locks on insert (#404)", function()
+        local lines = vim.fn.readfile(file)
+        lines[2] = "type: prose"
+        vim.fn.writefile(lines, file)
+        open(false, false, true, false)
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        assert.is_false(exists())
+        keys("<Esc>")
+        wait_for("return vim.fn.mode() == 'n'")
+        assert.is_false(exists())
+    end)
+
+    it("escape reconciles a foreign write outside the input autocmd before release (#404)", function()
+        open(false, false, true, true)
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        locked()
+        local foreign = vim.fn.readfile(file)
+        foreign[8] = "foreign before escape"
+        vim.fn.writefile(foreign, file)
+        keys("<Esc>")
+        wait_for("return vim.fn.mode() == 'n'")
+        notified("session-sync violation")
+        assert.equals("foreign before escape", vim.fn.readfile(file .. '.clobbered')[8])
+        assert.equals("first bullet", vim.fn.readfile(file)[8])
+    end)
+
     local function feedback(message, is_error)
         return exec([[
             local message, is_error = ...

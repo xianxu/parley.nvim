@@ -40,13 +40,17 @@ attachment acquires against the observed pre-edit baseline, even after auto-save
 **The lock (#315: pessimistic for the human, optimistic for the agent).**
 The operator's lock is the only lock. The sidecar `<file>.lock` is absent
 (free: the agent may write) or `holder: operator` (the agent never writes the
-file). The operator's first edit writes it; `<M-CR>` deletes it; the next
-edit takes it again. Undoing back to the content before that first edit silently
-releases the turn without submitting or notifying the owner; redo away takes it
-again. This acquisition baseline is an in-memory content hash: explicit saves
+file). Insert entry writes it immediately and updates the band before typing
+(#404); unchanged insert exit releases it. Normal-mode edits also take the turn.
+`<M-CR>` saves and deletes it; the next insert entry or edit takes it again.
+Undoing back to the acquisition content silently releases the turn outside
+insert mode, without submitting or notifying the owner; redo away takes it again.
+Restoring the baseline while inserting retains protection until insert exit.
+Attachment completed during insert mode takes the same lock. No idle-release
+timer or new watcher is added; failed release retains the existing band/recovery. This acquisition baseline is an in-memory content hash: explicit saves
 and immediate auto-save never advance it. A save of changed text keeps the turn.
 A pre-existing lock after a restart has no known baseline and stays held until submit. A legacy `holder: agent` lock reads as no lock and is
-overwritten by the first edit. A failed send leaves the file free; `<M-CR>`
+overwritten by insert entry or an edit. A failed send leaves the file free; `<M-CR>`
 resends. The lock is read from disk, so a reopened buffer shows it too. While
 the buffer is loaded, parley watches the file once a second: during a free
 turn an agent write reloads the unmodified buffer silently (and so does a
@@ -57,7 +61,7 @@ text. `window_views` (capture before, restore after) owns that wrap, and
 parley's own whole-buffer rewrites use it too (#358): `file_refresh` after the
 chat write, edit and propose tools, and the review round's reload. The operator's turn
 never starts on an old copy unnoticed: an agent write that landed just before
-the first edit lost the race, and goes through the violation path below with
+insert entry or the first edit lost the race, and goes through the violation path below with
 the operator's text kept. Outside the operator's turn, submit refuses to
 overwrite a file rewritten under a modified buffer.
 
@@ -113,7 +117,7 @@ override them.
 
 | State | Winbar | Highlight (default link) |
 |---|---|---|
-| free | `free: editing takes your turn` (no lock, nothing owed) | `ParleySessionSyncFree` (StatusLine) |
+| free | `free: insert mode or an edit takes your turn` (no lock, nothing owed) | `ParleySessionSyncFree` (StatusLine) |
 | owed | `<owner> owes a response, N min` (N since the oldest owed event; no operator lock) | `ParleySessionSyncOwed` (DiffChange) |
 | operator | `your turn, Alt+Return to submit` | `ParleySessionSyncOperator` (dark red `#870000`, white bold) |
 | violated | `<owner> wrote under your lock: yours kept, theirs in .clobbered` (`changed as you started typing: …` for the race) | `ParleySessionSyncOperator` |

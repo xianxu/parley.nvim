@@ -46,7 +46,7 @@ end)
 
 describe("session_sync.view", function()
     it("maps each turn to its label and highlight", function()
-        assert.same({ state = "free", label = "free: editing takes your turn", hl = "ParleySessionSyncFree" },
+        assert.same({ state = "free", label = "free: insert mode or an edit takes your turn", hl = "ParleySessionSyncFree" },
             ss.view("free", false, "ops:0"))
         assert.same({ state = "operator", label = "your turn, Alt+Return to submit", hl = "ParleySessionSyncOperator" },
             ss.view("operator", false, "ops:0"))

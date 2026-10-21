@@ -5,8 +5,8 @@
 -- Pessimistic locking for the human, optimistic for the agent (#315): the
 -- operator's lock is the only lock. The sidecar `<file>.lock`:
 --   absent           free — the agent may write; a clean buffer follows its
---                    writes silently; the operator's first edit takes the
---                    turn (holder: operator)
+--                    writes silently; insert entry or a normal-mode edit takes
+--                    the turn (holder: operator)
 --   holder: operator the operator's turn — the agent never writes the file
 -- A legacy `holder: agent` lock reads as free. <M-CR> saves, deletes the lock
 -- and tells the owner via `couch --send-to`; the buffer stays editable.
@@ -18,7 +18,8 @@
 -- after `session_sync_ping_minutes` without a write and with its turn ended,
 -- the owner is pinged once per write generation (outside the operator lock).
 --
--- Lifecycles: submit or an undo to the acquisition baseline removes the lock; an operator lock left
+-- Lifecycles: submit, unchanged insert exit, or a normal-mode undo to the
+-- acquisition baseline removes the lock; an operator lock left
 -- idle turns stale and is shown in the reminder colour until submitted. The
 -- watch timer lives while the buffer is loaded (closed on unload and
 -- BufWipeout, restarted by BufWinEnter); the idle
@@ -42,8 +43,8 @@ local ns_group = "ParleySessionSync"
 -- Per-buffer state: { turn, stale, loaded (disk mtime last read/written),
 -- foreign (the disk mtime of the last write Neovim saw as someone else's),
 -- checking (inside disk_changed's :checktime), edit (latest pending clean-edit
--- reconciliation token), content (last observed buffer hash), baseline (hash
--- before our first edit, retained through saves), edits_attached (native edit callback installed),
+-- reconciliation token), inserting (current insert intent), content (last observed buffer hash), baseline (hash
+-- at acquisition, retained through saves), edits_attached (native edit callback installed),
 -- watch = timer|nil, idle = timer|nil, owed (epoch of the oldest owed event
 -- couch last reported, or nil), minutes (rendered owed minutes), violated /
 -- complained (this operator turn), unkept (the disk mtime of an agent copy
@@ -81,7 +82,7 @@ M.turn = function(lock_text)
 end
 
 local VIEWS = {
-	free = { hl = "ParleySessionSyncFree", label = "free: editing takes your turn" },
+	free = { hl = "ParleySessionSyncFree", label = "free: insert mode or an edit takes your turn" },
 	operator = { hl = "ParleySessionSyncOperator", label = "your turn, Alt+Return to submit" },
 	stale = { hl = "ParleySessionSyncStale", label = "unsent edits, Alt+Return to submit" },
 	violated = { hl = "ParleySessionSyncOperator", label = "%s %s" },
@@ -582,6 +583,41 @@ M.attach = function(buf, identity, observed)
         end
     end })
 
+    -- Both edit intent and actual edits use the same lock and deferred disk-race
+    -- reconciliation. checktime must run outside the native input autocmd.
+    local function take_turn(baseline)
+        if state[buf] ~= s or s.moving or read_turn(buf) ~= "free" then return end
+        local moved, epoch = mtime_moved(buf), s.epoch
+        if not write_lock(buf, "operator") then return end
+        s.baseline = baseline
+        refresh(buf)
+        vim.schedule(function()
+            if moved and state[buf] == s and not s.moving and s.epoch == epoch and vim.api.nvim_buf_is_loaded(buf)
+                and read_turn(buf) == "operator" and disk_changed(buf) then
+                violation(buf, true)
+            end
+        end)
+    end
+    local function insert_enter()
+        if state[buf] ~= s or s.moving then return end
+        s.inserting = true
+        -- A dirty buffer with no witnessed preimage must remain outstanding.
+        take_turn(not vim.bo[buf].modified and content_hash(buf) or s.baseline)
+        restart_idle(buf)
+    end
+    vim.api.nvim_create_autocmd("InsertEnter", {group=group, buffer=buf, callback=insert_enter})
+    vim.api.nvim_create_autocmd("InsertLeave", {group=group, buffer=buf, callback=function()
+        s.inserting = nil
+        local epoch = s.epoch
+        -- Release may classify a foreign disk write with checktime. Like edit
+        -- reconciliation, it must run after the input autocmd/auto-save settles.
+        vim.schedule(function()
+            if state[buf] == s and not s.moving and s.epoch == epoch and vim.api.nvim_buf_is_loaded(buf) then
+                M.release_if_baseline(buf)
+            end
+        end)
+    end})
+
 	-- Acquire in the edit notification, before TextChanged/InsertLeave auto-save
 	-- callbacks can clear 'modified' (#324). This buffer was identified at
 	-- attach: an edit to its YAML must not remove its protection.
@@ -601,19 +637,7 @@ M.attach = function(buf, identity, observed)
                     refresh(buf) -- synchronous: an earlier TextChanged auto-save must see it cleared
                 end
                 local epoch = s.epoch
-				if vim.bo[buf].modified and read_turn(buf) == "free" then
-					local moved = mtime_moved(buf)
-					if write_lock(buf, "operator") then
-						s.baseline = previous
-						refresh(buf)
-						vim.schedule(function()
-							if moved and state[buf] == s and not s.moving and s.epoch == epoch and vim.api.nvim_buf_is_loaded(buf)
-								and read_turn(buf) == "operator" and disk_changed(buf) then
-								violation(buf, true)
-							end
-						end)
-					end
-				end
+				if vim.bo[buf].modified then take_turn(previous) end
 				restart_idle(buf)
 				-- Reconcile only the latest edit, after native undo and auto-save
 				-- settle. Saves never advance the acquisition baseline (#330).
@@ -713,6 +737,7 @@ M.attach = function(buf, identity, observed)
     restart_idle(buf)
     require("parley.edit_round").refresh(buf)
     if observed then M.acquire_observed(buf, observed) end
+    if vim.api.nvim_get_current_buf() == buf and vim.fn.mode():sub(1, 1) == "i" then insert_enter() end
 end
 
 -- Restore only the values this attachment still owns; never release a turn.
@@ -810,7 +835,7 @@ end
 M.release_if_baseline = function(buf)
     buf = buffer_id(buf)
     local s = state[buf]
-    if not s or s.moving or not s.baseline or content_hash(buf) ~= s.baseline then return false end
+    if not s or s.moving or s.inserting or not s.baseline or content_hash(buf) ~= s.baseline then return false end
     if not s.owned_lock or lock_bytes(M.lock_path(buf)) ~= s.owned_lock then return false end
     if disk_changed(buf) then
         violation(buf)

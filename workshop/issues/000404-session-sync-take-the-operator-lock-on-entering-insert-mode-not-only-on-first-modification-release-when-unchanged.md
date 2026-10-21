@@ -88,3 +88,33 @@ acquisition baseline on mode re-entry. Late attachment in actual insert mode
 gets the same protection. Each mode pair adds a constant number of existing
 O(B) content hashes for B buffer bytes; no scan of other buffers, subprocess,
 timer or durable format. Count full-buffer reads at 4/8 pairs.
+
+### 2026-10-21 — red tests and input ordering
+
+Before implementation, native tests reproduced five failures (registered
+parent/side entry, insert-baseline restoration, late attach, entry disk race);
+counted mode-pair tests reproduced two missing-lock failures. Existing non-insert
+edit tests passed. Initial shared acquisition passed 83 native / 71 buffer cases.
+
+An added escape/disk-race test then reproduced a deterministic stall: direct
+InsertLeave release entered checktime within the input autocmd. The harness
+reported idle 50000 ms after nine completed cases. Release now uses the same
+deferred reconciliation ordering as edits: clear insert intent immediately,
+schedule one guarded baseline check after auto-save/autocmd completion. Rapid
+re-entry is protected by the same insert-state guard; detach/move by the
+existing attachment/epoch checks. No timer, watcher or retry loop. This is
+required by the already planned foreign-write safety contract, not a new scope.
+
+After the 08:44 Couch restart, the design commit and tests survived, both red
+runs were complete, and queue/landing status contained no run of this item.
+No local-check/merge runner or PR existed; nothing was restarted.
+
+### 2026-10-21 — implementation verified on preferred runtime
+
+All 85 native cases pass after deferring exit reconciliation, including the
+new escaped foreign-write case that stalled without deferral. All 71 buffer
+cases pass, including counted 4/8 mode pairs (at most four full-buffer reads
+per pair). Lint is clean across 818 files and diff-check passes. Native tests
+on installed Neovim 0.11.7 and architecture/docs guards follow before the
+recorded suite. The README/atlas describe immediate entry and unchanged exit,
+continued normal-mode protection, preserved auto-save baseline and no timer.
