@@ -66,8 +66,11 @@ rename back first.
 An explicit `couch-owner:` overrides the default; a business `owner:` does not
 (`owner:` remains a fallback only for legacy `type: session-sync` files).
 [Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:
-entering insert mode confirms your turn with Couch before typing, then checks
+once registration is known, entering insert mode confirms your turn with Couch
+before typing, then checks
 for and silently reloads a newer clean copy. Acquisition waits at most 500 ms.
+An uncached background lookup keeps editing available until identity is known;
+attachment reconciles edits made during that interval.
 A namespace/store failure or timeout allows editing with `not locked: Couch
 unreachable; edits may conflict`; conflicting versions are kept through the
 existing clobber-copy path. A held-lock refusal or invalid acknowledgment blocks

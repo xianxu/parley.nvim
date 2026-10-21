@@ -156,6 +156,28 @@ runtimes, superseding another duplicated mapped rerun.
 Producer canonical-path correction confirmed via Couch ddd81167; its replacement
 suite and close are running. Consumer canonical-only validation is unchanged.
 
+### 2026-10-21 — recorded check queued; staging dependencies
+
+PR #329 opened on 661a70b6cc7f56c2529d25c362eebc61e3743cdf. Recorded suite
+lease-3037014451 is queued on that exact head (attempt
+9a52095c6af5097ec263b663e518ebee); do not duplicate or restart it. The hub approved
+a brief disposable stage only after green suite and deployment: pair#777 lands,
+pair#752 lands, hub rebuilds pair:0 on main, then stage Parley. No :0 changes
+have occurred. Hub will tell the operator to submit/release legacy held turns
+before restarting onto the new protocol. Isolated real conformance can run on
+#777's merge pin before that deployment.
+
+### 2026-10-21 — final preferred mapping green
+
+The settled preferred-runtime session-sync mapping passes all 29 files, 743
+cases, zero failures/errors (408-mapped-final.log). This includes the new
+126-case native file, corrected registry-backed reminder fixture, token fake
+and existing registered move/lifetime/recovery coverage. The corresponding
+0.11.7 mapped run is active (408-mapped-final-011.log). Recorded suite remains
+queued under lease-3037014451 on code head 661a70b6; no duplicate runner, code
+change or stage. Documentation after that code head records the hub-approved
+identity/discovery boundary and #410 follow-up only.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
@@ -186,3 +208,14 @@ Hub a44e4450-a411-4a17-8c39-7e730dae5715 confirmed error Codes/exits, recoverabl
 ID/turn fields in exact LockText and release acknowledgment shape. Recorded
 these in the durable plan Revision. Proceed against the agreed contract;
 pair#777 lands first, coordinated through the hub.
+
+### 2026-10-21 — explicit discovery boundary approved; #410 follow-up
+
+TL a15354ef approved the confirmed-identity boundary and a follow-up if composing
+the pending lookup into the same 500 ms budget is not small. #410 is filed
+unclaimed, depending on #408. S1 adoption itself calls late attachment and
+synchronous acquire, so a plain wait could restart the deadline inside its
+callback. #408 leaves unknown-period edits available and reconciled on
+attachment; its first-edit exclusion/freshness guarantee starts when identity
+is known, including cached identity. README and atlas explicitly state that
+boundary. No new blocking registration lookup is introduced.

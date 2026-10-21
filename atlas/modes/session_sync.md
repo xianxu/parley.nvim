@@ -7,6 +7,11 @@ no `type`, owner or instruction frontmatter is added or changed. Opening a
 registered file restores that identity through a bounded registry lookup. A
 positive null lookup proves a file plain; lookup failure leaves membership
 unknown. Plain files take no session-sync lock or watcher before admission.
+Insert admission below begins once that registration identity is known (from
+cache or a completed lookup). While an uncached lookup is still pending, S1
+keeps editing available and records outstanding edits for reconciliation on
+attachment. It does not block every Markdown insert on discovery. Sharing the
+500 ms budget with an already-pending lookup is tracked separately in #410.
 
 The default owner is the agent in this editor's own Couch pane, resolved from
 `COUCH_THREAD_SCOPE` / `COUCH_THREAD_TAG`. An explicit `couch-owner:` is an owner

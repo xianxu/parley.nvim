@@ -6,7 +6,7 @@ collaboration-mode: discussion
 
 > **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy). Execute this tightly coupled native-input change in the main session using superpowers-executing-plans; SDLC owns the fresh review at close.
 
-**Goal:** With Couch available, no first insert edit reaches an unconfirmed turn or stale clean snapshot; with Couch unreachable, keep editing available with explicit conflict risk.
+**Goal:** Once registration identity is known, with Couch available, no first insert edit reaches an unconfirmed turn or stale clean snapshot; with Couch unreachable, keep editing available with explicit conflict risk.
 
 **Architecture:** Couch's existing registry transaction serializes acquire with registered writer commits (pair#777). Parley's InsertEnter waits for that single acquire acknowledgment, then unconditionally checks freshness and completes any required native clean reread before admitting edits. Existing session-sync ownership/baseline/submit/recovery remains the lifetime owner; no second watcher, two-phase protocol or journal.
 
@@ -205,3 +205,15 @@ both preferred Neovim and installed 0.11.7), a superset of repeating both mapped
 sweeps. The native unreadable-protection red/green closes a missing-witness
 equality hole in the already-approved release policy: a nil witness never
 authorizes removal. No state, scope or recovery-policy change.
+
+### 2026-10-21 — confirmed-identity boundary; pending discovery in #410
+
+TL a15354ef approved preserving S1's editable unknown-identity period, with a
+pending-lookup wait only if small. Investigation shows adoption calls attach,
+which itself acquires when already inserting: a wait-only wrapper would nest
+a new full acquire deadline after spending its lookup budget. Sharing one
+deadline across that lifecycle is filed unclaimed as #410, depending on #408,
+under the TL's explicit follow-up option. #408 starts its acquire/freshness
+guarantee when identity is known, including late attachment; it introduces no
+blocking registration lookup for every Markdown InsertEnter. README and atlas
+state this boundary. Unknown-period edits retain existing reconciliation.
