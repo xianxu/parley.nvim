@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "ba2d58a3", done: "957e14cc"}
 ---
 
 # Alt+O: open links in tight bullet lists, and jump to #anchor headings
