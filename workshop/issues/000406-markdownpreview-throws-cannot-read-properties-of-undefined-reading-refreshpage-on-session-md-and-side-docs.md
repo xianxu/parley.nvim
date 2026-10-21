@@ -60,6 +60,7 @@ hub. Review may overlap a queued suite under the worker contract.
 ## Log
 
 ### 2026-10-20
+- 2026-10-20: closed — Parley-free occupied-port test reproduced EADDRINUSE then the exact refreshPage TypeError. Startup port regression failed before the fix, then all 21 bootstrap cases passed; actual installed MarkdownPreview on 18999 delivered updated parent and side-doc content through real Socket.IO after external writes, checktime and CursorMoved, with no TypeError. Architecture/docs guards pass; lint clean across 818 files. Configuration-only scope approved by hub; operator config stays theirs. Recorded suite bfc57d632fef2014e446eb6b073fe605 queued and remains required before landing; review overlaps per worker contract. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 ### 2026-10-20 — initiating failure located
 
