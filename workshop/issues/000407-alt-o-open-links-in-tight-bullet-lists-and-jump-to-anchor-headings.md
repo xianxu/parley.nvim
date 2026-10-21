@@ -44,9 +44,9 @@ Operator report (ops session file, 10-21 09:20): Alt+O (open the link under the 
 
 ## Plan
 
-- [ ] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
-- [ ] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
-- [ ] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
+- [x] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
+- [x] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
+- [x] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
 - [ ] Run mapped tests and recorded suite, update README/atlas, close review; coordinate live check with hub before normal landing.
 
 Actions: follow a link; retry/correct a missing heading. Found anchor: show destination heading. Unknown anchor: show file top plus short notice; correct the fragment and retry. Missing file: retain existing failure notice and source. No file bytes or durable navigation state are added; existing history owns navigation lifetime. Scans run only on Alt+O, linear in source lines plus destination heading bytes, not per edit. Reuse the existing occurrence scanner rather than parsing links twice; no new parser or background task.
@@ -56,3 +56,7 @@ Actions: follow a link; retry/correct a missing heading. Found anchor: show dest
 ### 2026-10-21
 
 - Root-cause inspection: ordinary Markdown resolution requires a URL ending in .md, so a fragment bypasses that opener and reaches gf without a heading jump. Navigation owns numbered items but unordered items fall back to a paragraph spanning adjacent list items. Existing issue/chat slug helpers have different punctuation/stopword semantics; use a heading-specific pure lookup rather than changing their contracts. No persisted format changes or external service dependencies.
+
+- Implementation: navigation-only unordered item stack chooses the enclosing item and bounds tight siblings; editing ranges and existing numbered tests remain unchanged. File resolution now returns path plus optional fragment. Pure heading lookup skips fenced examples, drops ASCII punctuation while keeping hyphens/underscores, supports percent-encoded fragments and duplicate suffixes. The editor verifies destination arrival before moving its cursor; missing headings go to top with a warning. Same-file item jumps skip source-cursor restoration.
+- Red evidence: /tmp/parley407-red2.log and /tmp/parley407-unit-red.log expose tight sibling candidate merging and missing anchor lookup. The literal direct-link label itself already opened; the reproduced list gap is navigation from item prose/continuations. Native fixture corrections: record offered picker rather than entering the blocking built-in picker; compare RPC nil as a boolean; correct Lua long-string index syntax. /tmp/parley407-samefile-red2.log fails Normal and Insert cases at row1 vs expected4 before the restoration fix. An earlier condition-only same-file fixture stalled; command-completion instrumentation now gives the immediate cursor assertion instead.
+- GREEN: make -k test-spec SPEC=context/file_references passed, /tmp/parley407-final-targeted.log (native mapping26/26, navigation range78/78, heading6/6 plus existing mapped tests). make -k lint passed across818 files,0 warnings/errors (/tmp/parley407-lint.log); git diff --check clean. README, existing atlas map and traceability updated. Required recorded suite and close remain pending; no live-editor acceptance claimed.

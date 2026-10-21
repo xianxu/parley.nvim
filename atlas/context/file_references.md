@@ -59,7 +59,13 @@ source alone; edited/deleted sources, a different active buffer/window, or a
 newer invocation invalidate retained choices and delayed resolver results.
 With no occurrences, navigation falls back to [smart gf](artifact_refs.md).
 A recognized but missing target reports its own error and does not fall through.
-URL and fragment destination handling follows the existing opening policy.
+Unordered bullet items, including tight siblings and nested continuations,
+form their own navigation range. This does not change editing textobjects.
+Local `.md#anchor` links resolve the file first, then jump to its GitHub-style
+ATX heading slug (lowercase, spaces to hyphens, punctuation dropped). Repeated
+headings use numeric suffixes; fenced examples do not define anchors. Missing
+anchors open at the top with a short notice. Plain file links retain their
+existing cursor behavior; URL destinations keep their existing fallback policy.
 
 Relative Markdown `.md` links resolve from the source buffer's directory,
 independent of shell cwd. For `@@` links, relative or bare names are resolved
@@ -90,6 +96,7 @@ literals. Operator-configured paths have a separate audited allowlist.
 - `lua/parley/init.lua` — editor opening chain, picker origin guard and remote-context cache.
 - `lua/parley/reference_candidates.lua` — shared occurrence scanners and pure picker completion.
 - `lua/parley/entity_range.lua` — navigation ranges sharing existing structural boundaries.
+- `lua/parley/markdown_heading.lua` — pure heading anchor lookup.
 - `lua/parley/artifact_ref.lua` — selected artifact resolution with optional final-effect validation.
 - `lua/parley/chat_respond.lua` — request inclusion.
 - `tests/unit/build_messages_spec.lua`, `tests/unit/remote_references_spec.lua` — context assembly and caching.

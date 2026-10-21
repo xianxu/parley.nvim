@@ -411,6 +411,30 @@ function M.navigation_range(parsed, lines, row, opts)
 	local lo = context.bounds and context.bounds.first or context.floor
 	local hi = context.bounds and context.bounds.last or #lines
 	local lexical = require("parley.document.lexical")
+    -- Keep a stack so a child owns its continuation without losing its parent.
+    local bullets = {}
+    for i = lo, hi + 1 do
+        local line = lines[i] or ""
+        local indent = #(line:match("^%s*") or "")
+        local outside = not context.in_code[i]
+        local bullet = outside and line:match("^%s*[-+*]%s+")
+        local marker = bullet or (outside and line:match("^%s*%d+[.)]%s+"))
+        local kind = outside and context.transcript and lexical.classify(line, context.patterns).kind
+        local wall = i > hi or heading_level_at(lines, i, context.in_code)
+            or kind == "user" or kind == "assistant"
+        while #bullets > 0 do
+            local top = bullets[#bullets]
+            if not wall and not (outside and indent <= top.indent and
+                (marker or (not is_blank(line) and is_blank(lines[i - 1])))) then break end
+            table.remove(bullets)
+            top.last, top.indent = i - 1, nil
+            trim_trailing_blanks(top, lines)
+            if row >= top.first and row <= top.last then return top, context.in_code end
+        end
+        if bullet and not wall then
+            bullets[#bullets + 1] = {kind = "bullet", first = i, indent = indent}
+        end
+    end
 	local item
 	for i = lo, hi + 1 do
 		local outside = not context.in_code[i]

@@ -212,8 +212,10 @@ All sorts of AI coding agents were used to create Parley.
 
 ## Follow links from a question
 
-Press **Alt+o** in a Markdown heading or anywhere in a numbered multi-line
-question to open its sole reference, including an answer link on the last line.
+Press **Alt+o** in a Markdown heading, numbered question or bullet item to open
+its sole reference, including a link on a continuation line. Tight and nested
+bullet lists keep each item’s links separate. Local `file.md#heading` links jump
+to the matching heading; an unknown anchor opens the file at the top with a notice.
 Several references show a picker; cancel leaves the source alone. A reference
 directly under the cursor takes priority. With no reference in the entity,
 Parley uses its existing artifact resolver and Vim file navigation.

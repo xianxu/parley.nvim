@@ -811,3 +811,17 @@ describe("entity_range invariants", function()
 		end
 	end)
 end)
+
+
+describe("unordered item navigation (#407)", function()
+    it("separates tight siblings, nested children and loose continuations", function()
+        local lines = {"- first [one](one.md)", "- parent", "  - child", "    [two](two.md)",
+            "  - sibling [three](three.md)", "", "- last", "", "  [four](four.md)"}
+        for _, row in ipairs({3, 4}) do
+            assert.same({kind = "bullet", first = 3, last = 4}, entity_range.navigation_range(nil, lines, row))
+        end
+        assert.same({kind = "bullet", first = 1, last = 1}, entity_range.navigation_range(nil, lines, 1))
+        assert.same({kind = "bullet", first = 7, last = 9}, entity_range.navigation_range(nil, lines, 9))
+        assert.same({kind = "paragraph", first = 1, last = 6}, entity_range.range(nil, lines, 1))
+    end)
+end)

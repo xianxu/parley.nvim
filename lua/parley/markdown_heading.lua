@@ -22,4 +22,23 @@ function M.level(line)
 	return #hashes
 end
 
+-- Link anchors use GitHub-style ATX slugs, independently of outline depth.
+function M.anchor_row(lines, fragment)
+    fragment = fragment:gsub("%%(%x%x)", function(hex) return string.char(tonumber(hex, 16)) end)
+    local code = require("parley.document.lexical").code_block_memo(lines, {}, true, false)
+    local used, counts = {}, {}
+    for row, line in ipairs(lines) do
+        local hashes, text = line:match("^ ? ? ?(#+)%s+(.+)$")
+        if hashes and #hashes <= 6 and not code[row] then
+            text = text:gsub("%s+#+%s*$", ""):lower()
+            local base = text:gsub("%p", function(c) return (c == "-" or c == "_") and c or "" end)
+                :gsub("%s", "-")
+            local slug, count = base, counts[base] or 0
+            while used[slug] do count = count + 1; slug = base .. "-" .. count end
+            counts[base], used[slug] = count, true
+            if slug == fragment then return row end
+        end
+    end
+end
+
 return M

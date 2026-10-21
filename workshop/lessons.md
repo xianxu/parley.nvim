@@ -899,3 +899,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #398: Importing a generated CI workflow can still introduce authored consumer configuration. Document its ownership, update and failure recovery in repository-owned README and indexed atlas guidance; an ignored inherited workflow page does not satisfy that surface.
 
 - #398 landing: shipped atlas prose must not link relatively into ignored weave overlays. Use a pinned upstream link for inherited contracts and run documentation_spec after adding atlas links; warm-checkout existence hides cold-checkout failures.
+
+- #407: Navigation must separate a destination path from its fragment before file-type checks, and must not restore a source cursor over a successful same-file anchor jump. Test real mapping completion before asserting cursor state; waiting only for the desired cursor can hide an ordering defect behind a stalled fixture.

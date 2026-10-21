@@ -609,6 +609,7 @@ atlas:
       - tests/integration/entity_navigation_native_spec.lua
       - tests/integration/entity_resolve_spec.lua
       - tests/unit/reference_candidates_spec.lua
+      - tests/unit/markdown_heading_spec.lua
       - tests/unit/entity_range_spec.lua
       - tests/unit/document_lexical_spec.lua
       - tests/unit/artifact_ref_spec.lua

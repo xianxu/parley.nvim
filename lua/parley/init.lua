@@ -4920,11 +4920,18 @@ local function try_open_markdown_link(line, cursor_col, buf, open)
     local link = issues_mod.parse_md_link_at_cursor(line, cursor_col + 1)
     if not link or link.url:match("^%a[%w+%.%-]*:") or link.url:sub(1, 2) == "//" then return nil end
     local base = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
-    local target = issues_mod.resolve_link_target(link, base)
+    local target, fragment = issues_mod.resolve_link_target(link, base)
     if not target then return nil end
     target = vim.fn.simplify(target)
     if vim.fn.filereadable(target) == 1 then
         open(target)
+        if fragment and vim.fn.resolve(vim.api.nvim_buf_get_name(0)) == vim.fn.resolve(target) then
+            local row = require("parley.markdown_heading").anchor_row(
+                vim.api.nvim_buf_get_lines(0, 0, -1, false), fragment)
+            vim.api.nvim_win_set_cursor(0, {row or 1, 0})
+            vim.cmd("normal! zvzz")
+            if not row then M.logger.warning("Heading not found: " .. fragment) end
+        end
         -- #378: a side doc opened from a registered parent takes its owner.
         local child = M.helpers.buffer_for(target, true)
         if child then require("parley.agentic_document").inherit(child, buf) end
@@ -5177,7 +5184,8 @@ M.cmd.OpenFileUnderCursor = function()
 		else
 			result = open_reference_under_cursor(buf, span, 0, is_chat, followed_open)
 		end
-		restore_cursor()
+        -- A same-file anchor intentionally moved this source window's cursor.
+        if result ~= "opened" or vim.api.nvim_get_current_buf() ~= buf then restore_cursor() end
 		if result == "none" then fallback(item) else restore_insert() end
 	end
 	if #items == 0 then fallback(); return end

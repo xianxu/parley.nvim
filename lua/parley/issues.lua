@@ -297,18 +297,18 @@ end
 
 -- Resolve a markdown link (as returned by parse_md_link_at_cursor) to an
 -- absolute path, given the directory of the file the link lives in. Returns
--- the resolved path string, or nil if the link's url is not a .md file.
+-- the resolved path and optional fragment, or nil if not a .md destination.
 -- Pure function (no vim deps); the caller is responsible for normalization
 -- (e.g. vim.fn.simplify) and existence checks (e.g. filereadable).
 M.resolve_link_target = function(link, cur_dir)
-    if not link or not link.url or not link.url:match("%.md$") then
-        return nil
-    end
-    local url = link.url
+    if not link or not link.url then return nil end
+    local url, fragment = link.url:match("^([^#]+)#(.*)$")
+    url = url or link.url
+    if not url:match("%.md$") then return nil end
     if url:sub(1, 1) == "/" then
-        return url
+        return url, fragment
     end
-    return (cur_dir or "") .. "/" .. url
+    return (cur_dir or "") .. "/" .. url, fragment
 end
 
 -- Extract the path from a src: URL. Returns the path string after "src:/" or nil.

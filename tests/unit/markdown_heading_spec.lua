@@ -24,3 +24,17 @@ describe("markdown_heading.level", function()
         assert.is_nil(heading.level(nil))
     end)
 end)
+
+
+describe("Markdown link heading anchors (#407)", function()
+    it("drops punctuation, keeps digits and skips fenced headings", function()
+        local lines = {"```md", "## Revised plan ready (10-21: 0040)", "```", "# Intro",
+            "## Revised plan ready (10-21: 0040)", "## Revised plan ready (10-21: 0040)"}
+        assert.equals(5, heading.anchor_row(lines, "revised-plan-ready-10-21-0040"))
+        assert.equals(6, heading.anchor_row(lines, "revised-plan-ready-10-21-0040-1"))
+        assert.is_nil(heading.anchor_row(lines, "absent"))
+    end)
+    it("accepts percent-encoded fragments and ATX closing hashes", function()
+        assert.equals(1, heading.anchor_row({"#### Keep_this: 42! ###"}, "keep_this%2D42"))
+    end)
+end)
