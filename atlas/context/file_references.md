@@ -63,8 +63,10 @@ Unordered bullet items, including tight siblings and nested continuations,
 form their own navigation range. This does not change editing textobjects.
 Local `.md#anchor` links resolve the file first, then jump to its GitHub-style
 ATX heading slug (lowercase, spaces to hyphens, other whitespace and punctuation
-removed). Heading emphasis, code spans, inline-link labels and HTML formatting
-contribute their text; literal underscores remain intact. Repeated
+removed). Markdown emphasis, code spans and inline-link labels contribute their text;
+literal underscores remain intact. Raw HTML headings/inline HTML and character
+reference decoding are outside this navigation feature; unmatched anchors use
+the file-top notice. Repeated
 headings use numeric suffixes; fenced examples do not define anchors. Shared
 fence containment requires matching delimiter characters and a sufficiently
 long, whitespace-only closer. Dedented fences end a bullet item; indented

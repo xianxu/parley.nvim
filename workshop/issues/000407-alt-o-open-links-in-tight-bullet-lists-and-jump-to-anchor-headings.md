@@ -35,6 +35,8 @@ Operator report (ops session file, 10-21 09:20): Alt+O (open the link under the 
    should open the file and jump to the heading whose slug is `revised-plan-ready-10-21-0040` (GitHub-style slug:
    lowercase, spaces to `-`, punctuation dropped). Today the jump fails.
 
+Current scope (hub Revision2026-10-21): anchors refer to Markdown ATX headings1–6 with inline Markdown formatting stripped. HTML headings/inline HTML and character-reference decoding are outside this feature. Unsupported or unmatched anchors retain the file-top notice; no HTML renderer/entity database is introduced.
+
 ## Done when
 
 - Headless tests: Alt+O opens links in tight and loose bullet lists, nested items and paragraphs; a link with
@@ -93,3 +95,7 @@ Hub approved all three families and existing shared-consumer verification. The i
 ### 2026-10-21 — Round 2 REWORK and rule-level replan
 
 BR-2 and BR-3 are addressed. BR-1 remains for quoted HTML attribute delimiters and character references; new BR-4 repeats the item-boundary family for outside headings1–6/empty/indented, walls and quotes. Durable plan now proposes one shared navigation block classifier with content indentation, and quote-aware HTML plus a complete finite character-reference decoder. No additional local patches proceed before hub approves the revised mechanism and bounded named-reference data artifact. Existing passing suite applies only to reviewed head2222dd74's executable ancestor053bf88b, not these pending corrections.
+
+### 2026-10-21 — Narrowed heading scope approved; shared block rule retained
+
+Hub delivery8887bf7d-ec9d-40df-8c27-89b898c13b51 rejects full HTML5 decoding and approves proceeding with Markdown ATX headings plus inline Markdown formatting only. Raw HTML headings/inline HTML and entity decoding are out of scope; document that limit and preserve unmatched-anchor fallback. The shared markdown_blocks/content-indentation repair remains approved. Durable plan retires the data-table proposal. This supersedes the pending decoder proposal above; no new artifact family is created.

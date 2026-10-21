@@ -215,7 +215,9 @@ All sorts of AI coding agents were used to create Parley.
 Press **Alt+o** in a Markdown heading, numbered question or bullet item to open
 its sole reference, including a link on a continuation line. Tight and nested
 bullet lists keep each item’s links separate. Local `file.md#heading` links jump
-to the matching heading; an unknown anchor opens the file at the top with a notice.
+to a matching Markdown ATX heading (levels1–6, inline Markdown formatting stripped).
+HTML headings and character-reference decoding are outside this feature. An
+unmatched anchor opens the file at the top with a notice.
 Several references show a picker; cancel leaves the source alone. A reference
 directly under the cursor takes priority. With no reference in the entity,
 Parley uses its existing artifact resolver and Vim file navigation.
