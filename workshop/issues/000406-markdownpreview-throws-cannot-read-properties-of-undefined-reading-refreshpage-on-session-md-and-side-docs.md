@@ -1,13 +1,13 @@
 ---
 id: 000406
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-20
 updated: 2026-10-20
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'cd70d74c34cc984bdf3e9bb124004998de1f6998' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '0eb4535f24bb268a39ac33fa6758860025a5357e' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-20T21:34:42-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "099d29a7", done: "1db194ec"}
+actual_hours: 0.13
 ---
 
 # MarkdownPreview throws 'Cannot read properties of undefined (reading refreshPage)' on session.md and side docs
