@@ -1,13 +1,21 @@
 ---
 id: 000408
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-21
 updated: 2026-10-21
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '3eb670eccfc8ea95e4c0f910a65acce3cebde491' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'ff2b59d3e0cdbf9eaa90fc0e5fb22e508f9f57ff' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-21T12:06:42-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # session-sync: fence insert admission and reload after lock acquisition
@@ -28,8 +36,26 @@ On InsertEnter for a registered session file or side doc, operator protection mu
 
 ## Plan
 
-- [ ]
+- [ ] Pin pair#777 acquire/ack ownership and failure contract through the hub; approve admission/failure design in [the durable plan](../plans/000408-insert-admission-freshness-plan.md).
+- [ ] Red/green native queued-input races, shared bounded acquisition and completed freshness before editing; retain existing ownership/exit/move safety and counted 4/8-turn bounds.
+- [ ] Producer conformance, both runtimes, guards/lint/recorded suite, docs, close review and landing.
+
 
 ## Log
 
 #404 landed as PR #327, merge c5089a7235b8d27a593a973be077649e7d0e56a9. Initial producer audit: pair cmd/internal/sessionsync/sync.go checks f.guard at write entry, later calls replaceShared, then checks the lock after the write only to emit a warning. The source explicitly states guard/write are not one step because Parley takes no shared flock. A second observation alone cannot prove atomic exclusion.
+
+### 2026-10-21 — producer dependency and native ordering probes
+
+Filed pair#777 unclaimed for the writer-side check-then-write gap. The hub
+confirmed it is dispatched to pair:2 after #768 and instructed #408 to target an
+acquire acknowledgment under the existing registry transaction; exact shape is
+to be agreed through the hub (Couch e87b8b2c-1724-4e9d-ae1a-004a8ce7fd2e).
+Planning only; do not start implementation on an assumed protocol.
+
+Disposable headless probes on both installed runtimes queued iX after an
+InsertEnter external write: checktime returned with old text, then native reload
+preceded X. A guarded native edit! reread completed inside the callback on both.
+These are feasibility observations, not the regression proof: plan requires
+first-edit ordering with stateful fake acquire, clean/dirty cases and native
+read-completion evidence. Probe files live only under the existing scratch root.
