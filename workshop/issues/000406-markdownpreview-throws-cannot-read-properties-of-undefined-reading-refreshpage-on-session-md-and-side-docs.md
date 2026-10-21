@@ -1,13 +1,23 @@
 ---
 id: 000406
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-20
 updated: 2026-10-20
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'db87faaf74a6182d7b77ddc600b12b4569922888' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '0eb4535f24bb268a39ac33fa6758860025a5357e' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-20T21:34:42-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "099d29a7", done: "1db194ec"}
+actual_hours: 0.13
 ---
 
 # MarkdownPreview throws 'Cannot read properties of undefined (reading refreshPage)' on session.md and side docs
@@ -23,22 +33,97 @@ session-sync writes by the TL), and they moved today from `teams/devinfra/tl-sta
 
 ## Spec
 
-- Reproduce: open `session.md` with MarkdownPreview running, write the file from outside (session-sync style), and
-  check whether the preview server's refresh hits a buffer or page it doesn't know (the error comes from the
-  markdown-preview server's `refreshPage` on an undefined client or page).
-- Find whether parley (or its session-sync reload path) triggers the preview refresh for a buffer whose preview page
-  isn't registered (for example after an external reload or the path change), and fix it so the preview keeps
-  updating, or at least never throws.
+The initial missing-page/reload hypothesis is superseded by the confirmed bind
+failure (Revision below). Pin the shipped starter's MarkdownPreview port to
+18999 (confirmed free on this machine), with a comment naming the Syncthing
+8384 collision. Document how to change it if occupied. The operator's separate
+Neovim configuration remains theirs; the hub coordinates that update. No fork,
+third-party plugin edits, or Parley/session-sync reload changes (ARCH-PURPOSE).
 
 ## Done when
 
-- A regression reproduces the TypeError before the fix and passes after; the operator's preview of session.md and a
-  side doc updates live after an external write.
+- A starter startup regression fails without the fixed-port setting and passes
+  after it; existing preview lazy/localhost settings stay intact.
+- Preserve the Parley-free TypeError reproduction and verify that the real
+  preview server on a free fixed port delivers external parent/side-doc edits.
+- Suite, close review and landing complete; operator config work stays with the hub.
 
 ## Plan
 
-- [ ]
+- [x] Trace the installed preview server and reproduce the reported failure with Parley absent.
+- [x] Resolve scope with the hub: configuration in the shipped starter, no fork.
+- [x] Add a red startup port regression; set the fixed port and troubleshooting note; verify real preview external rewrites and architecture/docs guards.
+- [x] Queue the recorded suite on the pushed head.
+
+Landing gates: recorded suite pass, close review, then merge and report to the
+hub. Review may overlap a queued suite under the worker contract.
 
 ## Log
 
 ### 2026-10-20
+- 2026-10-20: closed — Parley-free occupied-port test reproduced EADDRINUSE then the exact refreshPage TypeError. Startup port regression failed before the fix, then all 21 bootstrap cases passed; actual installed MarkdownPreview on 18999 delivered updated parent and side-doc content through real Socket.IO after external writes, checktime and CursorMoved, with no TypeError. Architecture/docs guards pass; lint clean across 818 files. Configuration-only scope approved by hub; operator config stays theirs. Recorded suite bfc57d632fef2014e446eb6b073fe605 queued and remains required before landing; review overlaps per worker contract. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+
+### 2026-10-20 — initiating failure located
+
+The operator's preview log at
+/Volumes/TestScratch/tmp/ops-slot0/mkdp-nvim.log starts at 14:12:48 with
+`listen EADDRINUSE: address already in use 127.0.0.1:8384` (PID 95851).
+The same process then reports openBrowser/refreshPage TypeErrors through
+the operator's report at 21:33. Installed MarkdownPreview's app/server.js
+chooses 8080 plus the last three timestamp digits when mkdp_port is empty.
+Only its successful listen callback initializes the application object;
+app/nvim.js catches the bind exception without ending the RPC process.
+Later cursor refreshes dereference an application that never initialized.
+The error is not an absent page: refreshPage already tolerates no clients.
+
+A disposable Neovim 0.11.7, loading only the installed MarkdownPreview
+plugin (no Parley), reproduced both EADDRINUSE and the exact refreshPage
+TypeError with a Python-owned occupied localhost port, an external rewrite,
+checktime and preview_refresh. Evidence/script:
+/Volumes/TestScratch/tmp/parley.nvim-slot1/parley-406-repro-yayoiu5j/.
+No operator files, installed plugin files or processes were changed.
+
+Asked the hub to revise scope to the preview dependency startup/port owner
+(ARCH-PURPOSE), rather than hide refresh errors in Parley's reload. Proposed
+kernel-assigned default port, bind-failure shutdown and startup-notification
+readiness coverage; delivery path and operator plugin update await decision.
+Restarting Neovim may pick a free port and restore service immediately, but
+is not the durable fix.
+
+## Revisions
+
+### 2026-10-20 — confirmed collision; configuration-only disposition
+
+The hub confirmed Syncthing owns 127.0.0.1:8384 and approved a configuration-only
+fix in packaging/starter-config/init.lua (Couch delivery
+6424c96b-68c3-4bd5-af4a-97691bfef023). editor_dependencies.lua is a pure payload
+registry, not configuration. Replace the initial Spec/Done-when's page-registration
+assumption with the confirmed cause and starter-config regression above. No
+startup state machine or dependency fork. A fixed port can still be occupied;
+explicitly document choosing a different free port and restarting Neovim.
+
+### 2026-10-20 — red/green and real dependency check
+
+The bootstrap regression failed before the config edit (expected 18999, got
+nil), with the other 20 cases passing. After adding the fixed port, all 21
+bootstrap cases pass. Existing lazy loading, localhost-only and auto-start-off
+assertions remain exercised. Architecture/documentation/arch-helper guards
+passed, lint reports zero warnings/errors across 818 files, and diff-check is
+clean. The fixed port was verified free by a real bind before testing.
+
+A disposable installed Neovim 0.11.7 loaded the actual pinned MarkdownPreview
+plugin/server with port 18999 and a browser callback that captured the URL
+instead of opening a window. A real HTTP Socket.IO polling client received
+initial contents and then updated contents for both session.md and
+session.side/discussion.md after external disk writes, native checktime and
+CursorMoved. No TypeError/EADDRINUSE appeared. The check used only scratch
+files, no live documents, provider credentials or operator config. Script and
+evidence live beside the reproduction (live.py / live.log).
+
+Review/landing are recorded as acceptance gates outside implementation checkboxes
+so they can overlap the recorded suite queue without claiming a pending pass.
+The operator's separate config remains with the hub as approved.
+
+Recorded suite bfc57d632fef2014e446eb6b073fe605 is queued on 6c28575b;
+PR #326 is open. The close review may overlap the queue, but the recorded
+suite must pass before landing.

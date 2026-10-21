@@ -351,8 +351,11 @@ for retry. This fallback does not establish bundled dependency parity.
 
 The Markdown filetype and `MarkdownPreview`, `MarkdownPreviewToggle`, and
 `MarkdownPreviewStop` commands load the plugin. Auto-start and network exposure
-are explicitly disabled; upstream owns preview process shutdown on Stop/editor
-exit. Bootstrap fixtures cover bundled local specs and standalone install errors.
+are explicitly disabled. The starter pins localhost port 18999 instead of the
+upstream timestamp range that collided with Syncthing on 8384 (#406); if it is
+occupied, choose another free mkdp_port in the profile and restart Neovim.
+Upstream owns preview process shutdown on Stop/editor exit. Bootstrap fixtures
+cover the port setting, bundled local specs and standalone install errors.
 The real bundle conformance runner opens the production starter with external
 networking denied, fetches Preview's loopback HTML and compares payload hashes
 before/after. That runtime assertion, rather than a download stub, is the offline

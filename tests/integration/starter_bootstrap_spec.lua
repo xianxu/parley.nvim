@@ -189,6 +189,11 @@ describe('starter bootstrap', function()
         assert.equals('dark', observed.appearance.mode)
     end)
 
+    it('pins the preview port instead of using the timestamp range that hit Syncthing (#406)', function()
+        local observed = startup_appearance()
+        assert.equals(18999, observed.preview_port)
+    end)
+
     it('refuses another app name before creating profile files', function()
         local result = run('nvim')
         assert.matches('NVIM_APPNAME=parley', result.stderr)
