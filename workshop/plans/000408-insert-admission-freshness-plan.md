@@ -18,7 +18,7 @@ collaboration-mode: discussion
 
 | Name | Lives in | Status |
 | --- | --- | --- |
-| Acquire acknowledgment | `lua/parley/couch.lua` | new |
+| `operator_result`, `operator_proof` — acknowledgment and ownership validation | `lua/parley/couch.lua` | new |
 
 A decoded result must prove the requested registration identity, canonical file and effective operator protection; missing/mismatched fields, nonzero exit and timeout do not admit input. Exact command/fields and ownership evidence are pinned through the hub with pair:2 before implementation, not invented by the consumer. Validation is pure and unit-tested with malformed/mismatched acknowledgments. There is one acknowledgment per newly admitted turn, not per character. Unknown fields remain tolerated; no persisted schema is introduced.
 
@@ -26,8 +26,8 @@ A decoded result must prove the requested registration identity, canonical file 
 
 | Name | Lives in | Status | Wraps |
 | --- | --- | --- | --- |
-| Couch process seam | `lua/parley/couch.lua` | modified | bounded synchronous acquire using the existing process owner/deadline |
-| Insert admission | `lua/parley/session_sync.lua` | modified | InsertEnter and late attachment, existing owned lock/baseline state |
+| `operator_lock` — Couch process seam | `lua/parley/couch.lua` | modified | bounded synchronous acquire using the existing process owner/deadline |
+| `attach` — insert admission and validated move restoration | `lua/parley/session_sync.lua` | modified | InsertEnter and late attachment, existing owned lock/baseline state |
 | Native freshness | `lua/parley/session_sync.lua` | modified | checktime, FileChangedShell/native reread and window-view restoration |
 | Stateful fake Couch | `tests/helpers/fake_couch.lua` | modified | delayed acquire, ack success/refusal/timeout, external write before ack |
 
@@ -77,7 +77,7 @@ For N new turns and B bytes per file: at most one bounded acquire child and one 
 
 Files: `tests/helpers/fake_couch.lua`, `tests/integration/session_sync_native_spec.lua`, `tests/integration/session_sync_spec.lua`, `tests/unit/couch_spec.lua`.
 
-- [ ] Obtain pair#777 merge/command/ack contract and record it below before implementation.
+- [x] Obtain pair#777 command/ack contract before implementation (confirmed in Revisions); record its merge pin at real conformance before landing.
 - [ ] Replace the old insert-entry clobber expectation where the buffer is clean. Fake acquire pauses, writes the external snapshot, then confirms. Queue `iX` together; assert first native edit sees the fresh text and exact lock proof before applying X, with no .clobbered/violation.
 - [ ] Parent/side × both runtimes; unchanged exit, saved/changed reentry, dirty entry, early/late attach, foreign/pre-existing protection; Escape and Ctrl-C.
 - [ ] Held refusal/malformed/mismatched ack: queued input cannot mutate and the notice says so. Unreachable/timeout: queued input applies after the bounded call, warning persists, concurrent disk write preserves both copies via the existing clobber effect, even after auto-save. Retry never guesses ownership; unrelated modifiable settings survive cleanup.
@@ -104,9 +104,9 @@ Files: `README.md`, `atlas/modes/session_sync.md`, this plan and issue Log.
 - [ ] Verify real producer conformance using disposable registered files after pair#777 lands; ask the hub before staging on live :0. No live store/document mutations without its authorization.
 - [ ] Push via sdlc pr, run the recorded suite, close through SDLC's one boundary review, resolve findings, land on SHIP and report the exact merge/PR to the hub.
 
-## Open pins before code
+## Protocol and implementation status
 
-- pair#777 acquire argv and acknowledgment fields/ownership/idempotence semantics, through the hub.
+- Acquire/release argv and acknowledgment identity/ownership/idempotence/error semantics are pinned by the hub in Revisions below. pair#777 must land before consumer conformance/landing.
 - TL approved refusal versus editable-unreachable split and a named 500 ms synchronous bound (Revision below). Producer failure taxonomy must support that distinction.
 - Confirm actual diff fits quick shell at change-code; if not, use this durable plan for the full flow and derive the estimate only after plan-quality.
 
@@ -170,3 +170,29 @@ Hub a44e4450-a411-4a17-8c39-7e730dae5715 confirmed all remaining pins:
 Implement against this contract now; pair#777 must land before #408. Exact
 release/acquire traces, fault classifications and native races are the tests;
 no speculative producer change is part of this consumer issue.
+
+### 2026-10-21 — complete acquisition/release enumeration
+
+Native red cases exposed two acquisition bypasses and one release bypass:
+normal-mode first edits and observed unknown-period edits created local legacy
+protection, then blocked their own later insert entry; registered submission
+could unlink a replacement legacy lock without ownership. All registered fresh
+turns now share the same acquisition function; token release uses the producer
+command. Unrelated registered legacy protection refuses; existing legacy
+journals retain only their exact previously owned witnesses.
+
+A separate native red case showed validated move restoration attempting to
+reacquire its already-owned turn during late attachment. Restore now passes an
+internal attachment hint only after existing journal/path/lock validation,
+retaining actual insert intent without an acquire request at OLD. It finalizes
+while keeping protection, then normal departure performs the sole owned
+release at NEW. No new journal fields or operator states.
+
+The temporary native test observer must retain on_reload; InsertCharPre now
+records confirmed acknowledgment and fresh text before the queued first
+character, in addition to on_lines witnessing the resulting edit. A named
+500 ms deadline is measured by the real hung-child seam test and native timeout
+case. Counted 4/8 native turns cap full reads at eight per turn and require one
+acquire/release pair. Lost-ack retry preserves exact bytes/time and baseline.
+An old submit receipt cannot hide admission failure; a dedicated red case
+checks warning priority before typing.

@@ -825,6 +825,7 @@ atlas:
       - scripts/check-couch-registry-conformance.py
       - scripts/couch-registry-probe.lua
       - tests/fixtures/fake_couch_registry.py
+      - tests/fixtures/fake_couch_operator.py
     tests:
       - tests/integration/lock_leave_reminder_spec.lua
       - tests/unit/session_sync_spec.lua
@@ -838,6 +839,7 @@ atlas:
       - tests/unit/helper_io_spec.lua
       - tests/integration/session_sync_spec.lua
       - tests/integration/session_sync_native_spec.lua
+      - tests/integration/fake_couch_operator_spec.lua
       - tests/integration/agentic_document_spec.lua
       - tests/integration/agentic_document_owned_move_spec.lua
       - tests/integration/agentic_document_lifetime_spec.lua

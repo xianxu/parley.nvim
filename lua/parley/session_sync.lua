@@ -43,7 +43,9 @@ local ns_group = "ParleySessionSync"
 -- Per-buffer state: { turn, stale, loaded (disk mtime last read/written),
 -- foreign (the disk mtime of the last write Neovim saw as someone else's),
 -- checking (inside disk_changed's :checktime), edit (latest pending clean-edit
--- reconciliation token), inserting (current insert intent), content (last observed buffer hash), baseline (hash
+-- reconciliation token), inserting (current insert intent), acquire_token (retained across lost replies),
+-- admission/message and gated_modifiable (bounded refusal/degraded view),
+-- unconfirmed_edit (preserve edits while unavailable), content (last observed buffer hash), baseline (hash
 -- at acquisition, retained through saves), edits_attached (native edit callback installed),
 -- watch = timer|nil, idle = timer|nil, owed (epoch of the oldest owed event
 -- couch last reported, or nil), minutes (rendered owed minutes), violated /
@@ -281,7 +283,12 @@ local function release_owned(buf, path, expected)
     if expected and (expected:find("\ndocument:", 1, true) or expected:find("\nturn:", 1, true)) then
         return false, "operator ownership evidence is invalid"
     end
-    return os.remove(path .. ".lock") -- legacy protection has no producer token
+    if s.identity.ID and expected ~= s.owned_lock then
+        return false, "registered operator protection has no confirmed ownership"
+    end
+    -- A legacy journal's exact owned witness remains recoverable without a
+    -- format migration; unrelated registered legacy protection never does.
+    return os.remove(path .. ".lock")
 end
 
 local send, query, list = couch.send, couch.query, couch.list
@@ -529,7 +536,7 @@ refresh = function(buf)
 	start_watch(buf)
 	local view = M.view(turn, s, owner_of(buf))
     view.unsent = s.baseline ~= nil and content_hash(buf) ~= s.baseline
-    view.feedback = s.feedback
+    view.feedback = not s.admission and s.feedback or nil
     render(buf, view)
 end
 
@@ -585,7 +592,7 @@ local function define_highlights()
 end
 
 --- Install the turn autocmds on a session-sync buffer and render its turn. Idempotent.
-M.attach = function(buf, identity, observed)
+M.attach = function(buf, identity, observed, restoring_move)
     buf = buffer_id(buf)
     if state[buf] then
         local current = state[buf].identity
@@ -625,48 +632,51 @@ M.attach = function(buf, identity, observed)
     local function acquire_registered(baseline, entering)
         if s.owned_lock and couch.operator_proof(s.owned_lock)
             and lock_bytes(M.lock_path(buf)) == s.owned_lock and not s.admission then return true end
-        do
-            if not s.acquire_token then
-                local random = assert(vim.uv.random(16))
+        local result
+        if not s.acquire_token then
+            local ok, random = pcall(vim.uv.random, 16)
+            if ok and type(random) == "string" and #random == 16 then
                 s.acquire_token = (random:gsub(".", function(byte) return ("%02x"):format(byte:byte()) end))
-            end
-            local result = couch.operator_lock("acquire", s.identity, s.acquire_token)
-            if result.kind == "confirmed" and lock_bytes(M.lock_path(buf)) ~= result.lock.LockText then
-                result = { kind = "refused", error = "operator protection changed after acknowledgment" }
-            end
-            s.admission, s.admission_message = nil, nil
-            if result.kind == "confirmed" then
-                restore_edit_gate(buf, s)
-                s.owned_lock = result.lock.LockText
-                s.baseline = s.baseline or baseline
-                if entering and not vim.bo[buf].modified and not s.unconfirmed_edit then
-                    s.admitting = true
-                    local checked, reason = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent checktime " .. buf) end)
-                    if checked and mtime_moved(buf) then checked, reason = pcall(reload, buf) end
-                    s.admitting = nil
-                    if checked then s.baseline = content_hash(buf); s.foreign = nil
-                    else result = { kind = "refused", error = "freshness check failed: " .. tostring(reason) } end
-                end
-                s.unconfirmed_edit = nil
-            end
-            if result.kind ~= "confirmed" then
-                s.admission = result.kind
-                if result.kind == "unavailable" then
-                    restore_edit_gate(buf, s)
-                    s.admission_message = "not locked: Couch unreachable; edits may conflict"
-                    s.baseline = s.baseline or baseline
-                    s.unconfirmed_edit = s.baseline == nil or s.content ~= s.baseline
-                else
-                    s.admission_message = "not locked: " .. result.error .. "; keys not applied; leave insert and retry"
-                    if s.gated_modifiable == nil then s.gated_modifiable = vim.bo[buf].modifiable end
-                    vim.bo[buf].modifiable = false
-                    notify(s.admission_message, vim.log.levels.ERROR)
-                end
-            end
-            refresh(buf)
-            return result.kind == "confirmed"
+            else result = { kind = "refused", error = "cannot create operator turn identity" } end
         end
+        result = result or couch.operator_lock("acquire", s.identity, s.acquire_token)
+        if result.kind == "confirmed" and lock_bytes(M.lock_path(buf)) ~= result.lock.LockText then
+            result = { kind = "refused", error = "operator protection changed after acknowledgment" }
+        end
+        s.admission, s.admission_message = nil, nil
+        if result.kind == "confirmed" then
+            restore_edit_gate(buf, s)
+            s.owned_lock = result.lock.LockText
+            s.baseline = s.baseline or baseline
+            if entering and not vim.bo[buf].modified and not s.unconfirmed_edit then
+                s.admitting = true
+                local checked, reason = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent checktime " .. buf) end)
+                if checked and mtime_moved(buf) then checked, reason = pcall(reload, buf) end
+                s.admitting = nil
+                if checked then s.baseline = content_hash(buf); s.foreign = nil
+                else result = { kind = "refused", error = "freshness check failed: " .. tostring(reason) } end
+            end
+            s.unconfirmed_edit = nil
+        end
+        if result.kind ~= "confirmed" then
+            s.admission = result.kind
+            if result.kind == "unavailable" then
+                restore_edit_gate(buf, s)
+                s.admission_message = "not locked: Couch unreachable; edits may conflict"
+                s.baseline = s.baseline or baseline
+                s.unconfirmed_edit = s.baseline == nil or s.content ~= s.baseline
+            else
+                s.admission_message = "not locked: " .. result.error .. "; keys not applied; leave insert and retry"
+                if s.gated_modifiable == nil then s.gated_modifiable = vim.bo[buf].modifiable end
+                vim.bo[buf].modifiable = false
+                notify(s.admission_message, vim.log.levels.ERROR)
+            end
+        end
+        refresh(buf)
+        return result.kind == "confirmed"
     end
+
+    s.acquire_turn = acquire_registered
 
     -- Dirty edit races reconcile outside input autocmds. Clean insert freshness
     -- uses the nested, narrowly permitted native reread above.
@@ -832,7 +842,9 @@ M.attach = function(buf, identity, observed)
     restart_idle(buf)
     require("parley.edit_round").refresh(buf)
     if observed then M.acquire_observed(buf, observed) end
-    if vim.api.nvim_get_current_buf() == buf and vim.fn.mode():match("^[iR]") then insert_enter() end
+    if vim.api.nvim_get_current_buf() == buf and vim.fn.mode():match("^[iR]") then
+        if restoring_move then s.inserting = true else insert_enter() end
+    end
 end
 
 -- Restore only the values this attachment still owns; never release a turn.
@@ -860,7 +872,11 @@ M.acquire_observed = function(buf, observed)
     local s = state[buf]
     if not s or s.moving or not observed or not observed.outstanding then return false end
     if observed.loaded then s.loaded = observed.loaded end
-    if read_turn(buf) == "free" and not write_lock(buf, "operator") then return false end
+    if read_turn(buf) == "free" then
+        if s.identity.ID then
+            if not s.acquire_turn(observed.baseline, false) then return false end
+        elseif not write_lock(buf, "operator") then return false end
+    end
     s.baseline = s.baseline or observed.baseline
     s.content = content_hash(buf)
     refresh(buf)
@@ -1129,7 +1145,9 @@ M.restore_move = function(buf, old_identity, new_path, protection, finalization)
         return nil, "another document operation owns this buffer"
     end
     if not s then
-        M.attach(buf, old_identity)
+        -- The journal proof above already owns this turn. Late attachment must
+        -- preserve insert intent without attempting a new acquisition at OLD.
+        M.attach(buf, old_identity, nil, true)
         s = state[buf]
         if not s then return nil, "document could not be attached" end
     end

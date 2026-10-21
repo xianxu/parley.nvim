@@ -28,6 +28,19 @@ class OperatorFakeTest(unittest.TestCase):
         self.assertTrue(result.stdout.strip(), result.stderr)
         return result.returncode, json.loads(result.stdout)
 
+    def test_invalid_identity_and_usage_are_explicit_before_store_io(self):
+        env = dict(os.environ, FAKE_COUCH_REGISTRY=str(self.root / 'absent' / 'registry.json'))
+        result = subprocess.run([sys.executable, str(FIXTURE), '--session-sync', 'operator-acquire',
+                                 str(self.doc), '--id', 'doc-1', '--turn', 'invalid', '--json'],
+                                capture_output=True, text=True, env=env, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads(result.stdout)['Code'], 'operator-invalid')
+        result = subprocess.run([sys.executable, str(FIXTURE), '--session-sync', 'operator-acquire'],
+                                capture_output=True, text=True, env=env, check=False)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stdout)['Code'], 'usage')
+        self.assertFalse((self.root / 'absent').exists())
+
     def test_acquire_replay_release_and_stale_release(self):
         exit_code, reply = self.request()
         self.assertEqual(exit_code, 0)
@@ -51,13 +64,25 @@ class OperatorFakeTest(unittest.TestCase):
         self.assertFalse(absent.get('LockText'))
 
     def test_foreign_legacy_and_malformed_lock_refuse_without_effect(self):
-        for content in ('holder: agent\n', 'holder: operator\nsince: 1\n',
+        for content in ('holder: operator\nsince: 1\n',
                         'holder: operator\ndocument: doc-1\nturn: ' + TOKEN + '\nturn: duplicate\n'):
             self.lock.write_text(content)
             code, reply = self.request()
             self.assertEqual(code, 3)
             self.assertEqual(reply['Code'], 'operator-lock')
             self.assertEqual(self.lock.read_text(), content)
+
+    def test_agent_sidecar_is_free_and_release_preserves_it(self):
+        text = 'holder: agent\ntime: 2026-10-21T10:00:00Z\n'
+        self.lock.write_text(text)
+        code, reply = self.request('operator-release')
+        self.assertEqual(code, 0)
+        self.assertEqual(reply['OperatorLock']['State'], 'already-released')
+        self.assertEqual(self.lock.read_text(), text)
+        code, reply = self.request()
+        self.assertEqual(code, 0)
+        self.assertEqual(reply['OperatorLock']['State'], 'acquired')
+        self.assertIn('holder: operator', self.lock.read_text())
 
     def test_registry_identity_and_rename(self):
         registry = self.root / 'registry.json'

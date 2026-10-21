@@ -66,9 +66,15 @@ rename back first.
 An explicit `couch-owner:` overrides the default; a business `owner:` does not
 (`owner:` remains a fallback only for legacy `type: session-sync` files).
 [Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:
-entering insert mode takes your turn immediately, before typing; leaving
-unchanged (Escape or Ctrl-C) releases it. Normal-mode edits also take the turn
-before auto-save.
+entering insert mode confirms your turn with Couch before typing, then checks
+for and silently reloads a newer clean copy. Acquisition waits at most 500 ms.
+A namespace/store failure or timeout allows editing with `not locked: Couch
+unreachable; edits may conflict`; conflicting versions are kept through the
+existing clobber-copy path. A held-lock refusal or invalid acknowledgment blocks
+edits with a notice that keys were not applied; leave insert and retry after
+the protection is available. A stopped Couch supervisor does not prevent these
+local acquire/release commands. Leaving unchanged (Escape or Ctrl-C) releases
+an owned turn. Normal-mode edits also take the turn before auto-save.
 Undo back to the acquisition baseline releases it outside insert mode, and redo
 takes it again. Saves never move that baseline.
 Leaving a document with an unsubmitted turn gives three short red winbar pulses

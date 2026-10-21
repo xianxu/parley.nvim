@@ -10,6 +10,7 @@ this process directly, so no child retains the response pipes. Knobs except
 TRACE apply only to acquire by default; _OPS is a comma-list of verbs to target.
 Registry fixtures validate registration identity under the registry flock;
 standalone native fixtures adopt the supplied ID for an existing document.
+Synthetic fixture IDs are accepted; real producer IDs are 32 lowercase hex.
 """
 from datetime import datetime, timezone
 import fcntl
@@ -43,10 +44,10 @@ def operate(args):
     if (len(args) != 8 or args[0] != '--session-sync' or args[1] not in
             ('operator-acquire', 'operator-release') or args[3] != '--id'
             or args[5] != '--turn' or args[7] != '--json'):
-        return refusal('usage', 'expected FILE --id ID --turn TOKEN --json')
+        return refusal('usage', 'expected FILE --id ID --turn TOKEN --json', 2)
     _, op, filename, _, identity, _, turn, _ = args
     if not identity or '\n' in identity or not re.fullmatch('[0-9a-f]{32}', turn):
-        return refusal('invalid-operator-lock', 'invalid document identity or turn')
+        return refusal('operator-invalid', 'invalid document identity or turn')
     path = Path(filename).resolve()
     lock_path = Path(str(path) + '.lock')
     registry = os.environ.get('FAKE_COUCH_REGISTRY')
@@ -71,6 +72,10 @@ def operate(args):
                 return refusal(injection, 'injected operator protocol failure',
                                int(os.environ.get('FAKE_COUCH_OPERATOR_EXIT', str(default))))
             text = lock_path.read_text() if lock_path.exists() else None
+            # A well-formed legacy agent sidecar is free, not operator ownership.
+            agent = text is not None and text.splitlines().count('holder: agent') == 1
+            if agent:
+                text = None
             if text is not None and not ownership(text, identity, turn):
                 return refusal('operator-lock', 'foreign, stale, or legacy protection', 3)
             if op == 'operator-acquire':
@@ -87,8 +92,8 @@ def operate(args):
                 if text is not None:
                     lock_path.unlink()
             envelope = dict(Code='ok', Error='', OperatorLock=dict(
-                ID=identity, File=str(path), Holder='operator', Turn=turn,
-                LockPath=str(lock_path), LockText=text or '', State=state))
+                ID=identity, File=str(path), Holder='operator' if op == 'operator-acquire' else '', Turn=turn,
+                LockPath=str(lock_path), LockText=(text or '') if op == 'operator-acquire' else '', State=state))
         if targeted:
             time.sleep(float(os.environ.get('FAKE_COUCH_OPERATOR_DELAY', '0')))
             if 'FAKE_COUCH_OPERATOR_ACK' in os.environ:

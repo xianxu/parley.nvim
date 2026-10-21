@@ -229,6 +229,7 @@ describe("couch operator transaction", function()
             {124, "", "unavailable"}, {7, "session-sync-unavailable", "unavailable"},
             {1, "session-sync-unavailable", "refused"}, {7, "operator-lock", "refused"},
             {3, "operator-lock", "refused"}, {1, "operator-lock-uncertain", "refused"},
+            {1, "operator-invalid", "refused"}, {2, "usage", "refused"},
             {-1, "", "refused"}, {1, "ok", "refused"},
         }) do
             local answer = couch.operator_result({code = case[1], stdout = vim.json.encode({Code = case[2]})},

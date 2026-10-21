@@ -89,6 +89,40 @@ turn costs, guards and full lint, native 0.11.7, producer #777 real conformance,
 recorded suite, live authorization/check, close and landing. No suite or :0
 stage is active. Pair#777 must land first.
 
+### 2026-10-21 — preferred native 125 green; release/recovery sweep complete
+
+Preferred-runtime native matrix passes 125 cases. In addition to original race
+red/green, independent reds covered observed registered acquisition, replacement
+legacy release, warning priority before typing, and validated move restoration
+without new acquisition. Known owned baseline and exact lock bytes survive
+lost replies; 4/8 turns meet bounded full-read/child counts. New InsertCharPre
+evidence proves acknowledgment and clean freshness before the first character.
+Protocol unit/fake integration map passes (19 Couch unit cases plus executable
+fake conformance). Full lint previously passed 819 files; repeat after final
+delta. Neovim 0.11.7 passed the prior 124-case head; final 125-case rerun is
+active. No full suite or stage yet; broader mapped cases/guards follow.
+
+### 2026-10-21 — native matrix both versions; final protocol clarification
+
+The final native matrix passes 125 cases on both preferred Neovim and operator
+0.11.7 (408-native-125.log and 408-native-125-011.log). The clarified protocol
+map passes all 19 Couch unit cases and both executable fake integration cases.
+The fake's direct process contract now passes 8 cases, including producer agent
+sidecars remaining free for acquisition and untouched by an absent release;
+that new case first failed with exit 3 before correcting the fake.
+
+Couch b50e6d36 clarified operator-invalid exit 1 before store IO and malformed
+argv usage exit 2; only structured session-sync-unavailable exit 7 and the local
+500 ms timeout permit degraded edits. Classifier cases explicitly cover those
+refusals. Architecture guards found missing public symbol names in the plan's
+Core-concepts table; table corrected, rerun pending. Broader mapped tests, final
+lint, producer conformance, recorded suite, live check and close remain pending.
+No full suite or stage is active.
+
+The hub approved canonical-sidecar-only admission (36085421): pair#777 will
+normalize same-token alias ownership and return the canonical LockPath. Keep
+the consumer path and exact on-disk byte checks; no alias witness guessing.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
