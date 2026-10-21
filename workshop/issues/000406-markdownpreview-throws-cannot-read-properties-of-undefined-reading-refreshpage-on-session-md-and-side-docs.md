@@ -31,23 +31,27 @@ session-sync writes by the TL), and they moved today from `teams/devinfra/tl-sta
 
 ## Spec
 
-- Reproduce: open `session.md` with MarkdownPreview running, write the file from outside (session-sync style), and
-  check whether the preview server's refresh hits a buffer or page it doesn't know (the error comes from the
-  markdown-preview server's `refreshPage` on an undefined client or page).
-- Find whether parley (or its session-sync reload path) triggers the preview refresh for a buffer whose preview page
-  isn't registered (for example after an external reload or the path change), and fix it so the preview keeps
-  updating, or at least never throws.
+The initial missing-page/reload hypothesis is superseded by the confirmed bind
+failure (Revision below). Pin the shipped starter's MarkdownPreview port to
+18999 (confirmed free on this machine), with a comment naming the Syncthing
+8384 collision. Document how to change it if occupied. The operator's separate
+Neovim configuration remains theirs; the hub coordinates that update. No fork,
+third-party plugin edits, or Parley/session-sync reload changes (ARCH-PURPOSE).
 
 ## Done when
 
-- A regression reproduces the TypeError before the fix and passes after; the operator's preview of session.md and a
-  side doc updates live after an external write.
+- A starter startup regression fails without the fixed-port setting and passes
+  after it; existing preview lazy/localhost settings stay intact.
+- Preserve the Parley-free TypeError reproduction and verify that the real
+  preview server on a free fixed port delivers external parent/side-doc edits.
+- Suite, close review and landing complete; operator config work stays with the hub.
 
 ## Plan
 
 - [x] Trace the installed preview server and reproduce the reported failure with Parley absent.
-- [ ] Resolve the upstream startup/port-allocation scope with the hub before implementation.
-- [ ] Add the red regression, fix the owning boundary, verify external rewrites for parent/side docs, then review and land.
+- [x] Resolve scope with the hub: configuration in the shipped starter, no fork.
+- [ ] Add a red startup port regression; set the fixed port and troubleshooting note; verify real preview external rewrites, guards and recorded suite.
+- [ ] Close review and land; report the merge to the hub. Review may overlap a queued suite; landing requires its pass.
 
 ## Log
 
@@ -79,3 +83,15 @@ kernel-assigned default port, bind-failure shutdown and startup-notification
 readiness coverage; delivery path and operator plugin update await decision.
 Restarting Neovim may pick a free port and restore service immediately, but
 is not the durable fix.
+
+## Revisions
+
+### 2026-10-20 — confirmed collision; configuration-only disposition
+
+The hub confirmed Syncthing owns 127.0.0.1:8384 and approved a configuration-only
+fix in packaging/starter-config/init.lua (Couch delivery
+6424c96b-68c3-4bd5-af4a-97691bfef023). editor_dependencies.lua is a pure payload
+registry, not configuration. Replace the initial Spec/Done-when's page-registration
+assumption with the confirmed cause and starter-config regression above. No
+startup state machine or dependency fork. A fixed port can still be occupied;
+explicitly document choosing a different free port and restarting Neovim.
