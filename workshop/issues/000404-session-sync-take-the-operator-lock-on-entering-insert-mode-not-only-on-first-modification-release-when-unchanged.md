@@ -237,3 +237,17 @@ All 71 buffer cases, architecture/arch-helper/documentation guards and 18 unit
 cases pass; lint 818 files and diff-check are clean. Fresh recorded suite
 attempt efa95c06053178e086dd6672142ba1d0, run lease-2323705263, is queued on
 7e9b74ba; no recorded pass is claimed. PR #327 is updated; stage remains clear.
+
+### 2026-10-21 — SHIP; recorded suite waiting for capacity
+
+Close round 3 returned SHIP, disposed BR-2, and found no new issues. The reviewer
+independently passed 111 native cases on each runtime and reproduced six failures
+by removing the replay correction. Close evidence commit 5dc0ef648b15 is published;
+codecomplete is bound to that reviewed generation. The unchanged-code recorded
+suite lease-2323705263 (attempt efa95c06053178e086dd6672142ba1d0) remains alive
+and queued, last observed position 5. Do not duplicate or cancel this runner.
+Next: inspect its result; on pass, sdlc merge --yes owns integration/CI and any
+required integration suite. Stage is already clear and live acceptance recorded.
+If the runner dies, verify the lease/attempt before restarting unchanged through
+sdlc. After landing report PR #327 and exact merge commit to the hub; then plan
+#405 from main as dispatched.
