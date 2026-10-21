@@ -52,7 +52,7 @@ third-party plugin edits, or Parley/session-sync reload changes (ARCH-PURPOSE).
 - [x] Trace the installed preview server and reproduce the reported failure with Parley absent.
 - [x] Resolve scope with the hub: configuration in the shipped starter, no fork.
 - [x] Add a red startup port regression; set the fixed port and troubleshooting note; verify real preview external rewrites and architecture/docs guards.
-- [ ] Queue the recorded suite on the pushed head.
+- [x] Queue the recorded suite on the pushed head.
 
 Landing gates: recorded suite pass, close review, then merge and report to the
 hub. Review may overlap a queued suite under the worker contract.
@@ -121,3 +121,7 @@ evidence live beside the reproduction (live.py / live.log).
 Review/landing are recorded as acceptance gates outside implementation checkboxes
 so they can overlap the recorded suite queue without claiming a pending pass.
 The operator's separate config remains with the hub as approved.
+
+Recorded suite bfc57d632fef2014e446eb6b073fe605 is queued on 6c28575b;
+PR #326 is open. The close review may overlap the queue, but the recorded
+suite must pass before landing.
