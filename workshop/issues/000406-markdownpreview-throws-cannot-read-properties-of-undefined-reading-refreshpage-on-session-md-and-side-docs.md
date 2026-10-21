@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "099d29a7", done: "1db194ec"}
 ---
 
 # MarkdownPreview throws 'Cannot read properties of undefined (reading refreshPage)' on session.md and side docs
