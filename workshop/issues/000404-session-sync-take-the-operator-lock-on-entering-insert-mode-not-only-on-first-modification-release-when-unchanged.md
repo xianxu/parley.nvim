@@ -53,7 +53,7 @@ iPhone view, showing the keyboard maps to the same thing.
 - [x] Share existing first-edit acquisition and deferred race handling with InsertEnter; retain one acquisition baseline; InsertLeave reuses owned baseline release. No watcher/timer (ARCH-DRY).
 - [x] Verify counted hash work at 4/8 mode pairs, focused/native tests, architecture guards and atlas; queue recorded suite and request the live check from the hub.
 
-- [ ] BR-1: one mode-departure handler for ModeChanged/InsertLeave, shared automatic-release eligibility including move finalization, native red/green matrix, renewed verification and suite.
+- [x] BR-1: one mode-departure handler for ModeChanged/InsertLeave, shared automatic-release eligibility including move finalization, native red/green matrix, renewed verification and suite.
 
 Landing gates: recorded suite pass, close review, hub's live acceptance, merge and report. Review may overlap a queued suite.
 
@@ -163,3 +163,14 @@ The operator authorized a brief live stage through the hub (Couch
 f4dec747-4578-4a3b-8f40-a1902dfb1401), superseding the earlier hold. Stage the
 corrected committed head; buffer/architecture guards and the fresh recorded
 suite continue while the operator checks Escape and Ctrl-C departures.
+
+### 2026-10-21 — BR-1 guards complete; live stage and suite pending
+
+The corrected 5c55f1ef passes all 71 buffer cases (including counted 4/8 mode
+pairs), every architecture/arch-helper/documentation guard and all 18 unit
+cases. Both native runtimes passed 102 cases as recorded above. sdlc staged
+5c55f1efe87eb5e5f17cd59454ba675e43c259e5 on parley.nvim:0; the hub received the
+exact output (submitted receipt 76f99538-63f4-4cf7-b42b-e625414dee8f). Await the
+operator's verdict, then clear the stage. PR #327 is updated. Fresh recorded
+suite attempt 2b6e01107afb196736b9f9eed53ff068, run lease-2669494922, is queued
+on that code head; no pass is claimed. Close review may overlap that queue.
