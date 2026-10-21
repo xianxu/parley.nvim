@@ -47,7 +47,7 @@ Operator report (ops session file, 10-21 09:20): Alt+O (open the link under the 
 - [x] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
 - [x] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
 - [x] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
-- [ ] Run mapped tests and recorded suite; update README/atlas.
+- [x] Run mapped tests and recorded suite; update README/atlas.
 
 Close review and normal landing follow verification. Per the hub, no stage: operator receives the landed change in normal use.
 
@@ -87,3 +87,5 @@ Hub approved all three families and existing shared-consumer verification. The i
 - BR-2/3 RED /tmp/parley407-fences-red.log shows five false-closer memo failures and outside-link navigation across both dedented fence styles. GREEN /tmp/parley407-fences-green.log; shared consumers passed in /tmp/parley407-memo-consumers.log (highlight_structure, outline, outline_parity, picker_items, copy_fence and entity_textobj). Public is_fence_delim keeps its single length result; private geometry feeds the memo state. A scanner fixture previously called a fence with a link suffix a closer; added a genuine whitespace-only closer after that invalid candidate, preserving the hidden-link assertion.
 - Infrastructure interruption, not assertion evidence: an overlapping same-checkout targeted make invoked orphan cleanup and SIGKILLed the active open_reference_spec PID69525. The exact reaping line is in /tmp/parley407-heading-inline-red.log and the matching Killed:9 line is in /tmp/parley407-rework-targeted2.log. Filed independent parley.nvim#409 unclaimed and reported it to the hub. All subsequent targeted checks run serially.
 - Final serial mapped context/file_references passed (/tmp/parley407-rework-serial.log), including native30/30, range84/84, lexical10/10 and heading16/16. Final lint passed818 files with0warnings/errors (/tmp/parley407-rework-lint-final.log), and git diff --check passed. Durable plan tracks the repair; fresh recorded suite and re-close remain pending. No stage per hub direction.
+
+- Corrected-head recorded suite passed on 053bf88b2b1a03d33a1c70d53cc1704c6ce6a062, attempt 61931a910072cb5f0afd04b1c306ef11, exit0 in289.04s, log SHA256 e817c0fe22944f47f182b5b90a45a5846a54e9e2d8e1febd989b9f84abbf5499. This is a complete fresh pass, not a flake resume or reuse of the pre-repair result. Re-close now reviews the complete repair and disposes BR-1/2/3; no stage per hub.

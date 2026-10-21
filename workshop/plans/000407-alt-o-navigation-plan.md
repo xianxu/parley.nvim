@@ -51,9 +51,9 @@ Actual editor tests use tests/helpers/embedded_nvim.lua and real mappings/files.
 ## Verification and landing
 
 - [x] Update existing README/atlas guidance and issue Log for corrected behavior; commit the combined fixes and durable evidence, then push.
-- [ ] Run the required recorded suite on that exact pushed head: sdlc local-check run --name suite. Existing head's pass cannot cover repair changes.
-- [ ] Re-close with behavioral evidence; full boundary review applies if the patch leaves the quick-flow shell. Fix any remaining findings and refresh verification for changed code.
-- [ ] On SHIP, promptly run sdlc merge --yes; it owns current-main integration and authoritative suite. Report verified merge, tracker and archive to hub. No stage: hub updates operator checkout after landing.
+- [x] Run the required recorded suite on that exact pushed head: sdlc local-check run --name suite. Existing head's pass cannot cover repair changes.
+Re-close with behavioral evidence; full boundary review applies if the patch leaves the quick-flow shell. Fix any remaining findings and refresh verification for changed code.
+On SHIP, promptly run sdlc merge --yes; it owns current-main integration and authoritative suite. Report verified merge, tracker and archive to hub. No stage: hub updates operator checkout after landing.
 
 ## Constraints and visible outcomes
 
@@ -62,3 +62,9 @@ Actions: follow a link; retry with a corrected path/fragment. A found anchor sho
 ## Approval and provenance
 
 The hub approved these three repair families in delivery d74a4811-e326-4a39-9e98-848ec3926df1, including testing existing shared-memo consumers. This durable plan was added when implementation sizing indicated the repair may leave the quick shell; it preserves that already-approved design and does not replace prior issue revisions.
+
+## Revisions
+
+### 2026-10-21 — Corrected-head suite complete
+
+The corrected implementation passed its recorded suite. Re-close and landing remain follow-on gate actions written as prose; checking implementation tasks does not claim either gate has already completed.
