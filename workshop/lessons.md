@@ -911,3 +911,8 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   destructive effect and before recovery attachment can acquire obsolete state.
   Test recovery before cleanup, between effects and after cleanup, with a new
   user intent as well as the ordinary idempotent replay controls.
+
+- #408: A native buffer observer without on_reload is detached by reload. A
+  first-edit ordering test must retain the observer through native rereads, or
+  it only measures a missing callback. Serialize make/test-spec within one
+  checkout: census cleanup from one run can interrupt another.

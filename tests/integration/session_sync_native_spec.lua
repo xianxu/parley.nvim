@@ -193,17 +193,95 @@ describe("session-sync native edits", function()
         end)
     end
 
-    it("insert entry reconciles a write racing the loaded buffer without blocking (#404)", function()
-        open(false, false, true, true)
-        local foreign = vim.fn.readfile(file)
-        foreign[8] = "foreign before insert"
-        vim.fn.writefile(foreign, file)
-        keys("i")
-        wait_for("return vim.fn.mode() == 'i'")
-        assert.is_true(exists(), "insert entry did not protect the loaded buffer")
-        notified("session-sync violation")
-        assert.equals("foreign before insert", vim.fn.readfile(file .. '.clobbered')[8])
-        assert.equals("first bullet", exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+    for _, kind in ipairs({"parent", "side"}) do
+        it("confirmed insert reloads before queued first edit in " .. kind .. " (#408)", function()
+            if kind == "side" then
+                local lines=vim.fn.readfile(file); lines[2]="type: prose"
+                vim.fn.writefile(lines,file)
+            end
+            open(false,false,true,true)
+            local fresh=vim.fn.readfile(file);fresh[8]="fresh before acknowledgment"
+            exec([[
+                vim.env.FAKE_COUCH_OPERATOR_ACQUIRE_WRITE=...
+                _G.first_edit=nil
+                vim.api.nvim_buf_attach(0,false,{on_reload=function() end, on_lines=function(_,buf)
+                    first_edit=first_edit or vim.api.nvim_buf_get_lines(buf,7,8,false)[1]
+                end})
+            ]],table.concat(fresh,"\n").."\n")
+            keys("iX")
+            wait_for("return _G.first_edit ~= nil")
+            assert.equals("Xfresh before acknowledgment",exec("return first_edit"))
+            assert.equals("Xfresh before acknowledgment",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            local text=table.concat(vim.fn.readfile(file..".lock"),"\n")
+            assert.truthy(text:find("document: doc-1",1,true))
+            assert.truthy(text:match("turn: [0-9a-f]+"))
+            assert.is_nil(vim.uv.fs_stat(file..".clobbered"))
+            assert.is_nil(vim.uv.fs_stat(sent_file))
+            keys("<Esc>")
+        end)
+    end
+
+    for _, fault in ipairs({
+        {name="held", code="operator-lock", exit="3"},
+        {name="uncertain", code="operator-lock-uncertain", exit="1"},
+        {name="malformed", ack="{}"},
+    }) do
+        it("blocks queued insert edits for "..fault.name.." acknowledgment (#408)",function()
+            open(false,false,true,true)
+            exec([[
+                local fault=...
+                vim.env.FAKE_COUCH_OPERATOR_CODE=fault.code
+                vim.env.FAKE_COUCH_OPERATOR_EXIT=fault.exit
+                vim.env.FAKE_COUCH_OPERATOR_ACK=fault.ack
+            ]],fault)
+            keys("iX")
+            wait_for("return vim.fn.mode() == 'i'")
+            assert.is_false(exec("return vim.bo.modifiable"))
+            assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            assert.is_true(exec([[return table.concat(notifications,"\n"):find("not applied",1,true)~=nil]]))
+            keys("<Esc>")
+        end)
+    end
+
+    for _, timeout in ipairs({false,true}) do
+        it("allows queued edits with an unconfirmed warning on "..(timeout and "500 ms timeout" or "store unavailable").." (#408)",function()
+            open(true,false,true,true)
+            exec([[
+                local timeout=...
+                if timeout then vim.env.FAKE_COUCH_OPERATOR_DELAY="2"
+                else vim.env.FAKE_COUCH_OPERATOR_CODE="session-sync-unavailable";vim.env.FAKE_COUCH_OPERATOR_EXIT="7" end
+            ]],timeout)
+            local started=vim.uv.hrtime()
+            keys("iX")
+            wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1] == 'Xfirst bullet'")
+            local elapsed=(vim.uv.hrtime()-started)/1e6
+            if timeout then
+                assert.is_true(elapsed>=450,"timeout returned before its 500 ms budget")
+                assert.is_true(elapsed<500+arrival.MS,"timeout exceeded bounded arrival allowance")
+            end
+            assert.is_true(exec("return vim.bo.modifiable"))
+            assert.is_true(exec([[return vim.wo.winbar:find("not locked: Couch unreachable; edits may conflict",1,true)~=nil]]))
+            keys("<Esc>")
+            exec("vim.cmd('silent write')")
+            local foreign=vim.fn.readfile(file);foreign[8]="agent competing copy";vim.fn.writefile(foreign,file)
+            exec("vim.cmd('checktime')")
+            wait_for([[return vim.fn.filereadable(vim.api.nvim_buf_get_name(0)..'.clobbered')==1]])
+            assert.equals("agent competing copy",vim.fn.readfile(file..".clobbered")[8])
+            assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        end)
+    end
+
+    it("normal-mode edit and insert share one confirmed operator turn (#408)",function()
+        open(false,false,true,true)
+        keys("x")
+        wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='irst bullet'")
+        keys("iX")
+        wait_for("return vim.fn.mode()=='i'")
+        exec("vim.schedule(function() _G.normal_insert_settled=true end)")
+        wait_for("return normal_insert_settled==true")
+        assert.is_true(exec("return vim.bo.modifiable"))
+        assert.equals("Xirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        assert.truthy(table.concat(vim.fn.readfile(file..".lock"),"\n"):match("turn: [0-9a-f]+"))
         keys("<Esc>")
     end)
 

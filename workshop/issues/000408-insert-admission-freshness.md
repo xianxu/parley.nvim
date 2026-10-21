@@ -64,6 +64,31 @@ These are feasibility observations, not the regression proof: plan requires
 first-edit ordering with stateful fake acquire, clean/dirty cases and native
 read-completion evidence. Probe files live only under the existing scratch root.
 
+### 2026-10-21 — implementation checkpoint; preferred native green
+
+Pinned protocol seam and stateful executable fake are implemented. The first
+coordinated native red run reproduced seven expected failures (110 existing
+cases passed): parent/side stale first edit, held/uncertain/malformed failures,
+and unavailable/timeout warning. A separate Normal-edit then InsertEnter red
+case exposed locally-created legacy protection; both paths now share confirmed
+acquisition. Current preferred-runtime native run passes all 118 cases, including
+editable unavailable/timeout, auto-save then competing write preserving both
+copies, and existing move/replay/Ctrl-C protections.
+
+Clean freshness requires nested InsertEnter autocmd dispatch so the narrowly
+permitted FileChangedShell reload runs without a deferred W11 prompt. The test
+observer must retain its own on_reload callback to witness the subsequent first
+edit; without it Neovim correctly detaches the observer and its wait stalls.
+Initial overlap between targeted make runs was stopped; all further checkout
+make tests are serialized. Unit protocol seam red/green and fake executable
+contract evidence are recorded by their bounded tasks; main will rerun the
+combined focused map.
+
+Not complete: remaining acquisition/release/recovery enumeration, counted 4/8
+turn costs, guards and full lint, native 0.11.7, producer #777 real conformance,
+recorded suite, live authorization/check, close and landing. No suite or :0
+stage is active. Pair#777 must land first.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
