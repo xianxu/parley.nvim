@@ -152,3 +152,21 @@ token is in those bytes. Report receipt ac7195e9-2fcc-4df9-bc76-09d4d20ecad1.
 
 The active table/cost/seam text above is adjusted for the in-process producer
 and matching release call. No implementation yet.
+
+### 2026-10-21 — all producer pins confirmed; implementation authorized
+
+Hub a44e4450-a411-4a17-8c39-7e730dae5715 confirmed all remaining pins:
+
+- Namespace/store unavailable: Code `session-sync-unavailable`, exit 7 only.
+  Held protection: `operator-lock`, exit 3. Identity/path/validation refusals:
+  explicit Code, exit 1. Uncertain sidecar publication:
+  `operator-lock-uncertain`, exit 1, blocking rather than editable-degraded.
+- LockText includes strict single `document: ID` and `turn: TOKEN` fields.
+  Rename copies those bytes unchanged; release on NEW canonical path with the
+  same ID/token succeeds. Parse recovery evidence strictly, rejecting duplicates.
+- Release uses the same OperatorLock envelope, State released|already-released,
+  echoing ID/File/Turn. Absence means already-released without ownership claimed.
+
+Implement against this contract now; pair#777 must land before #408. Exact
+release/acquire traces, fault classifications and native races are the tests;
+no speculative producer change is part of this consumer issue.

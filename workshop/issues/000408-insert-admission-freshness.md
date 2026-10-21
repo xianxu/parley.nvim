@@ -86,3 +86,10 @@ exact release success shape through the hub before code. Both commands run
 in-process: a stopped supervisor does not trigger editable degraded mode; only
 namespace/store unavailable or the 500 ms timeout does. Updated the durable
 plan's active table/seams/cost and appended its contract Revision.
+
+### 2026-10-21 — protocol pinned, implementation authorized
+
+Hub a44e4450-a411-4a17-8c39-7e730dae5715 confirmed error Codes/exits, recoverable
+ID/turn fields in exact LockText and release acknowledgment shape. Recorded
+these in the durable plan Revision. Proceed against the agreed contract;
+pair#777 lands first, coordinated through the hub.
