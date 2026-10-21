@@ -46,8 +46,8 @@ Operator report (ops session file, 10-21 09:20): Alt+O (open the link under the 
 
 - [x] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
 - [x] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
-- [x] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
-- [x] Run mapped tests and recorded suite; update README/atlas.
+- [ ] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
+- [ ] Run mapped tests and recorded suite; update README/atlas.
 
 Close review and normal landing follow verification. Per the hub, no stage: operator receives the landed change in normal use.
 
@@ -64,3 +64,17 @@ Actions: follow a link; retry/correct a missing heading. Found anchor: show dest
 - GREEN: make -k test-spec SPEC=context/file_references passed, /tmp/parley407-final-targeted.log (native mapping26/26, navigation range78/78, heading6/6 plus existing mapped tests). make -k lint passed across818 files,0 warnings/errors (/tmp/parley407-lint.log); git diff --check clean. README, existing atlas map and traceability updated. Required recorded suite and close remain pending; no live-editor acceptance claimed.
 
 - Recorded suite passed on c4d2222ad0fd0dbe0db443e0d0ac7e247b634ccb, attempt b82743bbb46e9281aaf07b62cd3fa8a5, exit0 in 316.35s; log SHA256 961fd0842cf8941980c82abd3298a2d23c5a496bbb2cbda78b0f150ac2dcda9e. GitHub merge-check and local-gates guard passed on PR328. Hub explicitly directed no stage because :0 holds #404; land after suite and close, then the hub fast-forwards the operator's live checkout for normal-use acceptance.
+
+## Revisions
+
+### 2026-10-21 — Close round 1: complete Markdown normalization and containment
+
+Close returned REWORK with BR-1/2/3. Reopen verification for all three families:
+
+- Heading-content normalization: trim heading edges, turn spaces into hyphens and remove other whitespace; remove paired inline formatting, link destinations and HTML tags before slugging while preserving literal intra-word underscores. Cover whitespace, emphasis, inline code, links and HTML plus duplicate suffixes. Keep this pure and inside the existing heading lookup.
+- Shared fence containment: replace the memo's boolean delimiter toggle with opener character/run-length state; only a same-character, sufficient-length, whitespace-only closer ends it. Preserve configured transcript partition resets and plain-Markdown non-partition mode, the memo API, and its existing indentation dialect. Do not change the separate render/ordinary fence dialect.
+- Navigation item boundaries: treat a dedented fence opener as a block boundary before excluding fenced contents; retain indented fenced blocks inside their item. Cover all three bullet markers and both fence characters, with an outside-link negative mapping case.
+
+The simpler alternative (extra anchor-local fence matching) duplicates the shared memo and leaves its other consumers wrong, so repair the shared owner (ARCH-DRY). Regex punctuation stripping alone cannot distinguish formatting underscores from literal text; normalize the heading's inline content first. No persistent state, new background work or new external dependency. All changes remain command-time linear scans; no edit hot path is added. New regression cases must fail before the fixes, then pass with the existing mapped tests, fresh recorded suite and re-close. If the implementation leaves the quick shell, the normal full boundary review applies.
+
+- Close evidence: round1 REWORK, three open Critical findings; prior suite success does not cover these counterexamples. GitHub section-link rules and GFM fence rules checked against their official references. Await hub approval of the shared-memo correction before implementation.
