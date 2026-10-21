@@ -599,14 +599,17 @@ M.attach = function(buf, identity, observed)
         end)
     end
     local function insert_enter()
-        if state[buf] ~= s or s.moving then return end
+        if state[buf] ~= s then return end
         s.inserting = true
+        if s.moving then return end
         -- A dirty buffer with no witnessed preimage must remain outstanding.
         take_turn(not vim.bo[buf].modified and content_hash(buf) or s.baseline)
         restart_idle(buf)
     end
     vim.api.nvim_create_autocmd("InsertEnter", {group=group, buffer=buf, callback=insert_enter})
-    vim.api.nvim_create_autocmd("InsertLeave", {group=group, buffer=buf, callback=function()
+    vim.api.nvim_create_autocmd({"InsertLeave", "ModeChanged"}, {group=group, buffer=buf, callback=function(event)
+        if not s.inserting then return end
+        if event.event == "ModeChanged" and vim.v.event.new_mode:match("^[iR]") then return end
         s.inserting = nil
         local epoch = s.epoch
         -- Release may classify a foreign disk write with checktime. Like edit
@@ -737,7 +740,7 @@ M.attach = function(buf, identity, observed)
     restart_idle(buf)
     require("parley.edit_round").refresh(buf)
     if observed then M.acquire_observed(buf, observed) end
-    if vim.api.nvim_get_current_buf() == buf and vim.fn.mode():sub(1, 1) == "i" then insert_enter() end
+    if vim.api.nvim_get_current_buf() == buf and vim.fn.mode():match("^[iR]") then insert_enter() end
 end
 
 -- Restore only the values this attachment still owns; never release a turn.
@@ -830,12 +833,16 @@ M.prepare_submit = function(buf)
     return true
 end
 
+local function automatic_release_eligible(s)
+    return not s.inserting and s.baseline ~= nil
+end
+
 -- The same acquisition-baseline release serves native undo and synthetic
 -- migration protection. A matching content hash alone never owns a lock.
 M.release_if_baseline = function(buf)
     buf = buffer_id(buf)
     local s = state[buf]
-    if not s or s.moving or s.inserting or not s.baseline or content_hash(buf) ~= s.baseline then return false end
+    if not s or s.moving or not automatic_release_eligible(s) or content_hash(buf) ~= s.baseline then return false end
     if not s.owned_lock or lock_bytes(M.lock_path(buf)) ~= s.owned_lock then return false end
     if disk_changed(buf) then
         violation(buf)
@@ -1111,7 +1118,8 @@ M.move_finalization_snapshot = function(buf, token)
         return false, "move protection changed before finalization intent"
     end
     local content = content_hash(buf)
-    local release = not vim.bo[buf].modified and s.baseline == content and s.owned_lock == moving.new_lock
+    local release = not vim.bo[buf].modified and automatic_release_eligible(s)
+        and s.baseline == content and s.owned_lock == moving.new_lock
     return true, { old_lock_before = moving.lock or false, new_lock_before = moving.new_lock or false,
         new_lock_after = not release and moving.new_lock or false, editor_hash = content }
 end

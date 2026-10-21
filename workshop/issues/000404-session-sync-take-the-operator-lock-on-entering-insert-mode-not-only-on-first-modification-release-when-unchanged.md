@@ -152,3 +152,14 @@ insert-intent-must-follow-mode (ARCH-PURPOSE). Original suite
 lease-4273173816 was cancelled through sdlc local-check cancel by that exact
 owned run ID; no unrelated runner was touched and the corrected head requires
 fresh recorded verification. Staging remains held pending the operator.
+
+### 2026-10-21 — BR-1 native verification and staging authorization
+
+The new matrix first reproduced 17 failures on the previous implementation
+(85 existing cases passed). The corrected shared departure handler and automatic
+release predicate pass all 102 native cases on both Neovim 0.12.5 and the
+operator's installed 0.11.7. Lint remains clean across 818 files; diff-check passes.
+The operator authorized a brief live stage through the hub (Couch
+f4dec747-4578-4a3b-8f40-a1902dfb1401), superseding the earlier hold. Stage the
+corrected committed head; buffer/architecture guards and the fresh recorded
+suite continue while the operator checks Escape and Ctrl-C departures.
