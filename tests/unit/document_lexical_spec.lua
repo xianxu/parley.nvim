@@ -21,6 +21,7 @@ describe('shared document lexical grammar',function()
         end
     end)
     it('keeps ordinary and render fence contracts distinct',function()
+        assert.equals(1, select('#', lexical.is_fence_delim('```')))
         assert.equals(4,lexical.is_fence_delim(' ````lua'))
         assert.is_nil(lexical.ordinary_open_len(' ````lua'))
         assert.equals(4,lexical.ordinary_open_len('````json {"type":"x"}'))
@@ -50,4 +51,25 @@ describe('shared document lexical grammar',function()
             end
         end
     end)
+end)
+
+
+describe('shared navigation fence containment (#407 BR-2)', function()
+    local lexical = require('parley.document.lexical')
+    it('rejects backticks in an opening info string and resets delimiter state at custom partitions', function()
+        local patterns = lexical.patterns({chat_user_prefix='USER>'})
+        assert.same({false,false}, lexical.code_block_memo({'```bad`info', '# Visible'}, patterns, true, false))
+        assert.same({true,false,true,true,false}, lexical.code_block_memo(
+            {'````md', 'USER> question', '~~~', 'code', '~~~'}, patterns, true))
+    end)
+    for _, case in ipairs({
+        {'````md', '```', '````'}, {'~~~~md', '~~~', '~~~~'},
+        {'```md', '~~~', '```'}, {'~~~md', '```', '~~~'},
+        {'```md', '``` invalid closer', '````'},
+    }) do
+        it('retains opener identity against ' .. case[2] .. ' after ' .. case[1], function()
+            assert.same({true,true,true,false,false}, lexical.code_block_memo(
+                {case[1], case[2], '# Fake', case[3], '# Real'}, lexical.patterns({}), true, false))
+        end)
+    end
 end)

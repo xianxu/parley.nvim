@@ -205,7 +205,8 @@ describe("reference candidates", function()
     end)
 
     it("masks fenced samples with the shared lexical memo including closing delimiters", function()
-        local lines = { "[before](a.md)", "~~~ [opener](x.md)", "[code](x.md) #2", "~~~ [closer](x.md)", "@@after@@" }
+        local lines = { "[before](a.md)", "~~~ [opener](x.md)", "[code](x.md) #2",
+            "~~~ [not-a-closer](x.md)", "~~~", "@@after@@" }
         local lexical = require("parley.document.lexical")
         local memo = lexical.code_block_memo(lines, lexical.patterns({}), true)
         local got = candidates.collect(lines, { first = 1, last = #lines }, { in_code = memo })

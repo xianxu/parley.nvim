@@ -159,11 +159,27 @@ describe("entity navigation native input", function()
             assert.equals(4, exec("return vim.api.nvim_win_get_cursor(0)[1]"))
         end)
 
+        for _, fence in ipairs({'```', '~~~'}) do
+            it("does not open an outside link across dedented " .. fence .. " in " .. mode .. " mode", function()
+                open_source({"- Chosen prose", "", fence .. "md", "sample", fence,
+                    "[outside](answer.md)"}, 1, insert)
+                exec([[
+                    local p = require("parley")
+                    local open = p.cmd.OpenFileUnderCursor
+                    p.cmd.OpenFileUnderCursor = function() pcall(open); _G.jump_completed = true end
+                    p.setup_markdown_keymaps(vim.api.nvim_get_current_buf())
+                ]])
+                keys("<M-o>")
+                wait_for([[return _G.jump_completed == true]])
+                assert.equals(source, exec([[return vim.api.nvim_buf_get_name(0)]]))
+            end)
+        end
+
         for _, fragment in ipairs({ "revised-plan-ready-10-21-0040", "unknown-section", "" }) do
             local description = fragment == "" and "plain file link"
                 or (fragment == "unknown-section" and "unknown heading anchor" or "heading anchor")
             it("opens a " .. description .. " in " .. mode .. " mode through <M-o>", function()
-                local heading = "## Revised plan ready (10-21: 0040)"
+                local heading = "## _Revised plan ready_ (10-21: 0040)"
                 vim.fn.writefile({ "# Answer", "", "```markdown", heading, "```", "", heading,
                     "The real section." }, target)
                 local suffix = fragment == "" and "" or "#" .. fragment

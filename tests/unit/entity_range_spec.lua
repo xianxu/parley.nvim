@@ -825,3 +825,24 @@ describe("unordered item navigation (#407)", function()
         assert.same({kind = "paragraph", first = 1, last = 6}, entity_range.range(nil, lines, 1))
     end)
 end)
+
+
+describe("bullet fenced block boundaries (#407 BR-3)", function()
+    for _, marker in ipairs({'-', '+', '*'}) do
+        for _, fence in ipairs({'```', '~~~'}) do
+            it('ends ' .. marker .. ' before dedented ' .. fence .. ' but retains an indented block', function()
+                local outside = {marker .. ' Chosen prose', '', fence .. 'md', 'sample', fence,
+                    '[outside](outside.md)'}
+                local range = entity_range.navigation_range(nil, outside, 1)
+                assert.same({kind='bullet',first=1,last=1}, range)
+                assert.same({}, require('parley.reference_candidates').collect(outside, range, {transcript=false}))
+                local inside = {marker .. ' Chosen prose', '', '  ' .. fence .. 'md', '  sample',
+                    '  ' .. fence, '', '  [inside](inside.md)'}
+                local kept = entity_range.navigation_range(nil, inside, 1)
+                assert.same({kind='bullet',first=1,last=7}, kept)
+                assert.equals('inside.md', require('parley.reference_candidates').collect(inside, kept,
+                    {transcript=false})[1].target)
+            end)
+        end
+    end
+end)

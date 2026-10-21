@@ -901,3 +901,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #398 landing: shipped atlas prose must not link relatively into ignored weave overlays. Use a pinned upstream link for inherited contracts and run documentation_spec after adding atlas links; warm-checkout existence hides cold-checkout failures.
 
 - #407: Navigation must separate a destination path from its fragment before file-type checks, and must not restore a source cursor over a successful same-file anchor jump. Test real mapping completion before asserting cursor state; waiting only for the desired cursor can hide an ordering defect behind a stalled fixture.
+
+- #407 close: a GitHub-style anchor is based on heading content, not raw Markdown. Pin whitespace, formatting and duplicate-slug classes, with literal/code controls. A fence memo must retain opener character and width instead of toggling on any delimiter. Determine container boundaries at a fence opener before its contents are excluded; test outside-link negatives as well as successful links.

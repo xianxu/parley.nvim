@@ -62,8 +62,13 @@ A recognized but missing target reports its own error and does not fall through.
 Unordered bullet items, including tight siblings and nested continuations,
 form their own navigation range. This does not change editing textobjects.
 Local `.md#anchor` links resolve the file first, then jump to its GitHub-style
-ATX heading slug (lowercase, spaces to hyphens, punctuation dropped). Repeated
-headings use numeric suffixes; fenced examples do not define anchors. Missing
+ATX heading slug (lowercase, spaces to hyphens, other whitespace and punctuation
+removed). Heading emphasis, code spans, inline-link labels and HTML formatting
+contribute their text; literal underscores remain intact. Repeated
+headings use numeric suffixes; fenced examples do not define anchors. Shared
+fence containment requires matching delimiter characters and a sufficiently
+long, whitespace-only closer. Dedented fences end a bullet item; indented
+fences remain inside it. Missing
 anchors open at the top with a short notice. Plain file links retain their
 existing cursor behavior; URL destinations keep their existing fallback policy.
 

@@ -416,7 +416,9 @@ function M.navigation_range(parsed, lines, row, opts)
     for i = lo, hi + 1 do
         local line = lines[i] or ""
         local indent = #(line:match("^%s*") or "")
-        local outside = not context.in_code[i]
+        local opening = lexical.is_fence_delim(line, true) and context.in_code[i]
+            and not context.in_code[i - 1]
+        local outside = not context.in_code[i] or opening
         local bullet = outside and line:match("^%s*[-+*]%s+")
         local marker = bullet or (outside and line:match("^%s*%d+[.)]%s+"))
         local kind = outside and context.transcript and lexical.classify(line, context.patterns).kind
@@ -425,7 +427,7 @@ function M.navigation_range(parsed, lines, row, opts)
         while #bullets > 0 do
             local top = bullets[#bullets]
             if not wall and not (outside and indent <= top.indent and
-                (marker or (not is_blank(line) and is_blank(lines[i - 1])))) then break end
+                (marker or opening or (not is_blank(line) and is_blank(lines[i - 1])))) then break end
             table.remove(bullets)
             top.last, top.indent = i - 1, nil
             trim_trailing_blanks(top, lines)

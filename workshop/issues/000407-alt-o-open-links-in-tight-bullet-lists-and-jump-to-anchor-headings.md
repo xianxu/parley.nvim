@@ -46,7 +46,7 @@ Operator report (ops session file, 10-21 09:20): Alt+O (open the link under the 
 
 - [x] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
 - [x] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
-- [ ] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
+- [x] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
 - [ ] Run mapped tests and recorded suite; update README/atlas.
 
 Close review and normal landing follow verification. Per the hub, no stage: operator receives the landed change in normal use.
@@ -78,3 +78,12 @@ Close returned REWORK with BR-1/2/3. Reopen verification for all three families:
 The simpler alternative (extra anchor-local fence matching) duplicates the shared memo and leaves its other consumers wrong, so repair the shared owner (ARCH-DRY). Regex punctuation stripping alone cannot distinguish formatting underscores from literal text; normalize the heading's inline content first. No persistent state, new background work or new external dependency. All changes remain command-time linear scans; no edit hot path is added. New regression cases must fail before the fixes, then pass with the existing mapped tests, fresh recorded suite and re-close. If the implementation leaves the quick shell, the normal full boundary review applies.
 
 - Close evidence: round1 REWORK, three open Critical findings; prior suite success does not cover these counterexamples. GitHub section-link rules and GFM fence rules checked against their official references. Await hub approval of the shared-memo correction before implementation.
+
+### 2026-10-21 — Approved repair recorded as durable plan
+
+Hub approved all three families and existing shared-consumer verification. The inline normalization makes the final patch likely to exceed the quick shell; preserve the already-approved design and remaining checks in workshop/plans/000407-alt-o-navigation-plan.md. This is one atomic close repair, not new milestone boundaries. The close gate upgrades its review as required.
+
+- Repair evidence: BR-1 RED /tmp/parley407-heading-red.log (3 normalized-heading failures), then rendered-edge/autolink/comment RED /tmp/parley407-heading-inline-red.log (3), and literal-autolink underscore RED /tmp/parley407-heading-autolink-red.log (1). Final pure heading checks pass16/16, including duplicate slugs, code/escaped/intra-word/URL underscore controls, delimiter-aware anchor consumers and a counted malformed-tag scan budget.
+- BR-2/3 RED /tmp/parley407-fences-red.log shows five false-closer memo failures and outside-link navigation across both dedented fence styles. GREEN /tmp/parley407-fences-green.log; shared consumers passed in /tmp/parley407-memo-consumers.log (highlight_structure, outline, outline_parity, picker_items, copy_fence and entity_textobj). Public is_fence_delim keeps its single length result; private geometry feeds the memo state. A scanner fixture previously called a fence with a link suffix a closer; added a genuine whitespace-only closer after that invalid candidate, preserving the hidden-link assertion.
+- Infrastructure interruption, not assertion evidence: an overlapping same-checkout targeted make invoked orphan cleanup and SIGKILLed the active open_reference_spec PID69525. The exact reaping line is in /tmp/parley407-heading-inline-red.log and the matching Killed:9 line is in /tmp/parley407-rework-targeted2.log. Filed independent parley.nvim#409 unclaimed and reported it to the hub. All subsequent targeted checks run serially.
+- Final serial mapped context/file_references passed (/tmp/parley407-rework-serial.log), including native30/30, range84/84, lexical10/10 and heading16/16. Final lint passed818 files with0warnings/errors (/tmp/parley407-rework-lint-final.log), and git diff --check passed. Durable plan tracks the repair; fresh recorded suite and re-close remain pending. No stage per hub direction.
