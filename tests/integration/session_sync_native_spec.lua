@@ -695,6 +695,78 @@ describe("session-sync native edits", function()
         assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
     end)
 
+    for _, point in ipairs({"before-cleanup", "after-old", "after-new"}) do
+        for _, entry in ipairs({"before-restore", "after-restore", "outside-insert"}) do
+            it("retained release journal respects current intent at " .. point .. "/" .. entry .. " (#404)", function()
+                rewritten_move(false)
+                local destination = root .. "/synchronized.md"
+                exec([[
+                    local destination, point = ...
+                    local ss = require("parley.session_sync")
+                    local synced, protection = ss.synchronize_move(0,sync_token,sync_before); assert(synced,protection)
+                    local ok,intent = ss.move_finalization_snapshot(0,sync_token); assert(ok,intent)
+                    assert(intent.new_lock_after == false, "fixture must authorize release outside insert")
+                    intent.stage = point == "after-new" and "retire" or "protection"
+                    _G.replay = { identity=ss.identity(0), protection=protection, intent=intent }
+                    if point ~= "before-cleanup" then assert(os.remove(replay.identity.File .. ".lock")) end
+                    if point == "after-new" then assert(os.remove(destination .. ".lock")) end
+                    ss.detach(0)
+                ]], destination, point)
+                if entry == "before-restore" then
+                    keys("i"); wait_for("return vim.fn.mode() == 'i'")
+                end
+                exec([[
+                    local destination, entry = ...
+                    local ss = require("parley.session_sync")
+                    local function bytes(path)
+                        local f = io.open(path,"rb"); if not f then return false end
+                        local value=f:read("*a"); f:close(); return value
+                    end
+                    replay.before_old=bytes(replay.identity.File .. ".lock")
+                    replay.before_new=bytes(destination .. ".lock")
+                    local token,reason=ss.restore_move(0,replay.identity,destination,replay.protection,replay.intent)
+                    replay.token=token
+                    if entry == "before-restore" then
+                        assert(not token, "release recovery admitted fresh insert intent")
+                        assert(reason:find("leave insert mode and reopen",1,true),reason)
+                        assert(bytes(replay.identity.File .. ".lock")==replay.before_old,"refusal changed OLD")
+                        assert(bytes(destination .. ".lock")==replay.before_new,"refusal changed NEW")
+                    else assert(token,reason) end
+                ]], destination, entry)
+                if entry == "after-restore" then
+                    keys("i"); wait_for("return vim.fn.mode() == 'i'")
+                    exec([[
+                        local destination=...
+                        local ss=require("parley.session_sync")
+                        local ok,reason=ss.prepare_move_finalization(0,replay.token,replay.intent)
+                        assert(not ok,"persisted permission overrode live insert intent")
+                        assert(reason:find("leave insert mode and reopen",1,true),reason)
+                        local function bytes(path)
+                            local f=io.open(path,"rb"); if not f then return false end
+                            local value=f:read("*a");f:close();return value
+                        end
+                        assert(bytes(replay.identity.File .. ".lock")==replay.before_old,"refusal changed OLD")
+                        assert(bytes(destination .. ".lock")==replay.before_new,"refusal changed NEW")
+                    ]],destination)
+                end
+                if entry ~= "outside-insert" then
+                    keys("<Esc>"); wait_for("return vim.fn.mode() == 'n'")
+                end
+                exec([[
+                    local destination=...
+                    local ss=require("parley.session_sync")
+                    local token=replay.token or assert(ss.restore_move(0,replay.identity,destination,replay.protection,replay.intent))
+                    assert(ss.prepare_move_finalization(0,token,replay.intent))
+                    assert(ss.prepare_move_finalization(0,token,replay.intent),"cleanup replay did not converge")
+                    replay.identity.File=destination
+                    assert(ss.retire_move(0,token,replay.identity))
+                ]],destination)
+                assert.is_nil(vim.uv.fs_stat(file .. ".lock"))
+                assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
+            end)
+        end
+    end
+
     it("replays partial OLD cleanup and preserves foreign NEW protection", function()
         rewritten_move(false)
         local destination = root .. "/synchronized.md"

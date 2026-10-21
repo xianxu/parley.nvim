@@ -833,8 +833,14 @@ M.prepare_submit = function(buf)
     return true
 end
 
-local function automatic_release_eligible(s)
-    return not s.inserting and s.baseline ~= nil
+local function insert_intent(buf)
+    local s = state[buf]
+    return s and s.inserting
+        or vim.api.nvim_get_current_buf() == buf and vim.fn.mode():match("^[iR]") ~= nil
+end
+
+local function automatic_release_eligible(buf, s)
+    return not insert_intent(buf) and s.baseline ~= nil
 end
 
 -- The same acquisition-baseline release serves native undo and synthetic
@@ -842,7 +848,7 @@ end
 M.release_if_baseline = function(buf)
     buf = buffer_id(buf)
     local s = state[buf]
-    if not s or s.moving or not automatic_release_eligible(s) or content_hash(buf) ~= s.baseline then return false end
+    if not s or s.moving or not automatic_release_eligible(buf, s) or content_hash(buf) ~= s.baseline then return false end
     if not s.owned_lock or lock_bytes(M.lock_path(buf)) ~= s.owned_lock then return false end
     if disk_changed(buf) then
         violation(buf)
@@ -976,6 +982,11 @@ M.restore_move = function(buf, old_identity, new_path, protection, finalization)
         or protection.new_lock ~= nil and type(protection.new_lock) ~= "string"
         or protection.baseline ~= nil and type(protection.baseline) ~= "string" then
         return nil, "invalid migration protection bytes"
+    end
+    -- A persisted release is permission for the old turn, never a new insert
+    -- intent. Refuse before attach can acquire obsolete protection at OLD.
+    if finalization and protection.new_lock and finalization.new_lock_after == false and insert_intent(buf) then
+        return nil, "leave insert mode and reopen " .. new_path .. " to finish this move"
     end
     local old_lock = lock_bytes(old_identity.File .. ".lock")
     local new_lock = lock_bytes(new_path .. ".lock")
@@ -1118,7 +1129,7 @@ M.move_finalization_snapshot = function(buf, token)
         return false, "move protection changed before finalization intent"
     end
     local content = content_hash(buf)
-    local release = not vim.bo[buf].modified and automatic_release_eligible(s)
+    local release = not vim.bo[buf].modified and automatic_release_eligible(buf, s)
         and s.baseline == content and s.owned_lock == moving.new_lock
     return true, { old_lock_before = moving.lock or false, new_lock_before = moving.new_lock or false,
         new_lock_after = not release and moving.new_lock or false, editor_hash = content }
@@ -1139,8 +1150,13 @@ M.prepare_move_finalization = function(buf, token, intent)
     end
     local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p")
     if (vim.uv.fs_realpath(path) or path) ~= moving.new_path then return false, "reopen " .. tostring(moving.new_path) .. " to finish this move" end
+    -- Revalidate at the effect boundary, including protection/retire replay.
+    if moving.new_lock and intent.new_lock_after == false and insert_intent(buf) then
+        return false, "leave insert mode and reopen " .. moving.new_path .. " to finish this move"
+    end
     if moving.new_lock and intent.new_lock_after == false
-        and (vim.bo[buf].modified or s.baseline ~= intent.editor_hash or s.owned_lock ~= moving.new_lock) then
+        and (vim.bo[buf].modified or not automatic_release_eligible(buf, s)
+            or s.baseline ~= intent.editor_hash or s.owned_lock ~= moving.new_lock) then
         return false, "operator turn changed before finalization"
     end
     local old_ok, old = finalization_lock(moving.old_path .. ".lock")

@@ -50,7 +50,11 @@ InsertLeave and ModeChanged share one departure handler: Ctrl-C skips
 InsertLeave, but still ends unchanged intent. Completion/replace submodes keep
 intent; non-insert departures defer reconciliation until input/autosave settles.
 Automatic move finalization shares the same eligibility rule and retains live
-intent even when its acquisition baseline is unchanged.
+intent even when its acquisition baseline is unchanged. Persisted release
+permission is rechecked at recovery admission and immediately before cleanup,
+including protection/retire replay. If fresh insert intent conflicts, the move
+stays interrupted: leave insert mode and reopen the destination to finish it.
+No lock or journal is overwritten to force recovery.
 Attachment completed during insert mode takes the same lock. No idle-release
 timer or new watcher is added; failed release retains the existing band/recovery. This acquisition baseline is an in-memory content hash: explicit saves
 and immediate auto-save never advance it. A save of changed text keeps the turn.

@@ -905,3 +905,9 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   handler, with native tests for every exit family rather than Escape alone.
   Enumerate every automatic release consumer (including move finalization)
   before claiming that an intent stays protected for its full lifetime.
+
+- #404 close BR-2: A persisted cleanup intent authorizes an old turn, not the
+  current one. Revalidate live release eligibility immediately before each
+  destructive effect and before recovery attachment can acquire obsolete state.
+  Test recovery before cleanup, between effects and after cleanup, with a new
+  user intent as well as the ordinary idempotent replay controls.

@@ -211,3 +211,15 @@ the intentional exception. Native tests cover retained journals at all three
 cleanup points, entry before and after restore, plus outside-insert replay.
 If close raises a third finding in this family, stop and re-plan the entire lock
 lifecycle as one state table, as the hub requires. ARCH-PURPOSE/ARCH-DRY.
+
+### 2026-10-21 — BR-2 red/green on preferred runtime
+
+Before production changes the retained-journal matrix reproduced six expected
+failures (entry before/after restore at each cleanup point); 105 cases passed,
+including the three outside-insert controls. The shared live-intent predicate
+now guards automatic release eligibility, recovery admission before attachment,
+and the final destructive cleanup boundary. Refusal keeps disk witnesses
+unchanged and gives the approved leave-insert-and-reopen action. All 111 native
+cases pass on Neovim 0.12.5; lint is clean across 818 files and diff-check passes.
+The operator's earlier live acceptance stays recorded above; this replay-only
+correction is being verified on both runtimes before renewed suite and review.
