@@ -100,7 +100,7 @@ Files: `lua/parley/couch.lua`, `lua/parley/session_sync.lua`.
 Files: `README.md`, `atlas/modes/session_sync.md`, this plan and issue Log.
 
 - [x] Document acquire/freshness/failure retry semantics and producer minimum capability; preserve existing lock lifecycle description.
-- [ ] Run `make test-spec SPEC=modes/session_sync` on preferred runtime and with `PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim`; run Couch unit, architecture/docs guards and lint. Expected all green, bounded child/read counts.
+- [x] Run `make test-spec SPEC=modes/session_sync` on preferred runtime and with `PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim`; run Couch unit, architecture/docs guards and lint. Expected all green, bounded child/read counts.
 - [ ] Verify real producer conformance using disposable registered files after pair#777 lands; ask the hub before staging on live :0. No live store/document mutations without its authorization.
 - [ ] Push via sdlc pr, run the recorded suite, close through SDLC's one boundary review, resolve findings, land on SHIP and report the exact merge/PR to the hub.
 

@@ -125,10 +125,18 @@ class OperatorFakeTest(unittest.TestCase):
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.addCleanup(lambda: process.poll() is None and process.kill())
         deadline = time.monotonic() + 5
-        while not self.lock.exists() and time.monotonic() < deadline:
+        owned = None
+        while time.monotonic() < deadline:
+            try:
+                candidate = self.lock.read_text()
+            except FileNotFoundError:
+                candidate = ''
+            if (candidate.startswith('holder: operator\ntime: ')
+                    and candidate.endswith('\ndocument: doc-1\nturn: ' + TOKEN + '\n')):
+                owned = candidate
+                break
             time.sleep(0.01)
-        self.assertTrue(self.lock.exists(), 'acquire never published its lock')
-        owned = self.lock.read_text()
+        self.assertIsNotNone(owned, 'acquire never published its complete ownership proof')
         process.terminate()
         stdout, _ = process.communicate(timeout=1)
         self.assertEqual(stdout, '')

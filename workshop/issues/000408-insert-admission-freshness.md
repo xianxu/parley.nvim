@@ -178,6 +178,19 @@ queued under lease-3037014451 on code head 661a70b6; no duplicate runner, code
 change or stage. Documentation after that code head records the hub-approved
 identity/discovery boundary and #410 follow-up only.
 
+### 2026-10-21 — both mapped runtimes green; replace superseded queued check
+
+The final 0.11.7 mapping also passes all 29 files, 743 cases, zero failures/errors
+(408-mapped-final-011.log); preferred runtime has the same 743/0/0 result. Both
+include 126 native cases. No actual product-code changes followed that evidence.
+The lost-ack fake test now waits for the complete holder/time/document/token
+payload before terminating the fake, rather than only waiting for a newly
+created filename. Its 8 direct executable contract cases pass after the readiness
+correction. Cancelled only this checkout's superseded queued suite with
+sdlc local-check cancel --run lease-3037014451 (confirmed cancelled on 661a70b6).
+Push this settled test head and enqueue its replacement once; do not restart or
+duplicate it while waiting for producer deployment. No live stage has occurred.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
