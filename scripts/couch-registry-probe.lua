@@ -35,6 +35,31 @@ local function run(argv)
     local result = vim.system(argv, { env = config.env, text = true, clear_env = true }):wait()
     return result
 end
+-- #408: actual synchronous production admission, with no supervisor running.
+-- A retry must retain the exact proof; a foreign token cannot release it.
+local function operator_case(path)
+    local couch = require('parley.couch')
+    local id = registered(request('lookup', { path }), path)
+    local identity, token = { ID = id, File = path }, string.rep('a', 32)
+    local function operation(verb, turn)
+        return couch.operator_lock(verb, identity, turn or token)
+    end
+    local acquired = operation('acquire')
+    check(acquired.kind == 'confirmed', 'operator acquire: ' .. vim.inspect(acquired))
+    check(acquired.lock.State == 'acquired', 'initial acquire state')
+    local proof = acquired.lock.LockText
+    check(proof == table.concat(vim.fn.readfile(path .. '.lock'), '\n') .. '\n', 'published proof differs')
+    local retry = operation('acquire')
+    check(retry.kind == 'confirmed' and retry.lock.State == 'already-held'
+        and retry.lock.LockText == proof, 'same-token retry changed proof')
+    check(operation('release', string.rep('b', 32)).kind == 'refused', 'foreign release admitted')
+    check(table.concat(vim.fn.readfile(path .. '.lock'), '\n') .. '\n' == proof, 'foreign release mutated proof')
+    local released = operation('release')
+    check(released.kind == 'confirmed' and released.lock.State == 'released', 'owned release failed')
+    check(vim.fn.filereadable(path .. '.lock') == 0, 'released sidecar survived')
+    local absent = operation('release')
+    check(absent.kind == 'confirmed' and absent.lock.State == 'already-released', 'absent release failed')
+end
 -- What the supervisor's message service writes in a live store, done here by
 -- hand in the isolated one: the marker that it records deliveries, and one
 -- delivered `submitted: PATH` row for `slot`, stamped as Couch stamps it
@@ -115,13 +140,14 @@ local function main()
     registered(request('lookup', { new }), new, id)
     registered(request('lookup', { target }), target, target_id)
     check(request('lookup', { config.root .. '/never.md' }).kind == 'absent', 'null lookup must mean absent')
+    operator_case(new)
     round_case(target)
     if config.fake then
         for _, mode in ipairs({ 'missing', 'malformed', 'unsupported', 'wrong-path' }) do
             check(request('lookup', { new }, mode).kind == 'unavailable', mode .. ' must retain uncertainty')
         end
     end
-    print('PASS: production registry register/lookup/repeat/fs-rename/metadata-rename/replay/conflicts/null/round'
+    print('PASS: production registry register/lookup/repeat/fs-rename/metadata-rename/replay/conflicts/null/round/operator-acquire/retry/refusal/release'
         .. (config.fake and '/malformed/unsupported' or ''))
 end
 local ok, err = pcall(main)

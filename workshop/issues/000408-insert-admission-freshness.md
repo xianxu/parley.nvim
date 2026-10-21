@@ -40,8 +40,8 @@ Held-lock refusal or malformed/mismatched acknowledgment blocks edits visibly; p
 
 ## Plan
 
-- [ ] Pin pair#777 acquire/ack ownership and failure contract through the hub; approve admission/failure design in [the durable plan](../plans/000408-insert-admission-freshness-plan.md).
-- [ ] Red/green native queued-input races, shared bounded acquisition and completed freshness before editing; retain existing ownership/exit/move safety and counted 4/8-turn bounds.
+- [x] Pin pair#777 acquire/ack ownership and failure contract through the hub; approve admission/failure design in [the durable plan](../plans/000408-insert-admission-freshness-plan.md).
+- [x] Red/green native queued-input races, shared bounded acquisition and completed freshness before editing; retain existing ownership/exit/move safety and counted 4/8-turn bounds.
 - [ ] Producer conformance, both runtimes, guards/lint/recorded suite, docs, close review and landing.
 
 
@@ -122,6 +122,39 @@ No full suite or stage is active.
 The hub approved canonical-sidecar-only admission (36085421): pair#777 will
 normalize same-token alias ownership and return the canonical LockPath. Keep
 the consumer path and exact on-disk byte checks; no alias witness guessing.
+
+### 2026-10-21 — architecture guards and disposable protocol probe
+
+Corrected Core-concepts table now passes the complete architecture/unit/docs
+guard map; lint passes with zero warnings/errors across 819 files. Extended the
+existing isolated real/fake registry conformance runner, using a disposable PATH
+for the synchronous production Couch seam. Its new operator case first failed
+against the registry-only fake with usage refusal; routing operator verbs to the
+shared operator fixture makes fake-only conformance pass, including its existing
+corrupted-fake negative control. Real run awaits pair#777's landing pin. The
+broader session-sync mapped tests are running, serialized in this checkout.
+
+### 2026-10-21 — mapped sweep findings and unreadable-proof red/green
+
+The 29-file mapped run completed. Its failures were the operator fake's live
+red-phase edit (a duplicate holder field) and 14 lock-reminder cases whose
+claimed registration was absent from their empty fake registry; all other
+mapped files passed. The fixture now seeds its claimed registration. Settled
+verification passes the fake integration (2), all lock-reminder cases (18),
+and a new unreadable-protection case (1), with zero failures.
+
+Release-sweep inspection found nil == nil could accept an unreadable sidecar
+when a registered attachment had no owned witness. The real-permissions native
+case first reproduced an accepted submit and removed protection; release now
+requires a non-nil exact legacy witness, or confirmed token ownership through
+the producer. Preferred-runtime red/green recorded in 408-unreadable-red.log
+and 408-unreadable-green.log. This enforces the approved unknown-ownership
+refusal, with no new state or recovery action. The operator-runtime rerun also passes the same 1/2/18 cases; the recorded
+full suite will verify the entire final head on both
+runtimes, superseding another duplicated mapped rerun.
+
+Producer canonical-path correction confirmed via Couch ddd81167; its replacement
+suite and close are running. Consumer canonical-only validation is unchanged.
 
 ## Revisions
 

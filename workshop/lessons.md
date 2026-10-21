@@ -916,3 +916,10 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   first-edit ordering test must retain the observer through native rereads, or
   it only measures a missing callback. Serialize make/test-spec within one
   checkout: census cleanup from one run can interrupt another.
+
+## 2026-10-21 (#408 — release ownership evidence)
+
+- Two missing witnesses comparing equal prove nothing. A destructive operation
+  that accepts an exact local witness must require that witness to exist before
+  comparing bytes. Exercise an unreadable on-disk sidecar with no local witness,
+  in addition to ordinary foreign replacement cases.

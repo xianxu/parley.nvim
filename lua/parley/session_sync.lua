@@ -283,7 +283,7 @@ local function release_owned(buf, path, expected)
     if expected and (expected:find("\ndocument:", 1, true) or expected:find("\nturn:", 1, true)) then
         return false, "operator ownership evidence is invalid"
     end
-    if s.identity.ID and expected ~= s.owned_lock then
+    if s.identity.ID and (not expected or expected ~= s.owned_lock) then
         return false, "registered operator protection has no confirmed ownership"
     end
     -- A legacy journal's exact owned witness remains recoverable without a

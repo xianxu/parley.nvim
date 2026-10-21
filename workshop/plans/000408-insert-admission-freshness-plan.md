@@ -20,7 +20,7 @@ collaboration-mode: discussion
 | --- | --- | --- |
 | `operator_result`, `operator_proof` — acknowledgment and ownership validation | `lua/parley/couch.lua` | new |
 
-A decoded result must prove the requested registration identity, canonical file and effective operator protection; missing/mismatched fields, nonzero exit and timeout do not admit input. Exact command/fields and ownership evidence are pinned through the hub with pair:2 before implementation, not invented by the consumer. Validation is pure and unit-tested with malformed/mismatched acknowledgments. There is one acknowledgment per newly admitted turn, not per character. Unknown fields remain tolerated; no persisted schema is introduced.
+A decoded result must prove the requested registration identity, canonical file and effective operator protection; missing/mismatched fields and explicit refusals do not admit input; structured unavailability and the bounded timeout use the approved editable-degraded state below. Exact command/fields and ownership evidence are pinned through the hub with pair:2 before implementation, not invented by the consumer. Validation is pure and unit-tested with malformed/mismatched acknowledgments. There is one acknowledgment per newly admitted turn, not per character. Unknown fields remain tolerated; no persisted schema is introduced.
 
 ### Integration points
 
@@ -78,28 +78,28 @@ For N new turns and B bytes per file: at most one bounded acquire child and one 
 Files: `tests/helpers/fake_couch.lua`, `tests/integration/session_sync_native_spec.lua`, `tests/integration/session_sync_spec.lua`, `tests/unit/couch_spec.lua`.
 
 - [x] Obtain pair#777 command/ack contract before implementation (confirmed in Revisions); record its merge pin at real conformance before landing.
-- [ ] Replace the old insert-entry clobber expectation where the buffer is clean. Fake acquire pauses, writes the external snapshot, then confirms. Queue `iX` together; assert first native edit sees the fresh text and exact lock proof before applying X, with no .clobbered/violation.
-- [ ] Parent/side × both runtimes; unchanged exit, saved/changed reentry, dirty entry, early/late attach, foreign/pre-existing protection; Escape and Ctrl-C.
-- [ ] Held refusal/malformed/mismatched ack: queued input cannot mutate and the notice says so. Unreachable/timeout: queued input applies after the bounded call, warning persists, concurrent disk write preserves both copies via the existing clobber effect, even after auto-save. Retry never guesses ownership; unrelated modifiable settings survive cleanup.
-- [ ] Pin the named 500 ms process option and measure a fake hung acquire finishing at the deadline with harness arrival slack; use a terminating fake process (no orphan sleep/stdio holder).
-- [ ] Retain genuine post-acquisition/dirty conflict tests and prior checktime/autocmd stall regression.
-- [ ] Run focused red tests against main and record expected failures before production edits.
+- [x] Replace the old insert-entry clobber expectation where the buffer is clean. Fake acquire pauses, writes the external snapshot, then confirms. Queue `iX` together; assert first native edit sees the fresh text and exact lock proof before applying X, with no .clobbered/violation.
+- [x] Parent/side × both runtimes; unchanged exit, saved/changed reentry, dirty entry, early/late attach, foreign/pre-existing protection; Escape and Ctrl-C.
+- [x] Held refusal/malformed/mismatched ack: queued input cannot mutate and the notice says so. Unreachable/timeout: queued input applies after the bounded call, warning persists, concurrent disk write preserves both copies via the existing clobber effect, even after auto-save. Retry never guesses ownership; unrelated modifiable settings survive cleanup.
+- [x] Pin the named 500 ms process option and measure a fake hung acquire finishing at the deadline with harness arrival slack; use a terminating fake process (no orphan sleep/stdio holder).
+- [x] Retain genuine post-acquisition/dirty conflict tests and prior checktime/autocmd stall regression.
+- [x] Run focused red tests against main and record expected failures before production edits.
 
 ### 2. Implement minimal shared admission
 
 Files: `lua/parley/couch.lua`, `lua/parley/session_sync.lua`.
 
-- [ ] Add bounded synchronous acquire through the shared process seam; pure ack validation has independent unit cases.
-- [ ] Share one admission lifecycle across InsertEnter/late attach; known owned turn reentry preserves baseline. Explicit refusal/invalid ack gates changes until retry/detach; transport unavailability/500 ms timeout admits edits with the unconfirmed warning and existing conflict preservation. Restore only owned option state.
-- [ ] Run unconditional post-ack native freshness; permit only clean acquisition reload; establish baseline after read completion before input admission.
-- [ ] Run focused native/fake/ownership tests green, including 4/8 counted turns; inspect trace order acquire ack -> read completion -> first edit.
-- [ ] Commit the implementation and evidence; no changes to old #404 review artifacts.
+- [x] Add bounded synchronous acquire through the shared process seam; pure ack validation has independent unit cases.
+- [x] Share one admission lifecycle across InsertEnter/late attach; known owned turn reentry preserves baseline. Explicit refusal/invalid ack gates changes until retry/detach; transport unavailability/500 ms timeout admits edits with the unconfirmed warning and existing conflict preservation. Restore only owned option state.
+- [x] Run unconditional post-ack native freshness; permit only clean acquisition reload; establish baseline after read completion before input admission.
+- [x] Run focused native/fake/ownership tests green, including 4/8 counted turns; inspect trace order acquire ack -> read completion -> first edit.
+- [x] Commit the implementation and evidence; no changes to old #404 review artifacts.
 
 ### 3. Verify, document, close and land
 
 Files: `README.md`, `atlas/modes/session_sync.md`, this plan and issue Log.
 
-- [ ] Document acquire/freshness/failure retry semantics and producer minimum capability; preserve existing lock lifecycle description.
+- [x] Document acquire/freshness/failure retry semantics and producer minimum capability; preserve existing lock lifecycle description.
 - [ ] Run `make test-spec SPEC=modes/session_sync` on preferred runtime and with `PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim`; run Couch unit, architecture/docs guards and lint. Expected all green, bounded child/read counts.
 - [ ] Verify real producer conformance using disposable registered files after pair#777 lands; ask the hub before staging on live :0. No live store/document mutations without its authorization.
 - [ ] Push via sdlc pr, run the recorded suite, close through SDLC's one boundary review, resolve findings, land on SHIP and report the exact merge/PR to the hub.
@@ -196,3 +196,12 @@ case. Counted 4/8 native turns cap full reads at eight per turn and require one
 acquire/release pair. Lost-ack retry preserves exact bytes/time and baseline.
 An old submit receipt cannot hide admission failure; a dedicated red case
 checks warning priority before typing.
+
+### 2026-10-21 — final verification uses the full two-runtime suite
+
+The mapped preferred sweep completed; settled targeted reruns cover its two
+fixture defects. Final verification uses the recorded full suite (which runs
+both preferred Neovim and installed 0.11.7), a superset of repeating both mapped
+sweeps. The native unreadable-protection red/green closes a missing-witness
+equality hole in the already-approved release policy: a nil witness never
+authorizes removal. No state, scope or recovery-policy change.

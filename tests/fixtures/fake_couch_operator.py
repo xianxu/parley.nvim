@@ -26,18 +26,30 @@ def refusal(code, error, exit_code=1):
     return exit_code, dict(Code=code, Error=error)
 
 
-def ownership(text, identity, turn):
-    """Strict fields: duplicate, malformed and legacy ownership never matches."""
+def lock_fields(text):
+    """Match the producer's known-field grammar; unrelated lines are ignored."""
+    if len(text) > 4096 or '\0' in text:
+        return None
     fields = {}
     for line in text.splitlines():
-        if ': ' not in line:
-            return False
-        key, value = line.split(': ', 1)
-        if key in fields:
-            return False
-        fields[key] = value
+        key, separator, value = line.partition(':')
+        if separator and key in ('holder', 'time', 'document', 'turn'):
+            if key in fields:
+                return None
+            fields[key] = value.strip()
+    return fields
+
+
+def ownership(text, identity, turn):
+    fields = lock_fields(text)
+    if fields is None:
+        return False
+    try:
+        datetime.fromisoformat(fields.get('time', '').replace('Z', '+00:00'))
+    except ValueError:
+        return False
     return (fields.get('holder') == 'operator' and fields.get('document') == identity
-            and fields.get('turn') == turn and bool(fields.get('time')))
+            and fields.get('turn') == turn)
 
 
 def operate(args):
@@ -73,7 +85,8 @@ def operate(args):
                                int(os.environ.get('FAKE_COUCH_OPERATOR_EXIT', str(default))))
             text = lock_path.read_text() if lock_path.exists() else None
             # A well-formed legacy agent sidecar is free, not operator ownership.
-            agent = text is not None and text.splitlines().count('holder: agent') == 1
+            fields = lock_fields(text) if text is not None else None
+            agent = fields is not None and fields.get('holder') == 'agent'
             if agent:
                 text = None
             if text is not None and not ownership(text, identity, turn):

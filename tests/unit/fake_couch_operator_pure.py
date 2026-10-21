@@ -65,6 +65,7 @@ class OperatorFakeTest(unittest.TestCase):
 
     def test_foreign_legacy_and_malformed_lock_refuse_without_effect(self):
         for content in ('holder: operator\nsince: 1\n',
+                        'holder: agent\nholder: operator\n',
                         'holder: operator\ndocument: doc-1\nturn: ' + TOKEN + '\nturn: duplicate\n'):
             self.lock.write_text(content)
             code, reply = self.request()

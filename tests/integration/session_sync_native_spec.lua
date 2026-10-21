@@ -357,6 +357,23 @@ describe("session-sync native edits", function()
         assert.is_nil(vim.uv.fs_stat(sent_file))
     end)
 
+    it("submit preserves unreadable registered protection with no owned witness (#408)",function()
+        open(false,false,true,true)
+        local foreign={"holder: operator","time: foreign"}
+        vim.fn.writefile(foreign,file..".lock")
+        assert.is_true(vim.uv.fs_chmod(file..".lock",0))
+        local accepted=exec([[
+            local input=io.open(path..".lock","rb")
+            if input then input:close(); error("fixture sidecar remains readable") end
+            local ss=require("parley.session_sync")
+            return ss.send_registered(0,ss.identity(0),function() end)
+        ]])
+        vim.uv.fs_chmod(file..".lock",384)
+        assert.is_false(accepted)
+        assert.same(foreign,vim.fn.readfile(file..".lock"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
     it("observed registered edits acquire a producer turn before insert (#408)",function()
         open(false,false,true,true)
         exec([[

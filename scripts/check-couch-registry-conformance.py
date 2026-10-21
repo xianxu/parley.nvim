@@ -77,6 +77,12 @@ def probe(nvim, repo, binary, root, *, fake=False, corrupt=False):
             env["FAKE_COUCH_REGISTRY_MODE"] = "wrong-path"
     else:
         adopt_store(binary, env)
+    # The admission seam intentionally invokes `couch`, just as the editor
+    # does. Select the candidate inside this process's disposable PATH only.
+    command_dir = root / "bin"
+    command_dir.mkdir()
+    (command_dir / "couch").symlink_to(binary)
+    env["PATH"] = str(command_dir) + os.pathsep + env.get("PATH", "")
     fixture = root / "probe.json"
     fixture.write_text(json.dumps({"binary": binary, "root": str(root), "env": env, "fake": fake}))
     env.update(PARLEY_CONFORMANCE_ROOT=str(repo), PARLEY_REGISTRY_PROBE=str(fixture))
@@ -101,8 +107,11 @@ def main():
         tempbin = scratch / "bin"
         tempbin.mkdir()
         fake = tempbin / "couch"
-        fake.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + " "
-                        + shlex.quote(str(repo / "tests/fixtures/fake_couch_registry.py")) + ' "$@"\n')
+        fake.write_text('#!/bin/sh\ncase "$2" in\noperator-acquire|operator-release) exec '
+                        + shlex.quote(sys.executable) + " "
+                        + shlex.quote(str(repo / "tests/fixtures/fake_couch_operator.py")) + ' "$@" ;;\n'
+                        + '*) exec ' + shlex.quote(sys.executable) + " "
+                        + shlex.quote(str(repo / "tests/fixtures/fake_couch_registry.py")) + ' "$@" ;;\nesac\n')
         fake.chmod(0o700)
         for label, command, is_fake in ([('fake', str(fake), True)] if args.fake_only else
                                         [('real', binary, False), ('fake', str(fake), True)]):
