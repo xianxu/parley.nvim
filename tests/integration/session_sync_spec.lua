@@ -203,6 +203,29 @@ describe("session-sync buffer", function()
         end)
     end
 
+    for _, pairs in ipairs({4, 8}) do
+        it("bounds full-buffer hashing across " .. pairs .. " insert mode pairs (#404)", function()
+            open(header)
+            local get_lines, reads = vim.api.nvim_buf_get_lines, 0
+            vim.api.nvim_buf_get_lines = function(target, first, last, ...)
+                if target == buf and first == 0 and last == -1 then reads = reads + 1 end
+                return get_lines(target, first, last, ...)
+            end
+            local ok, err = pcall(function()
+                for _ = 1, pairs do
+                    vim.api.nvim_exec_autocmds("InsertEnter", {buffer=buf})
+                    assert.is_true(exists(file .. ".lock"))
+                    vim.api.nvim_exec_autocmds("InsertLeave", {buffer=buf})
+                    assert.is_true(vim.wait(arrival_ms(), function() return not exists(file .. ".lock") end))
+                end
+            end)
+            vim.api.nvim_buf_get_lines = get_lines
+            assert.is_true(ok, tostring(err))
+            assert.is_true(reads >= 2 * pairs, tostring(reads))
+            assert.is_true(reads <= 4 * pairs, tostring(reads))
+        end)
+    end
+
     it("starts free, and the first modification takes the operator's turn", function()
         open(header)
         assert.is_false(exists(file .. ".lock"))

@@ -113,6 +113,195 @@ describe("session-sync native edits", function()
         vim.fn.delete(root, "rf")
     end)
 
+    for _, kind in ipairs({"registered session", "registered side doc"}) do
+        it(kind .. " locks on actual insert entry and releases unchanged escape (#404)", function()
+            if kind == "registered side doc" then
+                local original = file
+                file = root .. "/session.side/discussion.md"
+                vim.fn.mkdir(root .. "/session.side", "p")
+                vim.fn.writefile(vim.fn.readfile(original), file)
+                local lines = vim.fn.readfile(file)
+                lines[2] = "type: prose"
+                vim.fn.writefile(lines, file)
+            end
+            open(true, false, true, true)
+            keys("i")
+            wait_for("return vim.fn.mode() == 'i'")
+            assert.is_true(exists(), "insert turn was not protected")
+            locked()
+            assert.is_false(exec("return vim.bo.modified"))
+            assert.is_true(exec("return vim.wo.winbar:find('yours',1,true) ~= nil"))
+            keys("<Esc>")
+            wait_for("return vim.fn.mode() == 'n'")
+            assert.is_true(vim.wait(arrival.MS, function() return not exists() end), "unchanged escape kept lock")
+            assert.is_nil(vim.uv.fs_stat(sent_file), "unchanged exit sent a submission")
+        end)
+    end
+
+    it("insert intent stays locked after typing back to the baseline until escape (#404)", function()
+        open(true, false, true, true)
+        keys("ix<C-h>")
+        wait_for("return vim.fn.mode() == 'i' and vim.api.nvim_buf_get_lines(0,7,8,false)[1] == 'first bullet'")
+        exec("vim.schedule(function() _G.insert_settled=true end)")
+        wait_for("return _G.insert_settled == true")
+        assert.is_true(exists(), "insert turn was not protected")
+        locked()
+        keys("<Esc>")
+        assert.is_true(vim.wait(arrival.MS, function() return not exists() end))
+    end)
+
+    it("auto-saved changes survive escape and insert re-entry until submit (#404)", function()
+        open(true, false, true, true)
+        keys("iX<Esc>")
+        wait_for("return vim.fn.mode() == 'n' and not vim.bo.modified")
+        assert.is_true(exists(), "insert turn was not protected")
+        locked()
+        keys("i<Esc>")
+        exec("vim.schedule(function() _G.insert_settled=true end)")
+        wait_for("return _G.insert_settled == true")
+        assert.is_true(exists(), "insert turn was not protected")
+        locked()
+        exec("require('parley.session_sync').submit(0)")
+        assert.is_true(vim.wait(arrival.MS, function() return not exists() end))
+        notified("submitted")
+    end)
+
+    it("late registration during insert takes the turn before any keystroke (#404)", function()
+        open(false, false, true, true)
+        exec("require('parley.session_sync').detach(0)")
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        assert.is_false(exists())
+        exec("require('parley.session_sync').attach(0,{ID='doc-1',File=path,Owner='ops:0'})")
+        assert.is_true(exists(), "insert turn was not protected")
+        locked()
+        keys("<Esc>")
+        assert.is_true(vim.wait(arrival.MS, function() return not exists() end))
+    end)
+
+    for _, replacement in ipairs({false, true}) do
+        it("unchanged escape preserves " .. (replacement and "replacement" or "pre-existing") .. " lock (#404)", function()
+            local foreign = {"holder: operator", "time: 2000-01-01T00:00:00Z", "foreign: true"}
+            if not replacement then vim.fn.writefile(foreign, file .. '.lock') end
+            open(false, false, true, true)
+            keys("i")
+            wait_for("return vim.fn.mode() == 'i'")
+            if replacement then vim.fn.writefile(foreign, file .. '.lock') end
+            keys("<Esc>")
+            wait_for("return vim.fn.mode() == 'n'")
+            assert.same(foreign, vim.fn.readfile(file .. '.lock'))
+        end)
+    end
+
+    it("insert entry reconciles a write racing the loaded buffer without blocking (#404)", function()
+        open(false, false, true, true)
+        local foreign = vim.fn.readfile(file)
+        foreign[8] = "foreign before insert"
+        vim.fn.writefile(foreign, file)
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        assert.is_true(exists(), "insert entry did not protect the loaded buffer")
+        notified("session-sync violation")
+        assert.equals("foreign before insert", vim.fn.readfile(file .. '.clobbered')[8])
+        assert.equals("first bullet", exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        keys("<Esc>")
+    end)
+
+    it("plain unregistered Markdown never locks on insert (#404)", function()
+        local lines = vim.fn.readfile(file)
+        lines[2] = "type: prose"
+        vim.fn.writefile(lines, file)
+        open(false, false, true, false)
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        assert.is_false(exists())
+        keys("<Esc>")
+        wait_for("return vim.fn.mode() == 'n'")
+        assert.is_false(exists())
+    end)
+
+    it("escape reconciles a foreign write outside the input autocmd before release (#404)", function()
+        open(false, false, true, true)
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        locked()
+        local foreign = vim.fn.readfile(file)
+        foreign[8] = "foreign before escape"
+        vim.fn.writefile(foreign, file)
+        keys("<Esc>")
+        wait_for("return vim.fn.mode() == 'n'")
+        notified("session-sync violation")
+        assert.equals("foreign before escape", vim.fn.readfile(file .. '.clobbered')[8])
+        assert.equals("first bullet", vim.fn.readfile(file)[8])
+    end)
+
+    for _, side in ipairs({false, true}) do
+        for _, autosave in ipairs({false, true}) do
+            for _, late in ipairs({false, true}) do
+                for _, changed in ipairs({false, true}) do
+                    it(("Ctrl-C releases %s %s late=%s autosave=%s (#404 BR-1)"):format(
+                        side and "side doc" or "parent", changed and "after full undo" or "unchanged",
+                        tostring(late), tostring(autosave)), function()
+                        if side then
+                            local original = file
+                            file = root .. "/session.side/note.md"
+                            vim.fn.mkdir(root .. "/session.side", "p")
+                            local lines = vim.fn.readfile(original)
+                            lines[2] = "type: prose"
+                            vim.fn.writefile(lines, file)
+                        end
+                        open(autosave, false, true, true)
+                        if late then exec("require('parley.session_sync').detach(0)") end
+                        keys("i")
+                        wait_for("return vim.fn.mode() == 'i'")
+                        if late then exec("require('parley.session_sync').attach(0,{ID='doc-1',File=path,Owner='ops:0'})") end
+                        assert.is_true(exists())
+                        keys(changed and "X<C-c>" or "<C-c>")
+                        wait_for("return vim.fn.mode() == 'n'")
+                        if changed then
+                            assert.is_true(exists(), "changed exit lost protection")
+                            keys("u")
+                            wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1] == 'first bullet'")
+                        end
+                        exec("vim.schedule(function() _G.ctrl_c_settled=true end)")
+                        wait_for("return _G.ctrl_c_settled == true")
+                        assert.is_false(exists(), "actual mode departure stranded insert intent")
+                        assert.is_nil(vim.uv.fs_stat(sent_file))
+                    end)
+                end
+            end
+        end
+    end
+
+    it("automatic move finalization preserves live unchanged insert intent (#404)", function()
+        open(false, false, true, true)
+        keys("i")
+        wait_for("return vim.fn.mode() == 'i'")
+        assert.is_true(exists())
+        local destination = root .. '/renamed.md'
+        exec([[
+            local destination = ...
+            local ss=require('parley.session_sync')
+            local identity=ss.identity(0)
+            local token=assert(ss.begin_move(0))
+            assert(ss.install_move_lock(0,token,destination))
+            vim.api.nvim_buf_set_name(0,destination)
+            vim.cmd('silent write')
+            assert(vim.fn.mode()=='i', 'probe must preserve actual insert mode')
+            local ok,intent=ss.move_finalization_snapshot(0,token)
+            assert(ok,intent)
+            assert(intent.new_lock_after==intent.new_lock_before, 'finalization dropped live insert intent')
+            intent.stage='protection'
+            assert(ss.prepare_move_finalization(0,token,intent))
+            identity.File=destination
+            assert(ss.retire_move(0,token,identity))
+        ]],destination)
+        file=destination
+        assert.is_true(exists())
+        keys('<Esc>')
+        assert.is_true(vim.wait(arrival.MS,function() return not exists() end))
+    end)
+
     local function feedback(message, is_error)
         return exec([[
             local message, is_error = ...
@@ -505,6 +694,78 @@ describe("session-sync native edits", function()
         assert.is_nil(vim.uv.fs_stat(file .. ".lock"))
         assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
     end)
+
+    for _, point in ipairs({"before-cleanup", "after-old", "after-new"}) do
+        for _, entry in ipairs({"before-restore", "after-restore", "outside-insert"}) do
+            it("retained release journal respects current intent at " .. point .. "/" .. entry .. " (#404)", function()
+                rewritten_move(false)
+                local destination = root .. "/synchronized.md"
+                exec([[
+                    local destination, point = ...
+                    local ss = require("parley.session_sync")
+                    local synced, protection = ss.synchronize_move(0,sync_token,sync_before); assert(synced,protection)
+                    local ok,intent = ss.move_finalization_snapshot(0,sync_token); assert(ok,intent)
+                    assert(intent.new_lock_after == false, "fixture must authorize release outside insert")
+                    intent.stage = point == "after-new" and "retire" or "protection"
+                    _G.replay = { identity=ss.identity(0), protection=protection, intent=intent }
+                    if point ~= "before-cleanup" then assert(os.remove(replay.identity.File .. ".lock")) end
+                    if point == "after-new" then assert(os.remove(destination .. ".lock")) end
+                    ss.detach(0)
+                ]], destination, point)
+                if entry == "before-restore" then
+                    keys("i"); wait_for("return vim.fn.mode() == 'i'")
+                end
+                exec([[
+                    local destination, entry = ...
+                    local ss = require("parley.session_sync")
+                    local function bytes(path)
+                        local f = io.open(path,"rb"); if not f then return false end
+                        local value=f:read("*a"); f:close(); return value
+                    end
+                    replay.before_old=bytes(replay.identity.File .. ".lock")
+                    replay.before_new=bytes(destination .. ".lock")
+                    local token,reason=ss.restore_move(0,replay.identity,destination,replay.protection,replay.intent)
+                    replay.token=token
+                    if entry == "before-restore" then
+                        assert(not token, "release recovery admitted fresh insert intent")
+                        assert(reason:find("leave insert mode and reopen",1,true),reason)
+                        assert(bytes(replay.identity.File .. ".lock")==replay.before_old,"refusal changed OLD")
+                        assert(bytes(destination .. ".lock")==replay.before_new,"refusal changed NEW")
+                    else assert(token,reason) end
+                ]], destination, entry)
+                if entry == "after-restore" then
+                    keys("i"); wait_for("return vim.fn.mode() == 'i'")
+                    exec([[
+                        local destination=...
+                        local ss=require("parley.session_sync")
+                        local ok,reason=ss.prepare_move_finalization(0,replay.token,replay.intent)
+                        assert(not ok,"persisted permission overrode live insert intent")
+                        assert(reason:find("leave insert mode and reopen",1,true),reason)
+                        local function bytes(path)
+                            local f=io.open(path,"rb"); if not f then return false end
+                            local value=f:read("*a");f:close();return value
+                        end
+                        assert(bytes(replay.identity.File .. ".lock")==replay.before_old,"refusal changed OLD")
+                        assert(bytes(destination .. ".lock")==replay.before_new,"refusal changed NEW")
+                    ]],destination)
+                end
+                if entry ~= "outside-insert" then
+                    keys("<Esc>"); wait_for("return vim.fn.mode() == 'n'")
+                end
+                exec([[
+                    local destination=...
+                    local ss=require("parley.session_sync")
+                    local token=replay.token or assert(ss.restore_move(0,replay.identity,destination,replay.protection,replay.intent))
+                    assert(ss.prepare_move_finalization(0,token,replay.intent))
+                    assert(ss.prepare_move_finalization(0,token,replay.intent),"cleanup replay did not converge")
+                    replay.identity.File=destination
+                    assert(ss.retire_move(0,token,replay.identity))
+                ]],destination)
+                assert.is_nil(vim.uv.fs_stat(file .. ".lock"))
+                assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
+            end)
+        end
+    end
 
     it("replays partial OLD cleanup and preserves foreign NEW protection", function()
         rewritten_move(false)
