@@ -28,7 +28,7 @@ Follow-up to #404, requested by the operator through the hub (Couch 61805ff7-ac9
 
 On InsertEnter for a registered session file or side doc, operator protection must be effective before the first edit applies. Once acquisition is confirmed, run an unconditional freshness check; if the file changed while the buffer is still unmodified, reload silently before admitting edits. Preserve modified-buffer conflict safety, existing ownership checks and unchanged-exit/submit lifecycle. No two-phase protocol. Check Couch's writer for atomic exclusion against acquisition at write time; coordinate any producer fix rather than asserting a local sidecar write excludes an in-flight writer.
 
-Held-lock refusal or malformed/mismatched acknowledgment blocks edits visibly; pending keys are not applied and the notice says so. Couch unreachable or a bounded 500 ms timeout permits editing with "not locked: Couch unreachable; edits may conflict"; concurrent disk changes use the existing clobber-copy path. Unknown ownership never authorizes unlock. This approved exception refines the confirmed-acquisition guarantee above (Revision below).
+Held-lock refusal or malformed/mismatched acknowledgment blocks edits visibly; pending keys are not applied and the notice says so. Namespace/store unavailability or a bounded 500 ms timeout permits editing with "not locked: Couch unreachable; edits may conflict"; concurrent disk changes use the existing clobber-copy path. Unknown ownership never authorizes unlock. This approved exception refines the confirmed-acquisition guarantee above (Revision below).
 
 ## Done when
 
@@ -75,3 +75,14 @@ concurrent changes through the existing clobber-copy path, and use a named,
 measured 500 ms wait. Updated Spec/Done when and the durable plan's state table
 and tests; no producer assumptions or code changes. Await pair#777's pinned
 contract through the hub.
+
+### 2026-10-21 — acquire/release proposal and remaining pins
+
+The hub proposed operator-acquire/operator-release with ID, canonical path and
+a stable 32-hex turn token, registry-transaction serialization, exact lock-text
+ownership evidence and idempotent same-token retries. Agreed in principle,
+requesting machine-coded unavailable-store errors, recoverable move token and
+exact release success shape through the hub before code. Both commands run
+in-process: a stopped supervisor does not trigger editable degraded mode; only
+namespace/store unavailable or the 500 ms timeout does. Updated the durable
+plan's active table/seams/cost and appended its contract Revision.

@@ -31,7 +31,7 @@ A decoded result must prove the requested registration identity, canonical file 
 | Native freshness | `lua/parley/session_sync.lua` | modified | checktime, FileChangedShell/native reread and window-view restoration |
 | Stateful fake Couch | `tests/helpers/fake_couch.lua` | modified | delayed acquire, ack success/refusal/timeout, external write before ack |
 
-The process seam must remain the one Couch spawn owner (ARCH-DRY). It returns before InsertEnter finishes; queued input cannot run during acquisition. A named insert-acquire bound is exactly 500 ms, independent of the longer submit timeout; test the passed deadline and measured hung-child duration. No new timer/retry daemon. A known owned turn can re-enter without spawning or resetting its baseline. Pre-existing/foreign protection is never claimed as newly acquired or silently released.
+Token-owned release uses the same process seam and producer operator-release command, rather than unlinking an acknowledged lock locally; legacy unowned protection keeps only its existing explicitly authorized handling. All automatic, explicit-submit and move-finalization releases are enumerated in tests. The process seam must remain the one Couch spawn owner (ARCH-DRY). It returns before InsertEnter finishes; queued input cannot run during acquisition. A named insert-acquire bound is exactly 500 ms, independent of the longer submit timeout; test the passed deadline and measured hung-child duration. No new timer/retry daemon. A known owned turn can re-enter without spawning or resetting its baseline. Pre-existing/foreign protection is never claimed as newly acquired or silently released.
 
 ## Producer contract and alternatives
 
@@ -52,12 +52,12 @@ Actions: enter insert, leave insert, retry by leaving and entering insert again,
 | Confirmed + clean; unchanged disk | Normal insert and operator band | Edit | None |
 | Existing changed operator turn | Existing operator band; no baseline reset/reload | Submit | None |
 | Held-lock refusal, other explicit refusal, malformed or mismatched ack | Visible acquisition failure; buffer non-modifiable | Leave insert and retry insert | Typed characters while refused are not applied or saved; state this in notice |
-| Couch unreachable (not running/socket absent) | Editable, band: not locked: Couch unreachable; edits may conflict | Edit | Concurrent agent changes may conflict; existing clobber-copy handling preserves both copies |
+| Namespace/store unavailable (not a stopped supervisor) | Editable, band: not locked: Couch unreachable; edits may conflict | Edit | Concurrent agent changes may conflict; existing clobber-copy handling preserves both copies |
 | 500 ms timeout, including possible unacknowledged acquisition | Same editable warning; retain witnessed protection, never delete on guess | Edit | No guaranteed exclusion; conflicts use clobber-copy handling, no silent unlock |
 | Genuine dirty-buffer foreign write | Existing violation handling | Submit through existing reconciliation | Existing clobbered-copy policy retained |
 | Move/recovery in progress | Existing interrupted-move state | Reopen to finish move | No new automatic release rule |
 
-Failure gating owns only the temporary modifiable setting it installed: restore only if still owned, after successful admission or detach. Do not turn queued text into Normal-mode commands by forcing stopinsert. No automatic retry. TL approved this split in Couch ba2623c0-aa38-4941-81ed-66909e97aef2. Unreachable/timeout must restore any admission-owned edit gate before returning to queued input; never normalize those outcomes to a held-lock refusal. Classify explicit transport unavailability separately from successful-but-invalid JSON and explicit producer refusals.
+Failure gating owns only the temporary modifiable setting it installed: restore only if still owned, after successful admission or detach. Do not turn queued text into Normal-mode commands by forcing stopinsert. No automatic retry. TL approved this split in Couch ba2623c0-aa38-4941-81ed-66909e97aef2. Unreachable/timeout must restore any admission-owned edit gate before returning to queued input; never normalize those outcomes to a held-lock refusal. Classify machine-coded namespace/store unavailability separately from successful-but-invalid JSON and explicit producer refusals. Acquire/release run in-process; a stopped Couch supervisor is not unavailable.
 
 The editable degraded state remains visibly unconfirmed through ordinary saves and status refreshes until a real acquire acknowledgment establishes protection. Do not rely on sidecar existence to claim the turn is confirmed. Reuse the existing violation/clobber-copy effect when a concurrent disk change meets a degraded operator edit, including a buffer auto-save has made clean; the free-turn clean reload path must not discard the operator's copy. No extra watcher or ownership-by-guess fallback. Native tests retain both copies and the warning.
 
@@ -69,7 +69,7 @@ Native checktime inside InsertEnter can defer the actual reload. Do not equate c
 
 ## Cost and lifecycle
 
-For N new turns and B bytes per file: at most one bounded acquire child and a constant number of full-buffer/disk reads per turn, O(N*B); zero new processes per character, zero scans of other buffers. Count children and full reads at 4/8 turns. Existing-owned-turn reentry is O(1) ownership work without an acquire child. Existing per-attachment state owns the gate/receipt and discards them on detach; creates no new durable artifact family or growing queue (ARCH-BOUNDED).
+For N new turns and B bytes per file: at most one bounded acquire child and one matching release child, plus a constant number of full-buffer/disk reads per turn, O(N*B); zero new processes per character, zero scans of other buffers. Count children and full reads at 4/8 turns. Existing-owned-turn reentry is O(1) ownership work without an acquire child. Existing per-attachment state owns the gate/receipt and discards them on detach; creates no new durable artifact family or growing queue (ARCH-BOUNDED).
 
 ## Tasks (single close boundary)
 
@@ -123,3 +123,32 @@ clobber path, including auto-saved buffers; never infer ownership from a lost
 reply. The active state table, task checks and deadline text above are updated
 to the approved contract. No code starts before pair#777's argv/ack/ownership/
 retry pin, agreed through the hub.
+
+### 2026-10-21 — proposed acquire/release contract agreement
+
+Hub delivery 2617a411-5543-4c85-8b9c-ebbaf9bcd339 proposes:
+
+- `couch --session-sync operator-acquire FILE --id ID --turn TOKEN --json`;
+  matching `operator-release` arguments; bare release remains retired.
+- FILE resolves to current registered canonical path, ID pins registration.
+- TOKEN is 32 lowercase hex, generated once per operator turn and retained
+  across lost replies. Same-token retry preserves exact ownership/text/time.
+- Success: `Code: ok`, `OperatorLock: {ID, File, Holder: operator, Turn,
+  LockPath, LockText, State: acquired|already-held}`. Foreign/legacy protection
+  refuses without mutation. Release checks ID/token under the same flock and
+  returns released/already-released; stale/foreign protection refuses.
+- These commands work without the supervisor. Degraded editable mode applies
+  only to namespace/store unavailable or the consumer's 500 ms timeout.
+
+Agreed in principle through the hub, with three remaining pins before code:
+(1) machine-readable unavailable-store Code/exit, distinct from explicit
+refusals; (2) token recoverable from LockText or an explicit recovery query,
+with copied move protection releasable under NEW canonical path plus same
+ID/token; (3) release success envelope, preferably OperatorLock with echoed
+ID/File/Turn and State released|already-released, with absence recognized
+without claiming another ownership. Existing journals retain opaque lock bytes
+and registration ID, so no new persisted journal format is required if the
+token is in those bytes. Report receipt ac7195e9-2fcc-4df9-bc76-09d4d20ecad1.
+
+The active table/cost/seam text above is adjusted for the in-process producer
+and matching release call. No implementation yet.
