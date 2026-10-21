@@ -14,12 +14,12 @@ collaboration-mode: discussion
 
 ## Core concepts
 
-| Entity | Lives in | Status |
-|---|---|---|
-| Navigation range | lua/parley/entity_range.lua | modified |
-| Code fence memo | lua/parley/document/lexical.lua | modified |
-| Heading anchor lookup | lua/parley/markdown_heading.lua | new |
-| File destination plus fragment | lua/parley/issues.lua | modified |
+| Entity | Lives in | Status | Classification |
+|---|---|---|---|
+| Navigation range | lua/parley/entity_range.lua | modified | PURE |
+| Code fence memo | lua/parley/document/lexical.lua | modified | PURE |
+| Heading anchor lookup | lua/parley/markdown_heading.lua | new | PURE |
+| File destination plus fragment | lua/parley/issues.lua | modified | PURE |
 
 Navigation owns one transient range per invocation; nested items are bounded by their enclosing indentation. The memo is one boolean per input row; its private opener retains delimiter character and run length. Heading lookup owns a transient used-slug set so normalized duplicate headings get unique suffixes. No persisted formats change; all temporary values end with the call (ARCH-FUNERAL, ARCH-EVOLVE).
 
@@ -68,3 +68,13 @@ The hub approved these three repair families in delivery d74a4811-e326-4a39-9e98
 ### 2026-10-21 — Corrected-head suite complete
 
 The corrected implementation passed its recorded suite. Re-close and landing remain follow-on gate actions written as prose; checking implementation tasks does not claim either gate has already completed.
+
+### 2026-10-21 — Round 2: replace case patches with shared rules
+
+Round2 accepts BR-2 and BR-3, but retains BR-1 for quoted HTML attributes and character references, and raises BR-4 in the repeated navigation-item-boundaries family. Prior green suites do not cover these new counterexamples. Reopen verification; no more isolated heading/bullet exceptions.
+
+Proposed rule for item containment: derive navigation block openers from reference_candidates.markdown_blocks, the occurrence scanner's existing classifier. A block outside an item's content indentation ends it, including ATX headings1–6 (empty or not), thematic/setext walls, block quotes, sibling lists and fenced blocks. Indented counterparts remain owned by the item. Plain lazy continuations remain until a blank or outside block; editing ranges and numbered-item dispatch remain independent. Add the full3-marker ×6-level ×2-indentation ×2-heading-text sweep plus quote/wall/fence negatives and indented positive controls, and real mapping negatives.
+
+Proposed rule for inline content: one quote-aware HTML-tag scan (greater-than inside quoted attributes is content), then a real character-reference decoder before slugging rendered text; code spans and backslash escapes keep their current protection. Numeric references cover decimal/hex and invalid-scalar behavior; named references need a complete finite lookup rather than another few hardcoded entity cases. No existing Lua decoder is present. Proposed bounded source artifact: a generated HTML5 named-reference table from the development Python standard library, with an explicit regeneration script/source metadata and reviewable diffs; runtime stays Lua-only. Use Unicode-aware deterministic case conversion where decoded letters need it. Normalize duplicates after this common pipeline.
+
+The simpler alternative—another pattern for quoted attributes and only a few named entities—fails the same class on the next valid entity or quoted delimiter. A new runtime renderer/library would add a dependency to every plugin user. A finite generated lookup and shared classifier keep ownership explicit. This revision awaits hub approval, including the data artifact, before further production changes.
