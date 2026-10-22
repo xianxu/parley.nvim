@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "2a278ef4", done: "738788d6"}
 ---
 
 # Investigate native o-retry refusal flake on Neovim 0.11
