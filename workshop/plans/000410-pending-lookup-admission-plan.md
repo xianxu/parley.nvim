@@ -25,10 +25,11 @@ Recommended: carry one immutable absolute deadline through an ephemeral insert s
 | Name | Lives in | Status |
 |------|----------|--------|
 | `remaining_ms` | `lua/parley/couch.lua` | new |
+| `dispatch` | `lua/parley/operator_admission.lua` | modified |
 
-`remaining_ms` is arithmetic only: `math.max(0, math.floor(deadline_ms - now_ms))`. It takes clock readings as data and cannot refresh a deadline. Test directly in `tests/unit/couch_spec.lua`: start, partially consumed, exact expiry, overrun, fractional remainder. Keep it beside the existing timeout owner rather than introducing a new module for arithmetic (ARCH-DRY/PURE).
+`remaining_ms` is arithmetic only: `math.max(0, math.floor(deadline_ms - now_ms))`. It takes clock readings as data and cannot refresh a deadline. Its arithmetic properties are tested directly without IO in `tests/unit/couch_spec.lua`. Keep it beside the existing timeout owner rather than introducing a new module for arithmetic (ARCH-DRY/PURE).
 
-`operator_admission` and the document lifecycle's operation/witness model remain unchanged: the budget is scheduling context, not lock ownership or edit history. Existing pure sequence tests remain regression coverage.
+The document lifecycle's operation/witness model remains unchanged. The private operator_admission dispatch gains an internal `legacy_release` acquisition stage, retaining its existing public phases and sole ownership of baseline/content/history/proof/token. This stage is a continuation of acquisition, never an ordinary history-retiring release (history-preserving re-plan below).
 
 ### Integration points
 
@@ -36,17 +37,19 @@ Recommended: carry one immutable absolute deadline through an ephemeral insert s
 |------|----------|--------|-------|
 | `attach` | `lua/parley/agentic_document.lua` | modified | native InsertEnter, exact active lookup, bounded event-loop wait |
 | `adopt` | `lua/parley/agentic_document.lua` | modified | registration adoption and session-sync handoff |
+| `pending_lookup` | `lua/parley/agentic_document.lua` | new | exact eligible lookup in live controller state |
+| `admit_insert` | `lua/parley/agentic_document.lua` | new | one bounded native input join shared by both callback owners |
 | `attach` | `lua/parley/session_sync.lua` | modified | existing admission owner and nested late attachment |
 | `acquire_observed` | `lua/parley/session_sync.lua` | modified | observed edit handoff into existing admission dispatcher |
 | `finish_input_scope` | `lua/parley/session_sync.lua` | new | exact-scope cleanup after native input wait |
 | `operator_lock` | `lua/parley/couch.lua` | modified | synchronous operator acquire process and wait |
 | stateful registry/operator fixtures | `tests/helpers/fake_couch.lua`, `tests/fixtures/fake_couch_registry.py`, `tests/fixtures/fake_couch_operator.py` | modified as needed | controlled request completion and persisted registration/lock state |
 
-Extend the internal attachment/observed-acquire handoff with an optional admission scope, preserving current callers. `M.operator_lock(verb, identity, token, deadline_ms)` defaults to its existing per-call 500 ms behavior when no enclosing scope exists. Release remains unchanged. No new producer protocol is required.
+Extend the internal attachment/observed-acquire handoff with an optional admission scope, preserving current callers. `M.operator_lock(verb, identity, token, deadline_ms)` defaults to its existing per-call 500 ms behavior when no enclosing scope exists. Ordinary registered/legacy release remains unchanged; the separate acquisition continuation below does not retire history. No new producer protocol is required.
 
 ## Scheduling and ownership
 
-On S1 InsertEnter, inspect the controller's current lifecycle operation. Join only an existing `lookup` for this loaded buffer/path/namespace/incarnation, with no confirmed identity; exclude register, confirm-parent, move/recovery and another buffer's operation. Snapshot that operation's witness. Allocate one scope with absolute monotonic deadline `now + couch.OPERATOR_LOCK_TIMEOUT_MS` and this controller/witness; install it before yielding to `vim.wait`.
+Whichever controller already owns native InsertEnter invokes S1's shared `admit_insert`. `pending_lookup` supplies only an existing eligible lookup for the exact loaded buffer/path/namespace/incarnation without confirmed identity. The first join snapshots its witness and allocates one absolute deadline `now + couch.OPERATOR_LOCK_TIMEOUT_MS` before yielding to vim.wait; reentry joins that scope. S1's own callback does not start a second wait when session-sync already owns entry. The legacy callback therefore cannot establish tokenless protection ahead of pending discovery. An unresolved pending lookup defers legacy writes while feeding the first observed pre-edit baseline into the private owner; proven absence returns to existing legacy behavior without another Couch wait.
 
 ~~The scope has only `waiting`, `acquiring`, `settled`, `closed` phases.~~ The scope uses a deadline, original incarnation/witness, one attempted/result guard and a closed marker; these schedule the single input event and never duplicate lock/history state (Revision below). It is private to this input event; no module-global active deadline. Joining another callback cannot allocate a replacement scope. A nested callback for the same scope reuses it; an irrelevant or stale controller cannot receive it. Clear by exact scope identity on all exits, including errors, detach and supersession.
 
@@ -84,30 +87,41 @@ No new operator choice, refusal policy, recovery command, persisted state or pro
 
 ## Implementation tasks
 
+### Function-level verification strategies
+
+| Functions under test | Adversarial strategy and mechanical guard |
+|----------------------|------------------------------------------|
+| `remaining_ms` | Arithmetic boundary properties over monotonic inputs; assert nonnegative clipping and no deadline renewal without IO. |
+| `operator_lock` | Controlled clock/spawn progression plus a real hung child; assert every requested timeout is bounded by the original deadline and expired work creates no child. |
+| S1 `pending_lookup`, `admit_insert` | Native event scheduling with real fake-backed discovery and superseded controller witnesses; assert one joined request, one total deadline, and no effects on another incarnation. |
+| S1 `adopt`; session-sync `attach`, `acquire_observed` | Production attachment order and controlled external writes across the existing/new-controller boundary; assert first-input proof/freshness and retention of the original saved-edit baseline. |
+| operator_admission `dispatch` | Controlled event-sequence tests against the actual pure transition function; assert baseline/history invariance through handoff failures and ignore outcomes whose witness was superseded. |
+| Native legacy handoff IO | Stateful sidecar replacements and exact ownership evidence; assert only proven owned bytes may be removed and refused input never gets a writable gap. |
+
+The native counted workload tests compare 4 and 8 entries, with process/read counters that reject worse than linear growth. Supported runtime and disposable producer conformance checks remain below. This strategy table replaces prose test-case inventories (PQ-2).
+
 ### Task 1: Native red cases for pending discovery
 
 Files: `tests/integration/session_sync_native_spec.lua`, `tests/integration/agentic_document_lifetime_spec.lua`, existing fake helpers/fixtures if controlled completion needs a seam.
 
-- [ ] Add a native helper that opens an uncached registered parent/side document through S1, holds its already-started lookup, and queues actual `iX`. Release lookup under test control; race an external file write at operator acquire. Assert InsertCharPre sees confirmed protection and fresh text, and X applies to the fresh content.
-- [ ] Add pending-through-deadline case: first edit applies after the bound, lookup is still outstanding, then late completion preserves/reconciles the original edit baseline. Include autosaved outstanding edits, not only modified=true.
-- [ ] Add absence/failure/no-pending controls and detach/reopen, another-buffer, superseded-witness cases. Assert zero synchronous discovery launches and no foreign gating. Controls distinguish ordinary background discovery from newly launched input work.
+- [ ] Preserve production controller attachment order in the native helper and implement the S1/adoption strategies above with actual queued input and the shared stateful fake.
 - [ ] Run `make test-spec SPEC=modes/session_sync` and observe relevant new cases fail for the intended ordering/budget reasons before implementation. Preserve logs in disposable scratch.
 
 ### Task 2: Shared deadline and one acquire per scope
 
-Files: `lua/parley/couch.lua`, `lua/parley/agentic_document.lua`, `lua/parley/session_sync.lua`, `tests/unit/couch_spec.lua`.
+Files: `lua/parley/couch.lua`, `lua/parley/agentic_document.lua`, `lua/parley/session_sync.lua`, `lua/parley/operator_admission.lua`, `tests/unit/couch_spec.lua`, `tests/unit/operator_admission_spec.lua`.
 
-- [ ] Write pure remaining-budget tests and process-seam tests with an already-consumed deadline: both child timeout and synchronous wait receive only remaining time; expiry launches no child. Verify default acquire/release behavior is unchanged.
+- [ ] Write the pure arithmetic, process deadline and history-preserving owner sequence tests using the named strategies above.
 - [ ] Red-run `make test-spec SPEC=modes/review` (the mapping containing `couch_spec.lua`); implement arithmetic and optional absolute-deadline argument in the existing seam.
-- [ ] Implement exact pending lookup scope and bounded InsertEnter join. Forward the same scope through adopt/attach/observed acquisition, claim the acquire once before running effects, and clear by identity on every exit. Keep operator_admission as sole history owner.
-- [ ] Green-run native races. Add nested callback regression consuming most of the budget before attachment, followed by a slow acquire: total cannot become lookup wait + 500. Test confirmed, unavailable, held and invalid outcomes; stale scope cannot retry or retire a newer turn.
+- [ ] Implement the shared entry contract and owner-controlled acquisition continuation below; retain one attempt/deadline and exact scope cleanup.
+- [ ] Green-run the named native/owner strategies with counted effects and measured deadline evidence.
 - [ ] Commit code/tests with issue reference, Co-Authored-By and session Agent trailer after targeted green evidence.
 
 ### Task 3: Bounds, conformance and acceptance
 
 Files: native/integration tests above, `tests/unit/operator_admission_spec.lua` only if interface usage needs additional sequence coverage, `README.md`, `atlas/modes/session_sync.md`, `atlas/traceability.yaml` only for new files.
 
-- [ ] Count 4/8-turn process/read work and preserve existing refused retry mappings, lost-ack, release, dirty-buffer, Ctrl-C and clean-reload coverage. Run architecture guards, including sole admission owner and spec-authoring guards, and `make lint`.
+- [ ] Run counted growth tests, architecture guards (including sole admission ownership and spec authoring), and `make lint`; preserve the existing native regression mapping.
 - [ ] Run focused mappings serially on preferred runtime and installed operator runtime using environment `PARLEY_TEST_NVIM`; identify exact executable paths from harness/tooling rather than assume versions.
 - [ ] Run `python3 scripts/check-couch-registry-conformance.py --fake-only` and `make check-couch-registry-conformance` against a disposable real Couch supporting the landed operator protocol. Extend only the existing probe if residual timeout semantics require new real-command evidence.
 - [ ] Document the pending-lookup shared budget and retained editable-unknown boundary; keep atlas links and mapped tests consistent. Record measured timing/counters and deferred approvals in issue Log.
@@ -143,7 +157,22 @@ Proposed design, awaiting TL approval before code:
 1. Extract S1's exact pending predicate and bounded input join into reusable `pending_lookup` and `admit_insert` integration functions, retaining one absolute-deadline scope and one original request. The document's InsertEnter callback invokes the join only when no session-sync controller already owns entry.
 2. Session-sync's pre-existing legacy InsertEnter callback invokes S1's join BEFORE any tokenless write; if joined, return after that same admission (including timeout/absence) rather than starting another wait/acquire. Normal-mode legacy edit observation also defers tokenless writes while this exact S1 lookup remains pending; S1 retains the existing outstanding-edit baseline for later attachment. Outside pending S1 discovery, legacy behavior stays unchanged.
 3. Existing-controller adoption consumes the same scope, applies observed edits first, and invokes its registered acquisition entry directly when scope/actual insert intent is active. It must not return merely because a controller exists or a legacy turn reads operator. Acquisition remains in the private operator_admission owner, with only residual deadline time and one attempt guard.
-4. Enumerate pre-existing tokenless proof explicitly. Foreign/unknown sidecars remain protected/refused. If a locally owned tokenless proof predates the pending request, transition only through the owner's exact legacy release and immediate registered reacquisition, carrying the original baseline into the new acquire; no guessed removal, producer protocol or alternate history owner. The small local release/acquire handoff remains inside the original deadline; dirty/auto-saved content retains conflict-copy handling. If this cannot preserve history/failure semantics with the existing owner, stop for a revised design rather than invent a bypass.
-5. Preserve production attachment order in native fixtures: attach the header-driven legacy controller before S1, retain it during pending lookup, and run clean/saved/modified states, parent/side controls, refusal/unavailable/timeout, pre-owned versus foreign legacy proof, duplicate callback ordering, exact 4/8 process/read bounds, both runtimes. Prove the current implementation red on the clean and saved existing-controller cases before changing code. Add a native pending-through-timeout case showing no tokenless lock appears while discovery still owns unknown edits.
+4. The proposed ordinary release/reacquire sequence is superseded by the history-preserving re-plan below (PQ-1); no ordinary released event may clear history mid-acquisition.
+5. Preserve production controller attachment order in the native verification strategies above, using counted effects and independently stated input/history invariants. Reproduce BR-1 before implementation.
 
 The invariant is one S1 lookup scope and one registered acquisition attempt for the exact input event, regardless of which module's native callback runs first. The controller/owner resource already exists; the fix routes every entry consumer to it instead of observing absence twice (ARCH-DRY/PURPOSE/STATE). No new UI state, recovery command, watcher, journal or producer acknowledgment format. New public integration names get individual Core-concept rows when approved. Re-run change-code for the revised design; if the diff exceeds the quick shell, use its full-flow plan-quality gate before implementation.
+
+### 2026-10-22 — history-preserving re-plan after PQ-1/PQ-2
+
+TL c8405302 approved the first production-order correction and required a re-plan if review found another mechanism hole. The full plan-quality review identified PQ-1: ordinary `released` clears baseline/content/history (`operator_admission.lua:78–80`) and cannot be used mid-handoff. Stopped before code. PQ-2 requests function-level strategies rather than prose case inventories; the active verification table/tasks above now use that form.
+
+The simplest alternative, ordinary release followed by shell-held baseline restoration, fails because it retires owner history and temporarily restores the edit gate before reacquisition; failure/expiry can then leave saved work unanchored. Refusing every locally owned legacy turn avoids deletion but strands an otherwise provable turn and does not fulfill existing-controller adoption. Use one acquisition operation owned by the existing private model instead:
+
+- `dispatch(acquire)` captures freshness eligibility against the original history. When this owner has a non-nil exact tokenless proof, it emits `legacy_release`, retaining baseline, content, history and old proof; the requested registered token and freshness snapshot live only on that operation record. The public phase remains acquiring.
+- The shell removes only matching exact legacy bytes and returns the existing witnessed released/release_failed outcome. Ordinary release handling remains separate by operation kind. A foreign replacement or missing/unknown witness produces no deletion and no producer acquire.
+- A released outcome matching `legacy_release` clears only the now-removed proof, adopts the pending registered token, and immediately emits acquire under a new operation witness. It preserves original baseline/content/history and the original freshness eligibility. It does not enter idle, restore modifiable, or expose an intermediate completion to the caller. The subsequent acquire still receives the original scope deadline.
+- A release failure matching this stage enters the existing refused phase, retains exact proof/tokenless baseline/history and blocks input through existing retry mappings. A superseded/duplicate outcome does nothing. No new phase or recovery action is introduced.
+- After successful legacy removal, expiry/unavailability retains original history and saved edits in the existing editable unconfirmed phase; refusal retains them in the existing blocked phase. Confirmed clean freshness may advance a baseline only if the original history had no outstanding edit and the content witness still matches. A clean reload during the handoff updates that eligibility snapshot through the existing reload fact. Dirty or auto-saved outstanding work remains ineligible for clean freshness throughout.
+- While discovery is pending, legacy edit observation feeds the original pre-edit baseline to the private owner without writing a tokenless lock. This retains the first unknown-period edit even if discovery later fails and legacy behavior resumes before a retry confirms registration.
+
+This is a history-preserving continuation of the already approved exact owned-proof exception, with one owner and one producer acquisition; no ordinary release/reset, shell rollback, new protocol or parallel history cache. New owner dispatch sequence tests use controlled witnesses/failures and assert invariant history after each event. No implementation may resume until the TL reviews this re-plan and the plan-quality gate clears.

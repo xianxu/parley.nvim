@@ -42,8 +42,8 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 ## Plan
 
 - [x] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
-- [x] Native red/green pending-lookup ordering, exact incarnation/witness scope, and residual acquisition deadline through late attachment.
-- [x] Implement and verify the regression surface on both runtimes, counted 4/8-entry costs, disposable Couch conformance and indexed docs; prepare the recorded suite and TL-directed live acceptance. SDLC close owns fresh-context review; the recorded pass and live outcome remain mandatory before landing, tracked in the Log below.
+- [ ] Complete R1 production-order red/green through the revised one-owner handoff, including the exact owned legacy-proof exception; retain original deadline and history.
+- [ ] Reverify both runtimes, counted effects, conformance/docs and guards on the corrected implementation; recorded suite and post-review live acceptance still precede landing.
 
 ## Log
 
@@ -78,6 +78,10 @@ Recorded suite lease-1901041664, attempt 1f75cea859f261b4e87927ca0d433a4f, is qu
 Boundary review returned Critical BR-1 (`admission-handoff-covers-existing-controllers`): production attaches session-sync before S1, while our native helper detached it. Existing-controller adoption returns without acquiring, and its earlier legacy callback can establish tokenless protection; observed saved edits then skip acquisition because that legacy turn reads operator. The review reproduced clean and saved variants on both runtimes, zero producer acquisitions and stale first input. Source inspection confirms this handoff gap. No disposition yet; correction requires native red/green evidence and another boundary review.
 
 Cancelled our obsolete queued suite through `sdlc local-check cancel --run lease-1901041664`; no other runner touched. Proposed plan Revision routes the earlier legacy callback through S1's one input scope, defers tokenless unknown-period writes, and handles adoption into existing controllers with the original baseline/deadline. It explicitly enumerates pre-owned/foreign legacy proof rather than assuming every existing controller is empty. Waiting for TL approval of this mechanism correction before more code. Disposable profile fixture is statically prepared but unrun at `/Volumes/TestScratch/tmp/parley.nvim-slot4/parley-410-profile.H9qNMO/`; no :0 stage or live check held.
+
+### 2026-10-22 — full-flow plan gate; stopped for history re-plan
+
+TL c8405302 approved R1 and required stopping for a re-plan if review found another admission mechanism hole. Invoked change-code with full flow before any further code. Plan-quality raised Important PQ-1 (ordinary release clears history before reacquisition) and PQ-2 (replace test inventories with named function strategies). No code or tests changed after that approval. The durable plan now specifies an owner-controlled legacy_release continuation of acquire: exact release success preserves original baseline/content/history and emits registered acquire immediately; failure retains tokenless proof/history in existing refused phase; post-removal expiry/refusal retains original work. There is no ordinary release/reset or intermediate writable gap. Active tests are described as named function strategies. Waiting for TL review of this re-plan before re-entering the gate. No check/review/editor fixture is running.
 
 ## Revisions
 
