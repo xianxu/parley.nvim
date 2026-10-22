@@ -98,9 +98,91 @@ describe("attention finder", function()
         vim.env.PATH, vim.env.FAKE_COUCH_REGISTRY = saved.path, saved.registry
         vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_STATUS = saved.mode, saved.status
         p.config.state_dir, logger.warning, p.config.attention = saved.state_dir, saved.warning, saved.attention
+        if saved.info then logger.info = saved.info end
+        if saved.apply then Store.apply = saved.apply end
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG, vim.env.FAKE_COUCH_ACTORS = saved.scope, saved.tag, saved.actors
         vim.cmd("silent! %bwipeout!")
         vim.fn.delete(root, "rf")
+    end)
+
+    for _, size in ipairs({ 8, 16 }) do
+        it("clears " .. size .. " rows with exactly one leased batch", function()
+            local state = Model.empty()
+            for i = 1, size do
+                state = Model.transition(state, { type = "submitted", path = root .. "/" .. i .. ".md", id = tostring(i) }, now)
+            end
+            apply({ type = "sweep", grace = 3600 })
+            assert(require("parley.helper").table_to_file_atomic(state, Store.path()))
+            local picker = fake_picker()
+            open({ picker = picker, run = function(_, cb) cb(nil) end, own_slot = function(cb) cb(nil) end })
+            local clear = picker.opened.mappings[1]
+            assert.same({ "<C-r>" }, clear.key)
+            local original, calls, paths = Store.apply, 0, nil
+            saved.apply = original
+            Store.apply = function(event, options, callback)
+                if event.type == "clear" then calls, paths = calls + 1, event.paths end
+                return original(event, options, callback)
+            end
+            clear.fn(nil, nil, { items = picker.items })
+            await(function() return #picker.items == 0 end, "rows did not clear")
+            assert.equals(1, calls)
+            assert.equals(size, #paths)
+            assert.same({}, Store.load().entries)
+        end)
+    end
+
+    it("Ctrl+R clears actual filtered rows and ancestor context only in the chosen scope", function()
+        local parent = submitted("parent.md", "parent")
+        local child = submitted("child+++.md", "child")
+        local seen = submitted("seen+++.md", "seen")
+        local hidden = submitted("hidden.md", "hidden")
+        local other = submitted("other+++.md", "other")
+        local current = submitted("current+++.md", "current")
+        apply({ type = "observed", path = child, probed_ids = { "child" }, owed_ids = {} })
+        apply({ type = "observed", path = seen, probed_ids = { "seen" }, owed_ids = {} })
+        apply({ type = "opened", path = seen })
+        apply({ type = "submitted", path = other, id = "other", slot = "other:1" })
+        local state = Store.load()
+        state.entries[child].kind, state.entries[child].parent = "side", parent
+        assert(require("parley.helper").table_to_file_atomic(state, Store.path()))
+        vim.api.nvim_buf_set_name(0, current)
+        local previous_paste = vim.fn.maparg("<C-r>", "i", false, true)
+        local handle, held, notices = nil, {}, {}
+        local original_info = logger.info
+        logger.info = function(message) notices[#notices + 1] = message end
+        saved.info = original_info
+        Attention.open({ picker = { open = function(opts)
+            handle = require("parley.float_picker").open(opts)
+            return handle
+        end }, store = { now = now }, own_slot = function(cb) cb({}, { Binding = { Slot = "ops:0" } }) end,
+            run = function(argv, cb) held[argv[#argv]] = cb end })
+        await(function() return handle and held[parent] end, "finder did not open")
+        local prompt = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> +++" })
+        vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt })
+        local clear = vim.fn.maparg("<C-r>", "i", false, true)
+        assert.equals(1, clear.buffer, "clear must override register paste only in this prompt")
+        assert.is_function(clear.callback)
+        clear.callback()
+        await(function() return notices[1] ~= nil end, "clear did not finish")
+        assert.equals("Cleared 3 entries.", notices[1])
+        state = Store.load()
+        for _, path in ipairs({ parent, child, seen }) do assert.is_nil(state.entries[path]) end
+        for _, path in ipairs({ hidden, other, current }) do assert.is_truthy(state.entries[path]) end
+        assert.equals(now, state.retired[child])
+        assert.equals("+++", handle.current_query())
+        held[parent]({ Status = { Owed = {} } })
+        await(function() return #notices == 1 and Store.load().entries[parent] == nil end, "late observation revived clear")
+        clear.callback()
+        await(function() return #notices == 2 end, "empty clear did not finish")
+        assert.equals("Cleared 0 entries.", notices[2])
+        vim.fn.maparg("<C-a>", "i", false, true).callback()
+        clear.callback()
+        await(function() return #notices == 3 end, "all-slot clear did not finish")
+        assert.equals("Cleared 1 entries.", notices[3])
+        assert.is_nil(Store.load().entries[other])
+        handle.close()
+        assert.same(previous_paste, vim.fn.maparg("<C-r>", "i", false, true))
     end)
 
     for _, outcome in ipairs({ "success", "failure" }) do
@@ -199,12 +281,12 @@ describe("attention finder", function()
         assert.same({ "<C-a>" }, toggle.key)
         toggle.fn()
         assert.same({ a, legacy, b }, paths())
-        assert.equals("Attention — all slots", picker.title)
+        assert.equals("Attention — all slots — <C-r> clear shown", picker.title)
         callbacks[b]({ Status = { Owed = {} } })
         await(function() return Model.state_of(Store.load().entries[b]) == "answered" end, "probe did not land")
         assert.equals(3, #picker.items)
         toggle.fn()
-        assert.equals("Attention — ops:0", picker.title)
+        assert.equals("Attention — ops:0 — <C-r> clear shown", picker.title)
         assert.same({ a, legacy }, paths())
         callbacks[a]({ Status = { Owed = {} } })
         callbacks[legacy]({ Status = { Owed = {} } })
@@ -218,7 +300,7 @@ describe("attention finder", function()
         local picker = fake_picker()
         open({ picker = picker, own_slot = function(cb) cb(nil) end })
         assert.equals(2, #picker.items)
-        assert.equals(0, #picker.opened.mappings)
+        assert.equals(1, #picker.opened.mappings)
         open({ picker = picker, own_slot = function(cb) cb({}, nil) end })
         assert.equals(2, #picker.items)
         assert.matches("slot unavailable", warnings[#warnings])
