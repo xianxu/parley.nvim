@@ -846,3 +846,75 @@ describe("bullet fenced block boundaries (#407 BR-3)", function()
         end
     end
 end)
+
+
+describe("shared navigation block ownership (#407 BR-4)", function()
+    for _, marker in ipairs({ "-", "+", "*" }) do
+        for level = 1, 6 do
+            for _, indent in ipairs({ "", " " }) do
+                for _, suffix in ipairs({ "", " Heading" }) do
+                    local block = indent .. string.rep("#", level) .. suffix
+                    it("ends " .. marker .. " before outside ATX " .. string.format("%q", block), function()
+                        local lines = { marker .. " Chosen prose", block, "[outside](outside.md)" }
+                        local range = entity_range.navigation_range(nil, lines, 1)
+                        assert.same({ kind = "bullet", first = 1, last = 1 }, range)
+                        assert.same({}, require("parley.reference_candidates").collect(lines, range,
+                            { transcript = false }))
+                        local inside = { marker .. " Chosen prose", "  " .. block, "  [inside](inside.md)" }
+                        assert.same({ kind = "bullet", first = 1, last = 3 },
+                            entity_range.navigation_range(nil, inside, 1))
+                    end)
+                end
+            end
+        end
+        for _, block in ipairs({ "> quote", ">", "---", "- - -", "***", "* * *", "___", "_ _ _",
+            "===", "- sibling", "+ sibling", "* sibling", "2. sibling", "2) sibling", "```md", "~~~md" }) do
+            for _, indent in ipairs({ "", " " }) do
+                it("bounds " .. marker .. " at outside " .. string.format("%q", indent .. block), function()
+                    local fence = block:sub(1, 3)
+                    local tail = (fence == "```" or fence == "~~~") and { "sample", fence } or {}
+                    local lines = { marker .. " Chosen prose", indent .. block }
+                    vim.list_extend(lines, tail)
+                    lines[#lines + 1] = "[outside](outside.md)"
+                    local range = entity_range.navigation_range(nil, lines, 1)
+                    assert.same({ kind = "bullet", first = 1, last = 1 }, range)
+                    assert.same({}, require("parley.reference_candidates").collect(lines, range,
+                        { transcript = false }))
+                    local inside = { marker .. " Chosen prose" }
+                    for i = 2, #lines do inside[i] = "  " .. lines[i] end
+                    local kept = entity_range.navigation_range(nil, inside, 1)
+                    assert.same({ kind = "bullet", first = 1, last = #inside }, kept)
+                    assert.equals("outside.md", require("parley.reference_candidates").collect(inside, kept,
+                        { transcript = false })[1].target)
+                end)
+            end
+        end
+    end
+
+    it("measures ownership from content indentation including extra marker padding", function()
+        local lines = { "-   Parent", "   #### Outside", "[outside](outside.md)" }
+        assert.same({ kind = "bullet", first = 1, last = 1 }, entity_range.navigation_range(nil, lines, 1))
+        lines[2], lines[3] = "    #### Inside", "    [inside](inside.md)"
+        assert.same({ kind = "bullet", first = 1, last = 3 }, entity_range.navigation_range(nil, lines, 1))
+    end)
+
+    it("closes a child at an outside block while retaining its parent", function()
+        local lines = { "- Parent", "  - Child", "   #### Parent section", "   [parent](parent.md)" }
+        assert.same({ kind = "bullet", first = 2, last = 2 }, entity_range.navigation_range(nil, lines, 2))
+        assert.same({ kind = "bullet", first = 1, last = 4 }, entity_range.navigation_range(nil, lines, 1))
+    end)
+
+    it("retains plain lines resembling unsupported block openers", function()
+        for _, text in ipairs({ "####### seven hashes", "#literal", "-literal", "*literal", "_literal" }) do
+            local lines = { "- Chosen", text, "[inside](inside.md)" }
+            assert.same({ kind = "bullet", first = 1, last = 3 },
+                entity_range.navigation_range(nil, lines, 1))
+        end
+    end)
+
+    it("keeps plain lazy continuations until a blank followed by outside prose", function()
+        local lines = { "- Chosen", "lazy continuation", " [inside](inside.md)", "", "outside prose" }
+        assert.same({ kind = "bullet", first = 1, last = 3 }, entity_range.navigation_range(nil, lines, 2))
+        assert.same(entity_range.range(nil, lines, 5), entity_range.navigation_range(nil, lines, 5))
+    end)
+end)

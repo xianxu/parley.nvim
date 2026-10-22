@@ -411,30 +411,29 @@ function M.navigation_range(parsed, lines, row, opts)
 	local lo = context.bounds and context.bounds.first or context.floor
 	local hi = context.bounds and context.bounds.last or #lines
 	local lexical = require("parley.document.lexical")
-    -- Keep a stack so a child owns its continuation without losing its parent.
+    local blocks = require("parley.reference_candidates").markdown_blocks(lines,
+        { first = lo, last = hi }, { config = opts.config or require("parley.config"), in_code = context.in_code,
+            transcript = context.transcript })
+    -- A child's content indentation owns its blocks; lazy plain continuation
+    -- remains valid until a blank or an outside block. Editing stays separate.
     local bullets = {}
     for i = lo, hi + 1 do
+        local block = blocks[i]
         local line = lines[i] or ""
-        local indent = #(line:match("^%s*") or "")
-        local opening = lexical.is_fence_delim(line, true) and context.in_code[i]
-            and not context.in_code[i - 1]
-        local outside = not context.in_code[i] or opening
-        local bullet = outside and line:match("^%s*[-+*]%s+")
-        local marker = bullet or (outside and line:match("^%s*%d+[.)]%s+"))
-        local kind = outside and context.transcript and lexical.classify(line, context.patterns).kind
-        local wall = i > hi or heading_level_at(lines, i, context.in_code)
-            or kind == "user" or kind == "assistant"
         while #bullets > 0 do
             local top = bullets[#bullets]
-            if not wall and not (outside and indent <= top.indent and
-                (marker or opening or (not is_blank(line) and is_blank(lines[i - 1])))) then break end
+            local outside = block and block.indent < top.content_indent
+            local boundary = i > hi or (block and block.opener == "turn")
+                or (outside and (block.opener or
+                    (not context.in_code[i] and not is_blank(line) and is_blank(lines[i - 1]))))
+            if not boundary then break end
             table.remove(bullets)
-            top.last, top.indent = i - 1, nil
+            top.last, top.content_indent = i - 1, nil
             trim_trailing_blanks(top, lines)
             if row >= top.first and row <= top.last then return top, context.in_code end
         end
-        if bullet and not wall then
-            bullets[#bullets + 1] = {kind = "bullet", first = i, indent = indent}
+        if block and block.opener == "bullet" then
+            bullets[#bullets + 1] = { kind = "bullet", first = i, content_indent = block.content_indent }
         end
     end
 	local item

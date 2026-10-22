@@ -4,15 +4,53 @@ describe("reference candidates", function()
     it("shares block boundaries while retaining list and paragraph continuations", function()
         local lines = { "text", "- item", "  continuation", "# Heading", "> quote", "---", "", "```", "code", "```" }
         local blocks = candidates.markdown_blocks(lines, { first = 1, last = #lines }, { transcript = false })
-        assert.same({ before = false, after = false, excluded = false }, blocks[1])
-        assert.same({ before = true, after = false, excluded = false }, blocks[2])
-        assert.same(blocks[1], blocks[3])
+        local function barriers(row)
+            local block = blocks[row]
+            return { before = block.before, after = block.after, excluded = block.excluded }
+        end
+        assert.same({ before = false, after = false, excluded = false }, barriers(1))
+        assert.same({ before = true, after = false, excluded = false }, barriers(2))
+        assert.same(barriers(1), barriers(3))
         for _, row in ipairs({ 4, 5, 6 }) do
-            assert.same({ before = true, after = true, excluded = false }, blocks[row])
+            assert.same({ before = true, after = true, excluded = false }, barriers(row))
         end
         for row = 7, 10 do assert.is_true(blocks[row].excluded) end
         assert.same({}, candidates.markdown_blocks(lines))
     end)
+    it("exposes one navigation opener classifier with content indentation", function()
+        local lines = { "plain", "  -   child", " ####", "   #### Heading", "- - -", " > quote",
+            "===", "  2) item", " ```md", "#### code", " ```" }
+        local blocks = candidates.markdown_blocks(lines, { first = 1, last = #lines }, { transcript = false })
+        assert.is_nil(blocks[1].opener)
+        assert.equals("bullet", blocks[2].opener)
+        assert.equals(2, blocks[2].indent)
+        assert.equals(6, blocks[2].content_indent)
+        for _, row in ipairs({ 3, 4 }) do assert.equals("heading", blocks[row].opener) end
+        for _, row in ipairs({ 5, 7 }) do assert.equals("wall", blocks[row].opener) end
+        assert.equals("quote", blocks[6].opener)
+        assert.equals("numbered", blocks[8].opener)
+        assert.equals(5, blocks[8].content_indent)
+        assert.equals("fence", blocks[9].opener)
+        assert.is_nil(blocks[10].opener)
+        assert.is_nil(blocks[11].opener)
+    end)
+
+    it("keeps deeply indented wrapped labels while exposing their navigation opener", function()
+        for _, content in ipairs({ "> quote", "#### Heading", "---" }) do
+            local lines = { "[wrapped", "    " .. content .. "](answer.md)" }
+            -- Use a separate bare block for metadata: a link suffix changes
+            -- the thematic-wall grammar but not quote or heading recognition.
+            local block = candidates.markdown_blocks({ "    " .. content }, { first = 1, last = 1 },
+                { transcript = false })[1]
+            assert.is_false(block.before)
+            assert.is_false(block.after)
+            assert.is_not_nil(block.opener)
+            assert.equals(4, block.indent)
+            assert.equals("answer.md", candidates.collect(lines, { first = 1, last = 2 },
+                { transcript = false })[1].target)
+        end
+    end)
+
     it("enumerates Markdown links with the existing byte-span dialect", function()
         local line = "é [src:#12](src:a.lua:2) and [🌿:topic](chat.md)"
         local links = candidates.markdown_links(line)

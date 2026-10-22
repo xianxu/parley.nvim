@@ -69,8 +69,10 @@ reference decoding are outside this navigation feature; unmatched anchors use
 the file-top notice. Repeated
 headings use numeric suffixes; fenced examples do not define anchors. Shared
 fence containment requires matching delimiter characters and a sufficiently
-long, whitespace-only closer. Dedented fences end a bullet item; indented
-fences remain inside it. Missing
+long, whitespace-only closer. The occurrence scanner owns shared block-opener
+metadata: headings, thematic/Setext walls, quotes, lists and fences outside an
+item’s content indentation end its navigation range. Indented blocks stay inside
+the item; plain lazy continuations remain valid until a blank or outside block. Missing
 anchors open at the top with a short notice. Plain file links retain their
 existing cursor behavior; URL destinations keep their existing fallback policy.
 

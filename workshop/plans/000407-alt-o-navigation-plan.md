@@ -16,6 +16,7 @@ collaboration-mode: discussion
 
 | Entity | Lives in | Status | Classification |
 |---|---|---|---|
+| Navigation block metadata | lua/parley/reference_candidates.lua | modified | PURE |
 | Navigation range | lua/parley/entity_range.lua | modified | PURE |
 | Code fence memo | lua/parley/document/lexical.lua | modified | PURE |
 | Heading anchor lookup | lua/parley/markdown_heading.lua | new | PURE |
@@ -84,3 +85,13 @@ The simpler alternative—another pattern for quoted attributes and only a few n
 Delivery8887bf7d-ec9d-40df-8c27-89b898c13b51 rejects the generated HTML5 table/script as beyond Alt+O's need. Current heading contract: Markdown ATX levels1–6, with inline Markdown formatting stripped (emphasis, code and inline-link labels, preserving literal content). Raw HTML headings/inline HTML and character-reference decoding are out of scope. Unsupported/unmatched anchors use the existing file-top notice; they do not require a new renderer or runtime dependency. Remove the prior incidental HTML-rendering branches and test unsupported forms plus code/escaped literal controls.
 
 The hub approved the shared block-opener/content-indentation rule unchanged. Write the complete boundary matrix, observe RED, then implement metadata reuse and run all existing scanner/range/editor consumers serially. Retain prior shared-fence corrections. Fresh full suite and full re-close remain required; the reviewer must judge the narrowed contract, not the rejected HTML-rendering proposal.
+
+### 2026-10-21 — Narrowed correction verification
+
+The narrower heading contract failed first in /tmp/parley407-narrow-red.log; its pure GREEN run passed15/15 in /tmp/parley407-narrow-green.log. The boundary matrix failed first in /tmp/parley407-boundary-red.log, including real Normal/Insert wrong-destination failures. Shared opener metadata now drives content-indentation ownership; no entity data or HTML renderer is added. Verification is reopened for this correction; prior checked suite tasks describe the earlier reviewed attempt only.
+
+- [x] Record approved scope and RED controls; implement shared block metadata and narrow heading normalization.
+- [x] Pass serial mapped navigation tests and document-move scanner consumer; lint and whitespace checks.
+- [ ] Commit/push corrected code and record a fresh required suite on that exact head.
+
+Final correction checks: /tmp/parley407-narrow-final.log passes the full mapped context/file_references selection and document_move_plan51/51, including preserved four-space scanner continuations and the new indentation ownership matrix. /tmp/parley407-narrow-lint.log passes818 files with0warnings/errors; git diff --check is clean. Required suite and close are pending.

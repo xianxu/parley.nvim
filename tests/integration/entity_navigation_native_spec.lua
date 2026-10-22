@@ -175,6 +175,49 @@ describe("entity navigation native input", function()
             end)
         end
 
+        for _, block in ipairs({ "#### Outside", " #", " ###### Outside", "---", "* * *", "===", "> quote" }) do
+            it("keeps Alt+O inside the item before " .. string.format("%q", block) .. " in " .. mode .. " mode", function()
+                open_source({ "- Chosen prose", block, "[outside](answer.md)" }, 1, insert)
+                exec([[
+                    local p = require("parley")
+                    local open = p.cmd.OpenFileUnderCursor
+                    p.cmd.OpenFileUnderCursor = function()
+                        local ok, err = pcall(open)
+                        _G.jump_outcome = { ok = ok, error = ok and false or tostring(err) }
+                        _G.jump_completed = true
+                    end
+                    p.setup_markdown_keymaps(vim.api.nvim_get_current_buf())
+                ]])
+                keys("<M-o>")
+                wait_for([[return _G.jump_completed == true]])
+                local outcome = exec([[return _G.jump_outcome]])
+                assert.equals("boolean", type(outcome.ok))
+                if not outcome.ok then assert.matches("E447:", outcome.error) end
+                assert.equals(source, exec([[return vim.api.nvim_buf_get_name(0)]]))
+                assert.same({ source }, exec([[return require("parley.file_history").snapshot(0).paths]]))
+            end)
+        end
+
+        for _, unsupported in ipairs({ "# <em>Target</em>", "# &#84;arget" }) do
+            it("falls back to file top for unsupported heading " .. unsupported .. " in " .. mode .. " mode", function()
+                vim.fn.writefile({ "# Intro", "", unsupported, "Destination content." }, target)
+                open_source({ "[answer](answer.md#target)" }, 1, insert)
+                keys("<M-o>")
+                wait_for([[return vim.api.nvim_buf_get_name(0) == target]])
+                wait_for(insert and [[return vim.api.nvim_get_mode().mode == "i"]]
+                    or [[return vim.api.nvim_get_mode().mode == "n"]])
+                assert.equals(1, exec("return vim.api.nvim_win_get_cursor(0)[1]"))
+                wait_for([[
+                    for _, message in ipairs(notifications) do
+                        local text = tostring(message):lower()
+                        if text:find("target", 1, true) and text:find("not found", 1, true) then return true end
+                    end
+                    return false
+                ]])
+                assert.same({ source, target }, exec([[return require("parley.file_history").snapshot(0).paths]]))
+            end)
+        end
+
         for _, fragment in ipairs({ "revised-plan-ready-10-21-0040", "unknown-section", "" }) do
             local description = fragment == "" and "plain file link"
                 or (fragment == "unknown-section" and "unknown heading anchor" or "heading anchor")

@@ -49,7 +49,7 @@ describe("Markdown link heading anchors (#407)", function()
         for _, text in ipairs({
             "_Target_", "__Target__", "**Target**", "***Target***", "~~Target~~",
             "`Target`", "[Target](file.md)", "[**Target**](file(name).md)",
-            '<em class="label">Target</em>', "**_Target_**",
+            "**_Target_**",
         }) do
             assert.equals(1, heading.anchor_row({"# " .. text}, "target"), text)
         end
@@ -64,13 +64,10 @@ describe("Markdown link heading anchors (#407)", function()
         end
     end)
     it("numbers duplicates after content normalization", function()
-        local lines = { "# Target", "# _Target_", "# [Target](file.md)", "# <em>Target</em>  " }
+        local lines = { "# Target", "# _Target_", "# [Target](file.md)", "# **Target**  " }
         for row = 1, #lines do
             assert.equals(row, heading.anchor_row(lines, row == 1 and "target" or "target-" .. (row - 1)), "row " .. row)
         end
-    end)
-    it("trims whitespace exposed by removing inline HTML", function()
-        assert.equals(1, heading.anchor_row({ "# <em> Target </em>" }, "target"), "rendered edges")
     end)
     it("retains autolink text rather than treating it as an HTML tag", function()
         assert.equals(1, heading.anchor_row({ "# <https://example.com>" }, "httpsexamplecom"), "autolink")
@@ -81,8 +78,19 @@ describe("Markdown link heading anchors (#407)", function()
         assert.equals(1, heading.anchor_row({ "# <_literal_@example.com>" },
             "_literal_examplecom"), "literal email address")
     end)
-    it("removes inline HTML comments from heading content", function()
-        assert.equals(1, heading.anchor_row({ "# <!-- hidden -->Target<!-- hidden -->" }, "target"), "comment")
+    it("declines out-of-scope HTML and entity references without inventing raw-text anchors", function()
+        for _, case in ipairs({
+            {"# <em>Target</em>", "target"}, {"# <em title='> more'>Target</em>", "moretarget"},
+            {"# <!-- hidden -->Target", "target"}, {"# &#84;arget", "84arget"},
+            {"# &#x54;arget", "x54arget"}, {"# &amp; Target", "amp-target"},
+            {"<h1>Target</h1>", "target"}, {"# Before &amp; Target", "before-amp-target"},
+        }) do
+            assert.is_nil(heading.anchor_row({case[1]}, case[2]), case[1])
+        end
+        assert.equals(1, heading.anchor_row({"# `<em>Target</em>`"}, "emtargetem"))
+        assert.equals(1, heading.anchor_row({"# `&#84;arget`"}, "84arget"))
+        assert.equals(1, heading.anchor_row({"# \\&amp; Target"}, "amp-target"))
+        assert.equals(2, heading.anchor_row({"# <em>Target</em>", "# Target"}, "target"))
     end)
     it("keeps false fence closers from exposing example headings", function()
         for _, fences in ipairs({
@@ -98,17 +106,19 @@ end)
 
 
 describe("anchor normalization scan budget (#407)", function()
-    it("does not repeatedly search a malformed HTML suffix", function()
+    it("bounds searches through malformed angle-delimited text", function()
         local function searched(n)
             local text = "# " .. string.rep("<a", n)
             local find, bytes = string.find, 0
             rawset(string, "find", function(value, needle, first, plain)
-                if needle == ">" and plain then bytes = bytes + #value - (first or 1) + 1 end
-                return find(value, needle, first, plain)
+                local a, b = find(value, needle, first, plain)
+                if needle == "[<>]" then bytes = bytes + (a or #value + 1) - (first or 1) + 1 end
+                return a, b
             end)
             local ok, err = pcall(heading.anchor_row, {text}, "absent")
             rawset(string, "find", find)
             assert.is_true(ok, err)
+            assert.is_true(bytes > 0)
             assert.is_true(bytes <= #text)
             return bytes
         end

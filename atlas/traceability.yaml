@@ -598,6 +598,7 @@ atlas:
       - lua/parley/reference_candidates.lua
       - lua/parley/entity_range.lua
       - lua/parley/document/lexical.lua
+      - lua/parley/markdown_heading.lua
       - lua/parley/artifact_ref.lua
       - lua/parley/issues.lua
       - lua/parley/highlighter.lua

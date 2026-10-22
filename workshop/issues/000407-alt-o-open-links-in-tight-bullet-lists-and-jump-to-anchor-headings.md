@@ -48,7 +48,7 @@ Current scope (hub Revision2026-10-21): anchors refer to Markdown ATX headings1â
 
 - [x] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
 - [x] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
-- [ ] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
+- [x] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
 - [ ] Run mapped tests and recorded suite; update README/atlas.
 
 Close review and normal landing follow verification. Per the hub, no stage: operator receives the landed change in normal use.
@@ -99,3 +99,8 @@ BR-2 and BR-3 are addressed. BR-1 remains for quoted HTML attribute delimiters a
 ### 2026-10-21 â€” Narrowed heading scope approved; shared block rule retained
 
 Hub delivery8887bf7d-ec9d-40df-8c27-89b898c13b51 rejects full HTML5 decoding and approves proceeding with Markdown ATX headings plus inline Markdown formatting only. Raw HTML headings/inline HTML and entity decoding are out of scope; document that limit and preserve unmatched-anchor fallback. The shared markdown_blocks/content-indentation repair remains approved. Durable plan retires the data-table proposal. This supersedes the pending decoder proposal above; no new artifact family is created.
+
+- Narrowed-contract RED: /tmp/parley407-narrow-red.log; boundary RED: /tmp/parley407-boundary-red.log. Pure narrowed heading GREEN passed15/15 in /tmp/parley407-narrow-green.log. The first corrected mapping attempt was interrupted after exposing a fixture error: uncaught gf missing-file fallback prevented the completion signal; capture the known fallback exception while asserting source/history unchanged. This is fixture correction, not flake evidence. /tmp/parley407-narrow-mapped-green2.log then passed native48/48, range256/256, heading15/15 and document_move_plan51/51, but failed the existing scanner four-space quote continuation. Preserve scanner barrier indentation separately from navigation ownership metadata; rerun before claiming the corrected surface green.
+- Residual BR-1 HTML/entity cases disputed through sdlc finding dispute under the hub's explicit scope Revision, with measured RED/GREEN controls. Critical remains blocking until the next reviewer withdraws it; no gate waiver.
+
+- Final narrowed correction GREEN: make -k test-spec SPEC=context/file_references and a serial temporary-map document_move_plan consumer both exit0, /tmp/parley407-narrow-final.log (native48/48, range256/256, scanner22/22, heading15/15, move51/51 plus existing mapped tests). The scanner keeps its established up-to-three-literal-space wrapped-link barriers while navigation uses the same block classes relative to item content indentation. Native zero-candidate controls accept only existing gf E447 errors and still assert unchanged source/history. make -k lint passes818 files with0warnings/errors, /tmp/parley407-narrow-lint.log; git diff --check passes. Fresh recorded suite and re-close remain pending; no stage.

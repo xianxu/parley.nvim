@@ -1,4 +1,4 @@
--- The repo's one ATX-heading dialect: column-zero, one to three hashes,
+-- The outline/editing ATX-heading dialect: column-zero, one to three hashes,
 -- followed by a literal space. Stated once so entity_range, outline and the
 -- document tokenizer cannot drift apart (ARCH-DRY); document/lexical.lua keeps
 -- its own inline byte-scanner for the hot incremental path and is pinned to
@@ -82,7 +82,6 @@ local function anchor_content(text)
         end
     end
     i = 1
-    local no_tag_end, no_comment_end = false, false
     while i <= #text do
         local c, close = text:sub(i, i), next_tick[i]
         local autolink = c == "<" and autolink_end(text, i)
@@ -98,12 +97,13 @@ local function anchor_content(text)
         elseif autolink then
             append(text:sub(i + 1, autolink - 1), true)
             i = autolink + 1
-        elseif c == "<" and not no_comment_end and text:sub(i, i + 3) == "<!--" then
-            local last = text:find("-->", i + 4, true)
-            if last then i = last + 3 else no_comment_end = true end
-        elseif c == "<" and not no_tag_end and starts_html_tag(text, i + 1) then
-            local last = text:find(">", i + 1, true)
-            if last then i = last + 1 else no_tag_end = true end
+        elseif c == "<" and (text:sub(i, i + 3) == "<!--" or starts_html_tag(text, i + 1)) then
+            -- HTML rendering is outside the anchor contract; do not invent a
+            -- raw-source slug for content whose visible text we cannot know.
+            return nil
+        elseif c == "&" and (text:find("^&[%a][%w]*;", i)
+            or text:find("^&#%d+;", i) or text:find("^&#[xX]%x+;", i)) then
+            return nil
         else
             append(c)
             i = i + 1
@@ -146,13 +146,16 @@ function M.anchor_row(lines, fragment)
         local hashes, text = line:match("^ ? ? ?(#+)%s+(.+)$")
         if hashes and #hashes <= 6 and not code[row] then
             text = text:gsub("%s+#+%s*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
-            text = anchor_content(text):lower()
-            local base = text:gsub("%p", function(c) return (c == "-" or c == "_") and c or "" end)
-                :gsub(" ", "-"):gsub("%s", "")
-            local slug, count = base, counts[base] or 0
-            while used[slug] do count = count + 1; slug = base .. "-" .. count end
-            counts[base], used[slug] = count, true
-            if slug == fragment then return row end
+            text = anchor_content(text)
+            if text then
+                text = text:lower()
+                local base = text:gsub("%p", function(c) return (c == "-" or c == "_") and c or "" end)
+                    :gsub(" ", "-"):gsub("%s", "")
+                local slug, count = base, counts[base] or 0
+                while used[slug] do count = count + 1; slug = base .. "-" .. count end
+                counts[base], used[slug] = count, true
+                if slug == fragment then return row end
+            end
         end
     end
 end
