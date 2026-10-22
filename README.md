@@ -81,6 +81,10 @@ local acquire/release commands. Leaving unchanged (Escape or Ctrl-C) releases
 an owned turn. Normal-mode edits also take the turn before auto-save.
 Undo back to the acquisition baseline releases it outside insert mode, and redo
 takes it again. Saves never move that baseline.
+While viewing a registered session file or side doc, external writes reload a
+clean buffer silently with cursor and view retained. Conflicting local work uses
+the same copy-and-notice path without Neovim's file-changed prompt. Unregistered
+files retain Neovim's default handling.
 Leaving a document with an unsubmitted turn gives three short red winbar pulses
 and a file-named `unsubmitted: Alt+Return to submit` reminder. Navigation stays
 free; after a same-window file switch the destination bar names the file left
