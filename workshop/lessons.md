@@ -981,3 +981,15 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
 
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
+
+- #410 copied-profile acceptance: cache immutable vim.env paths before wrapping
+  libuv callbacks; vim.env can call Vimscript getenv and fail in a fast event.
+  A child RPC timeout after file open may be a blocking editor prompt: probe
+  fast nvim_get_mode before another ordinary Lua request, preserve the prompt's
+  messages, and fail the run rather than silently clearing it into acceptance.
+- #410 copied-profile acceptance: Lazy's installed census excludes directory
+  symlinks. Copy installed checkouts into disposable data roots when preserving
+  normal plugin discovery. Keep sticky v:errmsg as runtime diagnostic: caught
+  mapping deletion and silent ftplugin undo can set it without an observable
+  error. Judge displayed errors, ERROR notifications, uncaught exceptions,
+  blocking prompts and behavior; preserve raw diagnostics and cleanup proof.
