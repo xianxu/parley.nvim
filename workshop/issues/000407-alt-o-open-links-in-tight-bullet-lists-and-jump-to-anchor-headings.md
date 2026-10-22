@@ -49,7 +49,7 @@ Current scope (hub Revision2026-10-21): anchors refer to Markdown ATX headings1â
 - [x] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
 - [x] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
 - [x] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
-- [ ] Run mapped tests and recorded suite; update README/atlas.
+- [x] Run mapped tests and recorded suite; update README/atlas.
 
 Close review and normal landing follow verification. Per the hub, no stage: operator receives the landed change in normal use.
 
@@ -104,3 +104,5 @@ Hub delivery8887bf7d-ec9d-40df-8c27-89b898c13b51 rejects full HTML5 decoding and
 - Residual BR-1 HTML/entity cases disputed through sdlc finding dispute under the hub's explicit scope Revision, with measured RED/GREEN controls. Critical remains blocking until the next reviewer withdraws it; no gate waiver.
 
 - Final narrowed correction GREEN: make -k test-spec SPEC=context/file_references and a serial temporary-map document_move_plan consumer both exit0, /tmp/parley407-narrow-final.log (native48/48, range256/256, scanner22/22, heading15/15, move51/51 plus existing mapped tests). The scanner keeps its established up-to-three-literal-space wrapped-link barriers while navigation uses the same block classes relative to item content indentation. Native zero-candidate controls accept only existing gf E447 errors and still assert unchanged source/history. make -k lint passes818 files with0warnings/errors, /tmp/parley407-narrow-lint.log; git diff --check passes. Fresh recorded suite and re-close remain pending; no stage.
+
+- Narrowed corrected-head recorded suite passed on 0f58fb2ebe5c8414088acf323969d9da7484a557, attempt aa7b70d092639e85051983e51eb972a5, exit0 in317.3249s; log SHA256862333076c811bfa93f74de3dca1b1ed74429e98feee9df9c48c9c592d768ff7. Exact queue endpoints are retained in the attempt. Fresh full pass, not a flake resume. Hub delivery f23e4ddf-6fbc-45e2-9727-8a3c8669a460 directs re-close, then hold merge until hub confirms machine-wide GitHub DNS recovery. No stage or live acceptance claimed.

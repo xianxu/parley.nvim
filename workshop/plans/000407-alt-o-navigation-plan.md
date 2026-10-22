@@ -92,6 +92,10 @@ The narrower heading contract failed first in /tmp/parley407-narrow-red.log; its
 
 - [x] Record approved scope and RED controls; implement shared block metadata and narrow heading normalization.
 - [x] Pass serial mapped navigation tests and document-move scanner consumer; lint and whitespace checks.
-- [ ] Commit/push corrected code and record a fresh required suite on that exact head.
+- [x] Commit/push corrected code and record a fresh required suite on that exact head.
 
 Final correction checks: /tmp/parley407-narrow-final.log passes the full mapped context/file_references selection and document_move_plan51/51, including preserved four-space scanner continuations and the new indentation ownership matrix. /tmp/parley407-narrow-lint.log passes818 files with0warnings/errors; git diff --check is clean. Required suite and close are pending.
+
+### 2026-10-22 — Narrowed corrected-head suite complete
+
+Required suite passed on0f58fb2ebe5c8414088acf323969d9da7484a557, attempt aa7b70d092639e85051983e51eb972a5, exit0 in317.3249s, SHA256862333076c811bfa93f74de3dca1b1ed74429e98feee9df9c48c9c592d768ff7. Re-close is next. Hub directs holding the merge until GitHub DNS recovery is confirmed; no stage.
