@@ -61,6 +61,7 @@ local OUTSIDE = {
     ["lua/parley/clipboard_image.lua"] = { bounded = 1 },
     ["lua/parley/image_shrink.lua"] = { sync = 1 },
     ["lua/parley/document_lease.lua"] = { sync = 1 },
+    ["lua/parley/couch.lua"] = { sync = 1 }, -- #408: 500 ms operator acquisition/release
     ["lua/parley/init.lua"] = { sync = 1 },
     ["lua/parley/render_buffer.lua"] = { sync = 1 },
     ["lua/parley/log_emit.lua"] = { sync = 1 },

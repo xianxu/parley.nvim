@@ -7,6 +7,11 @@ no `type`, owner or instruction frontmatter is added or changed. Opening a
 registered file restores that identity through a bounded registry lookup. A
 positive null lookup proves a file plain; lookup failure leaves membership
 unknown. Plain files take no session-sync lock or watcher before admission.
+Insert admission below begins once that registration identity is known (from
+cache or a completed lookup). While an uncached lookup is still pending, S1
+keeps editing available and records outstanding edits for reconciliation on
+attachment. It does not block every Markdown insert on discovery. Sharing the
+500 ms budget with an already-pending lookup is tracked separately in #410.
 
 The default owner is the agent in this editor's own Couch pane, resolved from
 `COUCH_THREAD_SCOPE` / `COUCH_THREAD_TAG`. An explicit `couch-owner:` is an owner
@@ -40,9 +45,53 @@ attachment acquires against the observed pre-edit baseline, even after auto-save
 **The lock (#315: pessimistic for the human, optimistic for the agent).**
 The operator's lock is the only lock. The sidecar `<file>.lock` is absent
 (free: the agent may write) or `holder: operator` (the agent never writes the
-file). Insert entry writes it immediately and updates the band before typing
-(#404); unchanged insert exit releases it. Normal-mode edits also take the turn.
-`<M-CR>` saves and deletes it; the next insert entry or edit takes it again.
+file). Registered insert entry confirms acquisition under Couch's registry
+transaction before queued input can apply (#408). It then runs an unconditional
+freshness check: a clean pre-ack write reloads silently before the first edit,
+with the acquisition baseline taken from that fresh snapshot. Nested InsertEnter
+dispatch permits this narrowly scoped native reread without a deferred warning;
+dirty conflicts still reconcile outside input autocmds. Normal-mode first edits
+and observed unknown-period edits share the acquisition owner.
+
+The acquire/release commands have a named 500 ms bound. Namespace/store
+unavailability or timeout leaves editing enabled with `not locked: Couch
+unreachable; edits may conflict`; the warning survives saves and outranks older
+submit receipts. A concurrent write after an unconfirmed edit uses the existing
+clobber-copy effect even if auto-save cleared modified. Held/identity/path
+refusals, uncertain sidecar publication and invalid/mismatched acknowledgments
+block changes and say that keys were not applied. After leaving insert, press
+`i` to retry; refused-only buffer-local `i/a/o/I/A/O` mappings run admission,
+then the original native entry action only when admitted. `:ParleySessionRetry`
+runs the same admission without inserting or submitting. Successful or degraded
+admission removes those maps, restoring displaced local mappings and uncovering
+global ones. Refusal never creates a writable gap.
+No automatic retry or guessed unlock. The commands run locally without the
+Couch supervisor; its absence alone is not a degraded condition.
+
+The pure `operator_admission.lua` owner retains the original baseline, token and
+proof through unavailable/refused retries, saved edits and status refreshes.
+A clean native reload carries its before/after hashes: an exact known baseline
+with no operator change may follow the new clean snapshot, while saved operator
+edits and unknown baselines remain anchored. Both managed edit rereads and
+native checktime completion report that same atomic fact.
+Its phases are idle, acquiring, freshening, held, unconfirmed and refused; only
+a confirmed release retires normal turn history. The session engine runs its
+IO effects and returns matching operation witnesses. Validated move restoration
+and exact-preimage rebase use the same owner, including legacy journal proofs.
+
+The producer contract is `operator-acquire FILE --id ID --turn TOKEN --json`
+and matching `operator-release` (pair#777). One 32-hex token identifies the turn;
+lost-reply retries retain it and preserve exact lock text/time. `OperatorLock`
+acknowledges ID, canonical File, Holder, Turn, LockPath, LockText and State.
+The lock bytes carry strict single `document` and `turn` fields. Owned release
+uses the producer transaction and verifies its acknowledgment; a move copies
+those bytes and releases at the new canonical path with the same ID/token.
+Existing journals retain their exact legacy ownership witnesses without a
+format migration. Unrelated registered legacy/foreign protection is refused.
+Producer availability is required before shipping this consumer contract.
+
+Unchanged insert exit releases the owned turn. `<M-CR>` saves and releases it;
+the next insert entry or edit takes it again.
 Undoing back to the acquisition content silently releases the turn outside
 insert mode, without submitting or notifying the owner; redo away takes it again.
 Restoring the baseline while inserting retains protection until insert exit.
@@ -58,7 +107,7 @@ No lock or journal is overwritten to force recovery.
 Attachment completed during insert mode takes the same lock. No idle-release
 timer or new watcher is added; failed release retains the existing band/recovery. This acquisition baseline is an in-memory content hash: explicit saves
 and immediate auto-save never advance it. A save of changed text keeps the turn.
-A pre-existing lock after a restart has no known baseline and stays held until submit. A legacy `holder: agent` lock reads as no lock and is
+A pre-existing registered lock after a restart has no proven local ownership; it is not adopted or removed by guessing. Its owner must release it before a new turn can acquire. Legacy unregistered session files retain their previous submit behavior. A legacy `holder: agent` lock reads as no lock and is
 overwritten by insert entry or an edit. A failed send leaves the file free; `<M-CR>`
 resends. The lock is read from disk, so a reopened buffer shows it too. While
 the buffer is loaded, parley watches the file once a second: during a free
@@ -69,9 +118,10 @@ line through a line diff, and a line the agent rewrote is followed by its own
 text. `window_views` (capture before, restore after) owns that wrap, and
 parley's own whole-buffer rewrites use it too (#358): `file_refresh` after the
 chat write, edit and propose tools, and the review round's reload. The operator's turn
-never starts on an old copy unnoticed: an agent write that landed just before
-insert entry or the first edit lost the race, and goes through the violation path below with
-the operator's text kept. Outside the operator's turn, submit refuses to
+never starts on an old copy unnoticed: a registered clean insert reloads a
+write completed before acquisition acknowledgment. A dirty first edit or a genuine
+write after acquisition goes through the violation path below with the
+operator's text kept. Outside the operator's turn, submit refuses to
 overwrite a file rewritten under a modified buffer.
 
 **Edit ordering (#324).** Buffer edit notifications acquire the lock before

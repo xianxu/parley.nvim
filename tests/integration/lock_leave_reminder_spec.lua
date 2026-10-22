@@ -29,6 +29,11 @@ describe("lock leave reminder", function()
         require("tests.helpers.fake_couch").write(root, root .. "/sent", root .. "/argv")
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
         vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
+        -- #408 validates acquisition against the registry, rather than making
+        -- a local sidecar for an identity the producer has never registered.
+        vim.fn.writefile({ vim.json.encode({ paths = {
+            [root .. "/held.md"] = { ID = "fixture", File = root .. "/held.md", Owner = "ops:0" },
+        }, moves = {} }) }, vim.env.FAKE_COUCH_REGISTRY)
         ss.POLL_MS, band.PULSE_MS = 100000, 15
         ss.attach(source, { File = root .. "/held.md", Owner = "ops:0", ID = "fixture" })
         red, messages, timers, painted = 0, {}, {}, {}
