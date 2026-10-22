@@ -123,7 +123,7 @@ async def editor_bridge_probe(bridge, repo, root, *, binary=None, launch_env=Non
         session_factory = BridgeSession
     root.mkdir(parents=True, exist_ok=True)
     # Unix sockets need short physical parents even under a long TMPDIR.
-    base = Path("/Volumes/TestScratch") if Path("/Volumes/TestScratch").is_dir() else Path("/tmp").resolve()
+    base = Path("/tmp").resolve()  # native wrapper sockets need the shortest system parent
     producer_parent = Path(tempfile.mkdtemp(prefix="cb-", dir=base)).resolve()
     runtime_parent = Path(tempfile.mkdtemp(prefix="pe-", dir=base)).resolve()
     witnesses = {path: path.stat() for path in (producer_parent, runtime_parent)}
