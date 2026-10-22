@@ -31,6 +31,7 @@
 local M = {}
 local couch = require("parley.couch")
 local window_views = require("parley.window_views")
+local operator_admission = require("parley.operator_admission")
 
 M.POLL_MS = 1000
 M.PING_CHECK_MS = 60000
@@ -43,10 +44,10 @@ local ns_group = "ParleySessionSync"
 -- Per-buffer state: { turn, stale, loaded (disk mtime last read/written),
 -- foreign (the disk mtime of the last write Neovim saw as someone else's),
 -- checking (inside disk_changed's :checktime), edit (latest pending clean-edit
--- reconciliation token), inserting (current insert intent), acquire_token (retained across lost replies),
--- admission/message and gated_modifiable (bounded refusal/degraded view),
--- unconfirmed_edit (preserve edits while unavailable), content (last observed buffer hash), baseline (hash
--- at acquisition, retained through saves), edits_attached (native edit callback installed),
+-- reconciliation token), inserting (current insert intent), operator_admission
+-- (private history owner), gated_modifiable/retry_maps (owned refusal UI),
+-- retry_entry (one queued native entry sharing a completed retry), content
+-- (last observed buffer hash), edits_attached (native edit callback installed),
 -- watch = timer|nil, idle = timer|nil, owed (epoch of the oldest owed event
 -- couch last reported, or nil), minutes (rendered owed minutes), violated /
 -- complained (this operator turn), unkept (the disk mtime of an agent copy
@@ -55,6 +56,16 @@ local ns_group = "ParleySessionSync"
 -- feedback (bounded submission receipt/error, cleared by operator edit or foreign reload) }
 local state = {}
 local buffer_reads, native_reads = {}, {}
+local dispatch_admission
+
+local function admission(s)
+    return s.operator_admission.snapshot()
+end
+
+local function observe_content(buf, s, content)
+    s.content = content
+    dispatch_admission(buf, { type = "observe", content = content })
+end
 
 --- Frontmatter lines → normalized { owner, operator } for session-sync.
 --- This is the single owner accessor: couch-owner first, owner fallback.
@@ -244,7 +255,9 @@ local function lock_bytes(path)
     return bytes
 end
 
-local function write_lock(buf, holder)
+local function write_lock(buf, holder, baseline)
+	local s = state[buffer_id(buf)]
+    if s and admission(s).acquire_token then return false end
 	local path = M.lock_path(buf)
 	local f = io.open(path, "w")
 	if not f then
@@ -255,8 +268,7 @@ local function write_lock(buf, holder)
     local written = f:write(bytes)
     local closed = f:close()
     if not written or not closed then return false end
-    local s = state[buffer_id(buf)]
-    if s then s.owned_lock = bytes end
+    if s then dispatch_admission(buf, { type = "legacy_adopt", baseline = baseline, content = s.content, proof = bytes }) end
     return true
 end
 
@@ -268,27 +280,57 @@ local function restore_edit_gate(buf, s)
     end
 end
 
+-- Only refusal owns these local maps. Preserve local overrides and uncover
+-- global mappings again, without deleting a mapping changed by the operator.
+local function retry_maps(buf, s, refused)
+    if refused and not s.retry_maps then
+        s.retry_maps = {}
+        for _, key in ipairs({ "i", "a", "o", "I", "A", "O" }) do
+            local saved = vim.api.nvim_buf_call(buf, function() return vim.fn.maparg(key, "n", false, true) end)
+            local callback = function()
+                if M.retry(buf) and vim.bo[buf].modifiable then
+                    -- The immediately queued native command shares this retry's
+                    -- admission, including its single bounded unavailable call.
+                    local entry = { epoch = s.epoch, token = admission(s).acquire_token }
+                    s.retry_entry = entry
+                    vim.api.nvim_feedkeys(key, "ni", false)
+                end
+            end
+            s.retry_maps[key] = { saved = saved.buffer == 1 and saved or nil, callback = callback }
+            vim.keymap.set("n", key, callback, { buffer = buf, silent = true, desc = "Retry session lock" })
+        end
+    elseif not refused and s.retry_maps then
+        for key, mapping in pairs(s.retry_maps) do
+            local current = vim.api.nvim_buf_call(buf, function() return vim.fn.maparg(key, "n", false, true) end)
+            if current.buffer == 1 and current.callback == mapping.callback then
+                vim.keymap.del("n", key, { buffer = buf })
+                if mapping.saved then
+                    vim.api.nvim_buf_call(buf, function() vim.fn.mapset("n", false, mapping.saved) end)
+                end
+            end
+        end
+        s.retry_maps = nil
+    end
+end
+
 local function release_owned(buf, path, expected)
     local s = state[buf]
+    local owned = admission(s)
     local proof = couch.operator_proof(expected)
     if proof then
-        if proof.ID ~= s.identity.ID or expected ~= s.owned_lock and proof.Turn ~= s.acquire_token then
+        if proof.ID ~= s.identity.ID or expected ~= owned.owned_lock and proof.Turn ~= owned.acquire_token then
             return false, "operator protection belongs to another turn"
         end
-        local result = couch.operator_lock("release", { ID = proof.ID, File = path }, proof.Turn)
-        if result.kind ~= "confirmed" then return false, result.error end
-        s.acquire_token, s.admission, s.admission_message, s.unconfirmed_edit = nil, nil, nil, nil
-        return true
-    end
-    if expected and (expected:find("\ndocument:", 1, true) or expected:find("\nturn:", 1, true)) then
+    elseif expected and (expected:find("\ndocument:", 1, true) or expected:find("\nturn:", 1, true)) then
         return false, "operator ownership evidence is invalid"
-    end
-    if s.identity.ID and (not expected or expected ~= s.owned_lock) then
+    elseif s.identity.ID and (not expected or expected ~= owned.owned_lock) then
         return false, "registered operator protection has no confirmed ownership"
     end
-    -- A legacy journal's exact owned witness remains recoverable without a
-    -- format migration; unrelated registered legacy protection never does.
-    return os.remove(path .. ".lock")
+    if not owned.owned_lock and not s.identity.ID then
+        local adopted, reason = dispatch_admission(buf, { type = "legacy_adopt", proof = expected, content = s.content })
+        if not adopted then return false, reason end
+    end
+    return dispatch_admission(buf, { type = "release" }, path)
 end
 
 local send, query, list = couch.send, couch.query, couch.list
@@ -372,6 +414,86 @@ local function reload(buf)
 	state[buf].probed = nil
 	probe(buf)
 	require("parley.edit_round").refresh(buf) -- the write is usually the agent's round (#383)
+end
+
+local function refusal_message(reason)
+    local label = reason == "operator-lock" and "held by operator" or "not locked: " .. tostring(reason)
+    return label .. "; press i to retry (:ParleySessionRetry); keys not applied"
+end
+
+-- The shell runs effects; only the private owner advances admission history.
+-- Every completion carries its operation witness back, including release.
+dispatch_admission = function(buf, event, release_path)
+    local s = state[buf]
+    if not s then return false, "document is detached" end
+    local effect, error_message = s.operator_admission.dispatch(event)
+    if error_message then return false, error_message end
+    if event.type ~= "acquire" and event.type ~= "release" then return true end
+    local releasing = event.type == "release"
+    if releasing and not effect then return false, error_message or "no owned operator turn" end
+    while effect do
+        local outcome = { witness = effect.witness }
+        if effect.kind == "acquire" then
+            local result = couch.operator_lock("acquire", s.identity, effect.token)
+            if result.kind == "confirmed" and lock_bytes(M.lock_path(buf)) ~= result.lock.LockText then
+                result = { kind = "refused", error = "operator protection changed after acknowledgment" }
+            end
+            if result.kind == "confirmed" then
+                outcome.type, outcome.proof = "acquired", result.lock.LockText
+            else
+                outcome.type = result.kind
+                outcome.message = result.kind == "unavailable"
+                    and "not locked: Couch unreachable; edits may conflict" or refusal_message(result.error)
+            end
+        elseif effect.kind == "freshen" then
+            restore_edit_gate(buf, s)
+            s.admitting = true
+            local checked, reason = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent checktime " .. buf) end)
+            if checked and mtime_moved(buf) then checked, reason = pcall(reload, buf) end
+            s.admitting = nil
+            if checked and not vim.bo[buf].modified then
+                outcome.type, outcome.content, outcome.clean = "freshened", content_hash(buf), true
+                s.foreign = nil
+            else
+                outcome.type, outcome.message = "refused", refusal_message("freshness check failed: " .. tostring(reason or "buffer changed"))
+            end
+        elseif effect.kind == "release" then
+            local parsed = couch.operator_proof(effect.proof)
+            local token = effect.token or parsed and parsed.Turn
+            local path = release_path or file_of(buf)
+            local ok, reason
+            if token then
+                local result = couch.operator_lock("release", { ID = s.identity.ID, File = path }, token)
+                ok, reason = result.kind == "confirmed", result.error
+            else
+                -- Legacy exact-byte protection has no Couch turn identity.
+                if effect.proof and lock_bytes(path .. ".lock") == effect.proof then
+                    ok, reason = os.remove(path .. ".lock")
+                else reason = "operator protection changed" end
+            end
+            outcome.type = ok and "released" or "release_failed"
+            error_message = not ok and reason or nil
+        else
+            error("unknown operator admission effect: " .. tostring(effect.kind))
+        end
+        if state[buf] ~= s then return false, "document is detached" end
+        local next_effect, _, accepted = s.operator_admission.dispatch(outcome)
+        effect = next_effect
+        if accepted == false then return false, "operator admission changed while awaiting reply" end
+    end
+    local view = admission(s)
+    if view.phase == "refused" then
+        if s.gated_modifiable == nil then s.gated_modifiable = vim.bo[buf].modifiable end
+        vim.bo[buf].modifiable = false
+        retry_maps(buf, s, true)
+        if not releasing then notify(view.admission_message, vim.log.levels.ERROR) end
+    else
+        restore_edit_gate(buf, s)
+        retry_maps(buf, s, false)
+    end
+    if releasing then return error_message == nil, error_message end
+    refresh(buf)
+    return view.phase == "held" or view.phase == "unconfirmed"
 end
 
 -- Whole minutes the owner has owed a response, or nil when nothing is owed.
@@ -509,7 +631,7 @@ local function start_watch(buf)
 			return
 		end
 		local turn = read_turn(buf)
-		if (turn == "operator" and s.turn == "operator" or s.unconfirmed_edit) and disk_changed(buf) then
+		if (turn == "operator" and s.turn == "operator" or admission(s).unconfirmed_edit) and disk_changed(buf) then
 			violation(buf)
 		elseif turn == "free" and not vim.bo[buf].modified and disk_changed(buf) then
 			reload(buf)
@@ -529,14 +651,14 @@ refresh = function(buf)
 	end
 	local turn = read_turn(buf)
 	s.turn = turn
-	if turn ~= "operator" and s.admission ~= "unavailable" then
-		s.stale, s.violated, s.complained, s.baseline, s.owned_lock = false, false, false, nil, nil
+	if turn ~= "operator" and admission(s).admission ~= "unavailable" then
+		s.stale, s.violated, s.complained = false, false, false
 	end
 	s.minutes = owed_minutes(buf)
 	start_watch(buf)
-	local view = M.view(turn, s, owner_of(buf))
-    view.unsent = s.baseline ~= nil and content_hash(buf) ~= s.baseline
-    view.feedback = not s.admission and s.feedback or nil
+	local view = M.view(turn, vim.tbl_extend("force", s, admission(s)), owner_of(buf))
+    view.unsent = admission(s).baseline ~= nil and content_hash(buf) ~= admission(s).baseline
+    view.feedback = not admission(s).admission and s.feedback or nil
     render(buf, view)
 end
 
@@ -607,7 +729,7 @@ M.attach = function(buf, identity, observed, restoring_move)
     identity = identity or { File = file_of(buf), Owner = h.owner }
     if type(identity.File) ~= "string" or identity.File:sub(1, 1) ~= "/" then return end
     local s = { stale = false, identity = vim.deepcopy(identity), epoch = 0,
-        previous_autoread = vim.bo[buf].autoread }
+        previous_autoread = vim.bo[buf].autoread, operator_admission = operator_admission.new() }
     state[buf] = s
 	require("parley.highlight_groups").keep("session_sync", define_highlights)
 	define_highlights()
@@ -619,7 +741,7 @@ M.attach = function(buf, identity, observed, restoring_move)
     s.group = group
     local function outstanding()
         return state[buf] == s and not s.moving and vim.api.nvim_buf_is_valid(buf)
-            and M.has_unsubmitted(read_turn(buf), s.baseline, s.content)
+            and M.has_unsubmitted(read_turn(buf), admission(s).baseline, s.content)
     end
     vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, { group = group, buffer = buf, callback = function()
         if outstanding() then
@@ -630,50 +752,18 @@ M.attach = function(buf, identity, observed, restoring_move)
     -- One admission policy serves insert intent and normal-mode first edits.
     -- Only a clean insert entry is allowed to establish a fresh native baseline.
     local function acquire_registered(baseline, entering)
-        if s.owned_lock and couch.operator_proof(s.owned_lock)
-            and lock_bytes(M.lock_path(buf)) == s.owned_lock and not s.admission then return true end
-        local result
-        if not s.acquire_token then
+        local owned = admission(s)
+        if owned.phase == "held" and owned.owned_lock and couch.operator_proof(owned.owned_lock)
+            and lock_bytes(M.lock_path(buf)) == owned.owned_lock then return true end
+        local token = owned.acquire_token
+        if not token then
             local ok, random = pcall(vim.uv.random, 16)
             if ok and type(random) == "string" and #random == 16 then
-                s.acquire_token = (random:gsub(".", function(byte) return ("%02x"):format(byte:byte()) end))
-            else result = { kind = "refused", error = "cannot create operator turn identity" } end
-        end
-        result = result or couch.operator_lock("acquire", s.identity, s.acquire_token)
-        if result.kind == "confirmed" and lock_bytes(M.lock_path(buf)) ~= result.lock.LockText then
-            result = { kind = "refused", error = "operator protection changed after acknowledgment" }
-        end
-        s.admission, s.admission_message = nil, nil
-        if result.kind == "confirmed" then
-            restore_edit_gate(buf, s)
-            s.owned_lock = result.lock.LockText
-            s.baseline = s.baseline or baseline
-            if entering and not vim.bo[buf].modified and not s.unconfirmed_edit then
-                s.admitting = true
-                local checked, reason = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent checktime " .. buf) end)
-                if checked and mtime_moved(buf) then checked, reason = pcall(reload, buf) end
-                s.admitting = nil
-                if checked then s.baseline = content_hash(buf); s.foreign = nil
-                else result = { kind = "refused", error = "freshness check failed: " .. tostring(reason) } end
-            end
-            s.unconfirmed_edit = nil
-        end
-        if result.kind ~= "confirmed" then
-            s.admission = result.kind
-            if result.kind == "unavailable" then
-                restore_edit_gate(buf, s)
-                s.admission_message = "not locked: Couch unreachable; edits may conflict"
-                s.baseline = s.baseline or baseline
-                s.unconfirmed_edit = s.baseline == nil or s.content ~= s.baseline
-            else
-                s.admission_message = "not locked: " .. result.error .. "; keys not applied; leave insert and retry"
-                if s.gated_modifiable == nil then s.gated_modifiable = vim.bo[buf].modifiable end
-                vim.bo[buf].modifiable = false
-                notify(s.admission_message, vim.log.levels.ERROR)
+                token = (random:gsub(".", function(byte) return ("%02x"):format(byte:byte()) end))
             end
         end
-        refresh(buf)
-        return result.kind == "confirmed"
+        return dispatch_admission(buf, { type = "acquire", baseline = baseline,
+            content = content_hash(buf), token = token, clean = entering and not vim.bo[buf].modified })
     end
 
     s.acquire_turn = acquire_registered
@@ -686,8 +776,7 @@ M.attach = function(buf, identity, observed, restoring_move)
         if s.identity.ID then
             if not acquire_registered(baseline, false) then return end
         else
-            if not write_lock(buf, "operator") then return end
-            s.baseline = baseline
+            if not write_lock(buf, "operator", baseline) then return end
             refresh(buf)
         end
         vim.schedule(function()
@@ -701,12 +790,19 @@ M.attach = function(buf, identity, observed, restoring_move)
         if state[buf] ~= s then return end
         s.inserting = true
         if s.moving then return end
-        local baseline = not vim.bo[buf].modified and content_hash(buf) or s.baseline
-        if s.identity.ID then acquire_registered(baseline, true)
-        else take_turn(baseline) end
+        local baseline = not vim.bo[buf].modified and content_hash(buf) or admission(s).baseline
+        local retried = s.retry_entry
+        s.retry_entry = nil
+        -- A refused-state key already completed this exact admission.
+        if not (retried and retried.epoch == s.epoch and retried.token == admission(s).acquire_token) then
+            if s.identity.ID then acquire_registered(baseline, true)
+            else take_turn(baseline) end
+        end
         restart_idle(buf)
     end
     vim.api.nvim_create_autocmd("InsertEnter", {group=group, buffer=buf, nested=true, callback=insert_enter})
+    vim.api.nvim_buf_create_user_command(buf, "ParleySessionRetry", function() M.retry(buf) end,
+        { desc = "Retry this document's operator lock" })
     vim.api.nvim_create_autocmd({"InsertLeave", "ModeChanged"}, {group=group, buffer=buf, callback=function(event)
         if not s.inserting then return end
         if event.event == "ModeChanged" and vim.v.event.new_mode:match("^[iR]") then return end
@@ -726,22 +822,22 @@ M.attach = function(buf, identity, observed, restoring_move)
 	-- attach: an edit to its YAML must not remove its protection.
 	local function attach_edits()
 		if s.edits_attached then return end
-		s.content = content_hash(buf)
+		observe_content(buf, s, content_hash(buf))
 		s.edits_attached = vim.api.nvim_buf_attach(buf, false, {
 			on_lines = function()
 				if state[buf] ~= s then
 					return true
 				end
                 local previous = s.content
-                s.content = content_hash(buf)
+                observe_content(buf, s, content_hash(buf))
                 if s.moving then return end
                 if s.feedback and previous ~= s.content and vim.bo[buf].modified then
                     s.feedback = nil
                     refresh(buf) -- synchronous: an earlier TextChanged auto-save must see it cleared
                 end
                 local epoch = s.epoch
-				if s.admission == "unavailable" then s.unconfirmed_edit = s.content ~= s.baseline end
-                if vim.bo[buf].modified and not s.admission then take_turn(previous) end
+				-- The pure owner derives outstanding work from the observed hash.
+                if vim.bo[buf].modified and not admission(s).admission then take_turn(previous) end
 				restart_idle(buf)
 				-- Reconcile only the latest edit, after native undo and auto-save
 				-- settle. Saves never advance the acquisition baseline (#330).
@@ -751,7 +847,7 @@ M.attach = function(buf, identity, observed, restoring_move)
 					if state[buf] ~= s or s.moving or s.epoch ~= epoch or s.edit ~= edit or not vim.api.nvim_buf_is_loaded(buf) then
 						return
 					end
-                    if s.baseline and content_hash(buf) == s.baseline and read_turn(buf) == "operator" then
+                    if admission(s).baseline and content_hash(buf) == admission(s).baseline and read_turn(buf) == "operator" then
                         M.release_if_baseline(buf)
                     end
 				end)
@@ -759,7 +855,7 @@ M.attach = function(buf, identity, observed, restoring_move)
 			-- An external reload is not an operator edit; keep the attachment for
 			-- the next keystroke and invalidate any pending clean-edit check.
 			on_reload = function()
-				s.content = content_hash(buf)
+				observe_content(buf, s, content_hash(buf))
 				s.edit = nil
                 s.feedback = nil
                 refresh(buf)
@@ -788,7 +884,7 @@ M.attach = function(buf, identity, observed, restoring_move)
 				vim.v.fcs_choice = ""
 				return
 			end
-			if read_turn(buf) ~= "operator" and not s.unconfirmed_edit then
+			if read_turn(buf) ~= "operator" and not admission(s).unconfirmed_edit then
 				vim.v.fcs_choice = vim.bo[buf].modified and "ask" or "reload"
                 if vim.v.fcs_choice == "reload" then
                     -- FileChangedShellPost ends the synchronous native check.
@@ -801,7 +897,7 @@ M.attach = function(buf, identity, observed, restoring_move)
 			end
 			vim.v.fcs_choice = ""
 			vim.schedule(function()
-				if state[buf] == s and not s.moving and s.epoch == epoch and vim.api.nvim_buf_is_loaded(buf) and (read_turn(buf) == "operator" or s.unconfirmed_edit) then
+				if state[buf] == s and not s.moving and s.epoch == epoch and vim.api.nvim_buf_is_loaded(buf) and (read_turn(buf) == "operator" or admission(s).unconfirmed_edit) then
 					violation(buf)
 				end
 			end)
@@ -853,7 +949,11 @@ M.detach = function(buf)
     native_reads[buf] = nil
     local s = state[buf]
     if not s then return end
-    if vim.api.nvim_buf_is_valid(buf) then restore_edit_gate(buf, s) end
+    if vim.api.nvim_buf_is_valid(buf) then
+        restore_edit_gate(buf, s)
+        retry_maps(buf, s, false)
+        pcall(vim.api.nvim_buf_del_user_command, buf, "ParleySessionRetry")
+    end
     state[buf] = nil
     s.epoch, s.edit = s.epoch + 1, nil
     close_timer(s.watch)
@@ -863,6 +963,14 @@ M.detach = function(buf)
     end
     if s.renderer then s.renderer.clear() end
     pcall(vim.api.nvim_del_augroup_by_id, s.group)
+end
+
+M.retry = function(buf)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s or s.moving or not s.identity.ID then return false end
+    local baseline = not vim.bo[buf].modified and content_hash(buf) or admission(s).baseline
+    return s.acquire_turn(baseline, true)
 end
 
 -- Unknown-period edits can already have been auto-saved: modified is not
@@ -875,10 +983,10 @@ M.acquire_observed = function(buf, observed)
     if read_turn(buf) == "free" then
         if s.identity.ID then
             if not s.acquire_turn(observed.baseline, false) then return false end
-        elseif not write_lock(buf, "operator") then return false end
+        elseif not write_lock(buf, "operator", observed.baseline) then return false end
     end
-    s.baseline = s.baseline or observed.baseline
-    s.content = content_hash(buf)
+    dispatch_admission(buf, { type = "observed", baseline = observed.baseline, content = content_hash(buf) })
+    observe_content(buf, s, content_hash(buf))
     refresh(buf)
     restart_idle(buf)
     if disk_changed(buf) then return violation(buf, true) end
@@ -923,7 +1031,7 @@ M.prepare_submit = function(buf)
     local s = state[buf]
     if not s or s.moving then return false, "document is not available for submission" end
     if disk_changed(buf) then
-        if read_turn(buf) == "operator" or s.unconfirmed_edit then
+        if read_turn(buf) == "operator" or admission(s).unconfirmed_edit then
             if not violation(buf) then return false, "the agent's copy could not be kept beside the file" end
         else
             return false, "the file changed on disk since this buffer read it; not overwriting it"
@@ -943,7 +1051,7 @@ local function insert_intent(buf)
 end
 
 local function automatic_release_eligible(buf, s)
-    return not insert_intent(buf) and s.baseline ~= nil
+    return not insert_intent(buf) and admission(s).baseline ~= nil
 end
 
 -- The same acquisition-baseline release serves native undo and synthetic
@@ -951,8 +1059,8 @@ end
 M.release_if_baseline = function(buf)
     buf = buffer_id(buf)
     local s = state[buf]
-    if not s or s.moving or not automatic_release_eligible(buf, s) or content_hash(buf) ~= s.baseline then return false end
-    if not s.owned_lock or lock_bytes(M.lock_path(buf)) ~= s.owned_lock then return false end
+    if not s or s.moving or not automatic_release_eligible(buf, s) or content_hash(buf) ~= admission(s).baseline then return false end
+    if not admission(s).owned_lock or lock_bytes(M.lock_path(buf)) ~= admission(s).owned_lock then return false end
     if disk_changed(buf) then
         violation(buf)
         return false
@@ -960,10 +1068,10 @@ M.release_if_baseline = function(buf)
     if mtime_moved(buf) then return false end
     if vim.bo[buf].modified then
         local ok = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent write") end)
-        if not ok or vim.bo[buf].modified or content_hash(buf) ~= s.baseline then return false end
+        if not ok or vim.bo[buf].modified or content_hash(buf) ~= admission(s).baseline then return false end
     end
-    if lock_bytes(M.lock_path(buf)) ~= s.owned_lock then return false end
-    local ok = release_owned(buf, file_of(buf), s.owned_lock)
+    if lock_bytes(M.lock_path(buf)) ~= admission(s).owned_lock then return false end
+    local ok = release_owned(buf, file_of(buf), admission(s).owned_lock)
     if not ok then return false end
     refresh(buf)
     restart_idle(buf)
@@ -980,10 +1088,8 @@ local function release_and_send(buf, owner, callback)
     local lock = M.lock_path(buf)
     if vim.uv.fs_stat(lock) then
         ok, err = release_owned(buf, file_of(buf), lock_bytes(lock))
-    elseif state[buf].acquire_token then
-        local result = couch.operator_lock("release", state[buf].identity, state[buf].acquire_token)
-        ok, err = result.kind == "confirmed", result.error
-        if ok then state[buf].acquire_token, state[buf].admission, state[buf].unconfirmed_edit = nil, nil, nil end
+    elseif admission(state[buf]).acquire_token then
+        ok, err = dispatch_admission(buf, { type = "release" })
     end
     if not ok then
         err = "cannot release " .. lock .. ": " .. tostring(err)
@@ -1053,8 +1159,8 @@ M.begin_move = function(buf)
         if read_turn(buf) ~= "operator" or not violation(buf) then return nil, "foreign change requires reconciliation" end
     end
     if mtime_moved(buf) then return nil, "disk change could not be reconciled" end
-    local token = { old_path = file_of(buf), path = file_of(buf), lock = lock_bytes(M.lock_path(buf)), baseline = s.baseline }
-    s.moving = { token = token, old_path = token.old_path, lock = token.lock, baseline = s.baseline }
+    local token = { old_path = file_of(buf), path = file_of(buf), lock = lock_bytes(M.lock_path(buf)), baseline = admission(s).baseline }
+    s.moving = { token = token, old_path = token.old_path, lock = token.lock, baseline = admission(s).baseline }
     s.epoch, s.edit, s.probing = s.epoch + 1, nil, false
     close_timer(s.watch)
     close_timer(s.idle)
@@ -1152,7 +1258,11 @@ M.restore_move = function(buf, old_identity, new_path, protection, finalization)
         if not s then return nil, "document could not be attached" end
     end
     s.identity = vim.deepcopy(old_identity)
-    s.baseline, s.owned_lock = protection.baseline, protection.baseline and protection.new_lock or nil
+    local restored_proof = protection.baseline and protection.new_lock or nil
+    local parsed_proof = couch.operator_proof(restored_proof)
+    local restored, restore_error = dispatch_admission(buf, { type = "restore", baseline = protection.baseline,
+        proof = restored_proof, token = parsed_proof and parsed_proof.Turn })
+    if not restored then return nil, restore_error end
     local token = { old_path = old_identity.File, path = old_identity.File,
         lock = protection.old_lock, baseline = protection.baseline }
     s.moving = { token = token, old_path = old_identity.File, lock = protection.old_lock,
@@ -1214,11 +1324,11 @@ M.synchronize_move = function(buf, token, expected_before_content_hash)
     local observed = vim.uv.fs_stat(moving.new_path)
     if not observed or observed.type ~= "file" then return false, "move destination is unavailable" end
     local content = content_hash(buf)
-    local baseline = s.baseline
-    if baseline == expected_before_content_hash then baseline = content end
-    s.baseline, moving.baseline, token.baseline = baseline, baseline, baseline
+    dispatch_admission(buf, { type = "rebase", before = expected_before_content_hash, after = content })
+    local baseline = admission(s).baseline
+    moving.baseline, token.baseline = baseline, baseline
     s.loaded = observed.mtime.sec .. "." .. observed.mtime.nsec
-    s.content = content
+    observe_content(buf, s, content)
     s.attach_edits()
     return true, { old_lock = moving.lock, new_lock = moving.new_lock, baseline = baseline }
 end
@@ -1242,7 +1352,7 @@ M.move_finalization_snapshot = function(buf, token)
     end
     local content = content_hash(buf)
     local release = not vim.bo[buf].modified and automatic_release_eligible(buf, s)
-        and s.baseline == content and s.owned_lock == moving.new_lock
+        and admission(s).baseline == content and admission(s).owned_lock == moving.new_lock
     return true, { old_lock_before = moving.lock or false, new_lock_before = moving.new_lock or false,
         new_lock_after = not release and moving.new_lock or false, editor_hash = content }
 end
@@ -1267,8 +1377,8 @@ M.prepare_move_finalization = function(buf, token, intent)
         return false, "leave insert mode and reopen " .. moving.new_path .. " to finish this move"
     end
     if moving.new_lock and intent.new_lock_after == false
-        and (vim.bo[buf].modified or not automatic_release_eligible(buf, s)
-            or s.baseline ~= intent.editor_hash or s.owned_lock ~= moving.new_lock) then
+        and (vim.bo[buf].modified or admission(s).history and (not automatic_release_eligible(buf, s)
+            or admission(s).baseline ~= intent.editor_hash or admission(s).owned_lock ~= moving.new_lock)) then
         return false, "operator turn changed before finalization"
     end
     local old_ok, old = finalization_lock(moving.old_path .. ".lock")
@@ -1285,6 +1395,15 @@ M.prepare_move_finalization = function(buf, token, intent)
         if not ok then return false, err end
     end
     if new and after == nil then
+        if not admission(s).history then
+            -- A retained, validated journal can replay its exact before-state
+            -- after a confirmed release. Restore that witness through the same
+            -- owner; never adopt different bytes or a current insert intent.
+            local proof = couch.operator_proof(new)
+            local restored, reason = dispatch_admission(buf, { type = "restore", baseline = moving.baseline,
+                proof = new, token = proof and proof.Turn })
+            if not restored then return false, reason end
+        end
         local ok, err = release_owned(buf, moving.new_path, moving.new_lock)
         if not ok then return false, err end
     end
@@ -1305,7 +1424,8 @@ M.retire_move = function(buf, token, identity)
         return false, "move identity mismatch"
     end
     s.identity = vim.deepcopy(identity)
-    s.loaded, s.content = moving.finalized_loaded, content_hash(buf)
+    s.loaded = moving.finalized_loaded
+    observe_content(buf, s, content_hash(buf))
     s.foreign, s.unkept, s.moving = nil, nil, nil
     s.probed, s.probing = nil, false
     s.attach_edits()
@@ -1333,7 +1453,7 @@ M.finish_move = function(buf, token, identity)
     s.loaded = disk_mtime(buf)
     s.foreign, s.unkept, s.moving = nil, nil, nil
     s.probed, s.probing = nil, false
-    s.content = content_hash(buf)
+    observe_content(buf, s, content_hash(buf))
     s.attach_edits() -- owned native acknowledgement may reload while moving
     refresh(buf)
     restart_idle(buf)

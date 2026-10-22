@@ -348,3 +348,20 @@ Preferred mapped session-sync pass is green (all-final.log; includes replay
 restoration correction); 0.11 mapped pass is running on current code. Lint was
 0 warnings/0 errors over 822 files before the outcome refinement; rerunning.
 Logs: /Volumes/TestScratch/parley-408-owner-fs58vfkw/. No stage held.
+
+### 2026-10-22 — R1 targeted verification complete
+
+Preferred mapped pass: 772 cases, 0 failures/errors. Current 0.11 mapped pass:
+774 cases, 0 failures/errors, including the queued retry-freshness and stale
+release-reply native cases. Final focused preferred pass: 15 native BR-1/retry
+cases, 14 pure owner cases and 2 ownership guards, all green. Lint: 0 warnings /
+0 errors in 822 files; diff-check clean.
+
+The sole-writer sweep also preserved tokenless legacy policy: explicit submit
+may adopt its exact legacy disk witness even when observation already established
+history, and a successful new legacy write may replace opaque proof without
+replacing the original baseline. One IO and one pure regression were red, then
+15 focused cases passed (legacy-green.log). A registered token cannot enter the
+legacy writer. No new watcher, journal, workflow or local-gates path changed.
+The current code now proceeds to the recorded suite and R2 close; the new
+real-profile refusal/retry check remains after review approval, as ordered.

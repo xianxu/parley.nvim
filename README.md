@@ -74,8 +74,9 @@ attachment reconciles edits made during that interval.
 A namespace/store failure or timeout allows editing with `not locked: Couch
 unreachable; edits may conflict`; conflicting versions are kept through the
 existing clobber-copy path. A held-lock refusal or invalid acknowledgment blocks
-edits with a notice that keys were not applied; leave insert and retry after
-the protection is available. A stopped Couch supervisor does not prevent these
+edits with a notice that keys were not applied. Leave insert, then press `i`
+to retry when protection is available (`a`, `o`, `I`, `A`, and `O` also retry),
+or use `:ParleySessionRetry`. These local mappings exist only during refusal. A stopped Couch supervisor does not prevent these
 local acquire/release commands. Leaving unchanged (Escape or Ctrl-C) releases
 an owned turn. Normal-mode edits also take the turn before auto-save.
 Undo back to the acquisition baseline releases it outside insert mode, and redo

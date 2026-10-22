@@ -59,9 +59,21 @@ unreachable; edits may conflict`; the warning survives saves and outranks older
 submit receipts. A concurrent write after an unconfirmed edit uses the existing
 clobber-copy effect even if auto-save cleared modified. Held/identity/path
 refusals, uncertain sidecar publication and invalid/mismatched acknowledgments
-block changes, say that keys were not applied, and ask to leave insert and retry.
+block changes and say that keys were not applied. After leaving insert, press
+`i` to retry; refused-only buffer-local `i/a/o/I/A/O` mappings run admission,
+then the original native entry action only when admitted. `:ParleySessionRetry`
+runs the same admission without inserting or submitting. Successful or degraded
+admission removes those maps, restoring displaced local mappings and uncovering
+global ones. Refusal never creates a writable gap.
 No automatic retry or guessed unlock. The commands run locally without the
 Couch supervisor; its absence alone is not a degraded condition.
+
+The pure `operator_admission.lua` owner retains the original baseline, token and
+proof through unavailable/refused retries, saved edits and status refreshes.
+Its phases are idle, acquiring, freshening, held, unconfirmed and refused; only
+a confirmed release retires normal turn history. The session engine runs its
+IO effects and returns matching operation witnesses. Validated move restoration
+and exact-preimage rebase use the same owner, including legacy journal proofs.
 
 The producer contract is `operator-acquire FILE --id ID --turn TOKEN --json`
 and matching `operator-release` (pair#777). One 32-hex token identifies the turn;

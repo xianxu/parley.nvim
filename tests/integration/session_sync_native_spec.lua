@@ -344,6 +344,179 @@ describe("session-sync native edits", function()
         end)
     end
 
+    it("an older release reply cannot retire a newly admitted turn (#408 retry)",function()
+        open(false,false,true,true)
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        locked()
+        exec([[
+            local couch=require('parley.couch')
+            local command=couch.operator_lock
+            couch.operator_lock=function(verb,...)
+                local result=command(verb,...)
+                if verb=='release' and result.kind=='confirmed' and not _G.reentered_release then
+                    _G.reentered_release=true
+                    assert(require('parley.session_sync').retry(0))
+                    _G.reentered_release_done=true
+                end
+                return result
+            end
+        ]])
+        keys("<Esc>")
+        wait_for("return vim.fn.mode()=='n' and reentered_release_done==true")
+        locked()
+        assert.is_nil(vim.uv.fs_stat(sent_file),"stale release submitted a newer turn")
+    end)
+
+    local function refuse_insert_entry()
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock"
+            vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
+        ]])
+        keys("I");wait_for("return vim.fn.mode()=='i'")
+        assert.is_false(exec("return vim.bo.modifiable"))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+    end
+    local function settle_retry_input(value)
+        keys(value)
+        exec("_G.retry_input_settled=false;vim.schedule(function() _G.retry_input_settled=true end)")
+        wait_for("return _G.retry_input_settled==true")
+    end
+
+    for _, entry in ipairs({"i","a","o","I","A","O"}) do
+        it("retries refused admission with native "..entry.." entry (#408 retry)",function()
+            open(false,false,true,true)
+            refuse_insert_entry()
+            exec("vim.env.FAKE_COUCH_OPERATOR_CODE=nil;vim.env.FAKE_COUCH_OPERATOR_EXIT=nil")
+            settle_retry_input(entry)
+            assert.equals("i",exec("return vim.fn.mode()"),"retry did not enter insert via "..entry)
+            assert.is_true(exec("return vim.bo.modifiable"))
+            locked()
+            local native={i={8,0,10},a={8,1,10},o={9,0,11},I={8,0,10},A={8,12,10},O={8,0,11}}
+            local position=exec("local at=vim.api.nvim_win_get_cursor(0);return {at[1],at[2],vim.api.nvim_buf_line_count(0)}")
+            assert.same(native[entry],position,"retry changed the native entry action")
+            assert.is_nil(vim.uv.fs_stat(sent_file),"retry submitted the document")
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        end)
+    end
+
+    it("refused retry freshens before its queued first edit (#408 retry)",function()
+        open(false,false,true,true)
+        refuse_insert_entry()
+        local fresh=vim.fn.readfile(file);fresh[8]="fresh before retry acknowledgment"
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE=nil
+            vim.env.FAKE_COUCH_OPERATOR_EXIT=nil
+            vim.env.FAKE_COUCH_OPERATOR_ACQUIRE_WRITE=...
+            vim.env.FAKE_COUCH_OPERATOR_DELAY="0.1"
+            _G.retry_first_edit=nil
+            local couch=require("parley.couch");local acquire=couch.operator_lock
+            couch.operator_lock=function(verb,...)
+                local result=acquire(verb,...)
+                if verb=="acquire" then _G.retry_acquire_confirmed=result.kind=="confirmed" end
+                return result
+            end
+            vim.api.nvim_create_autocmd("InsertCharPre",{buffer=0,callback=function()
+                local proof=couch.operator_proof(table.concat(vim.fn.readfile(path..".lock"),"\n").."\n")
+                _G.retry_first_char_protected=retry_acquire_confirmed==true and proof and proof.ID=="doc-1" and type(proof.Turn)=="string"
+                _G.retry_before_first_char=vim.api.nvim_buf_get_lines(0,7,8,false)[1]
+            end})
+            vim.api.nvim_buf_attach(0,false,{on_reload=function() end,on_lines=function(_,buf)
+                retry_first_edit=retry_first_edit or vim.api.nvim_buf_get_lines(buf,7,8,false)[1]
+            end})
+        ]],table.concat(fresh,"\n").."\n")
+        keys("iX")
+        wait_for("return _G.retry_first_edit~=nil")
+        assert.is_true(exec("return retry_first_char_protected"),"retry applied first character before confirmed protection")
+        assert.equals("fresh before retry acknowledgment",exec("return retry_before_first_char"))
+        assert.equals("Xfresh before retry acknowledgment",exec("return retry_first_edit"))
+        assert.equals("Xfresh before retry acknowledgment",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        locked()
+        assert.is_nil(vim.uv.fs_stat(file..".clobbered"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+    end)
+
+    it("repeated refusal keeps native retry entry blocked and available (#408 retry)",function()
+        open(false,false,true,true)
+        refuse_insert_entry()
+        for _,entry in ipairs({"i","a"}) do
+            settle_retry_input(entry)
+            assert.equals("n",exec("return vim.fn.mode()"),"refused retry entered insert")
+            assert.is_false(exec("return vim.bo.modifiable"))
+            assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            assert.equals(1,exec("return vim.fn.maparg(...,'n',false,true).buffer",entry),"refusal lost retry entry mapping")
+        end
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
+    it("unavailable retry admits native input with a visible warning (#408 retry)",function()
+        open(false,false,true,true)
+        refuse_insert_entry()
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE="session-sync-unavailable"
+            vim.env.FAKE_COUCH_OPERATOR_EXIT="7"
+        ]])
+        settle_retry_input("i")
+        assert.equals("i",exec("return vim.fn.mode()"))
+        assert.is_true(exec("return vim.bo.modifiable"))
+        keys("X");wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='Xfirst bullet'")
+        assert.is_true(exec([[return vim.wo.winbar:find("not locked: Couch unreachable; edits may conflict",1,true)~=nil]]))
+        assert.equals(0,exec("return vim.tbl_count(vim.fn.maparg('i','n',false,true))"),"editable admission kept refusal mapping")
+        keys("<Esc>")
+    end)
+
+    it("retry restores displaced buffer mappings and uncovers global mappings (#408 retry)",function()
+        open(false,false,true,true)
+        exec([[
+            vim.keymap.set('n','i',function() _G.local_i=true end,{buffer=0,desc='original local insert'})
+            vim.keymap.set('n','a',function() _G.global_a=true end,{desc='original global append'})
+        ]])
+        refuse_insert_entry()
+        assert.equals(1,exec("return vim.fn.maparg('a','n',false,true).buffer"),"refusal did not cover global entry mapping")
+        assert.is_false(exec("return vim.fn.maparg('i','n',false,true).desc=='original local insert'"))
+        exec("vim.env.FAKE_COUCH_OPERATOR_CODE=nil;vim.env.FAKE_COUCH_OPERATOR_EXIT=nil")
+        settle_retry_input("O")
+        assert.equals("i",exec("return vim.fn.mode()"))
+        assert.equals("original local insert",exec("return vim.fn.maparg('i','n',false,true).desc"))
+        assert.equals(1,exec("return vim.fn.maparg('i','n',false,true).buffer"))
+        assert.equals("original global append",exec("return vim.fn.maparg('a','n',false,true).desc"))
+        assert.equals(0,exec("return vim.fn.maparg('a','n',false,true).buffer"))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        keys("i");wait_for("return _G.local_i==true")
+        keys("a");wait_for("return _G.global_a==true")
+    end)
+
+    it("explicit retry acquires without entering insert or submitting (#408 retry)",function()
+        open(false,false,true,true)
+        refuse_insert_entry()
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE=nil
+            vim.env.FAKE_COUCH_OPERATOR_EXIT=nil
+            vim.cmd('ParleySessionRetry')
+        ]])
+        assert.equals("n",exec("return vim.fn.mode()"))
+        assert.is_true(exec("return vim.bo.modifiable"))
+        locked()
+        assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
+    it("detach removes refusal mappings and restores displaced mappings (#408 retry)",function()
+        open(false,false,true,true)
+        exec([[
+            vim.keymap.set('n','i',function() _G.detached_i=true end,{buffer=0,desc='detached original insert'})
+            vim.keymap.set('n','a',function() _G.detached_a=true end,{desc='detached global append'})
+        ]])
+        refuse_insert_entry()
+        exec("require('parley.session_sync').detach(0)")
+        assert.is_true(exec("return vim.bo.modifiable"))
+        assert.equals("detached original insert",exec("return vim.fn.maparg('i','n',false,true).desc"))
+        assert.equals(1,exec("return vim.fn.maparg('i','n',false,true).buffer"))
+        assert.equals("detached global append",exec("return vim.fn.maparg('a','n',false,true).desc"))
+        assert.equals(0,exec("return vim.fn.maparg('a','n',false,true).buffer"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
     it("lost acquire acknowledgment retries the same turn without advancing baseline (#408)",function()
         open(true,false,true,true)
         exec('vim.env.FAKE_COUCH_OPERATOR_DELAY="2"')

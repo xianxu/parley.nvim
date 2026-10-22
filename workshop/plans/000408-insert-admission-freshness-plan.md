@@ -295,8 +295,8 @@ and cannot overwrite outstanding history except the existing preimage-equality
 translation. Existing unregistered legacy turns use the same owner with opaque
 exact proof bytes; their established disk/submit policy is unchanged.
 
-- [ ] Add native BR-1 red and no-refusal control; add independent pure sequence tests.
-- [ ] Implement the encapsulated owner and dispatch effects; sweep every old history writer.
+- [x] Add native BR-1 red and no-refusal control; add independent pure sequence tests.
+- [x] Implement the encapsulated owner and dispatch effects; sweep every old history writer.
 - [ ] Guard the ownership boundary structurally, verify both runtimes and run the fresh recorded suite.
 - [ ] Close review approves; then repeat the authorized real-profile stage and clear before landing.
 
