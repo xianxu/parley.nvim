@@ -19,6 +19,7 @@ collaboration-mode: discussion
 | Name | Lives in | Status |
 |------|----------|--------|
 | EndpointAttachment | lua/parley/remote_session_model.lua | new |
+| RuntimeOwnershipRecord | lua/parley/remote_session_model.lua | new |
 
 EndpointAttachment owns one live buffer attachment's namespace/document ID, process incarnation, monotone AttachID, request witnesses, binding generation and phase. Its only mutation surface is dispatch(event); snapshot() returns copies. It validates endpoint envelopes and notification tuples without editor/process IO. Multiple endpoints belong to one nvim incarnation; a fresh explicit attach advances the process-wide decimal counter. Retry preserves AttachID. Counter exhaustion refuses remote publication rather than wrapping. This is the first occurrence of this ownership pattern; reuse the existing document-registration and request seams rather than embedding it in operator_admission (ARCH-PURE/DRY/ORDER).
 
@@ -35,7 +36,7 @@ EndpointAttachment owns one live buffer attachment's namespace/document ID, proc
 
 No remote web API, tunnel, arbitrary remote operation dispatcher, headless spawning or phone UI is implemented here. Pair#758 owns proxy allowlisting and checking current binding on established connections; stopping a listener cannot revoke an already-open RPC channel.
 
-## Producer contract (jointly pinned with pair:6; durable M1 pin pending)
+## Producer contract (jointly pinned with pair:6; durable M1 contract pinned)
 
 - CLI: couch --editor-endpoint register --json and unregister --json consume bounded version-1 JSON from stdin. Read-only lookup takes --namespace CANONICAL --document-id ID --json.
 - Existing document lookup/register replies add Registration.Namespace. Only confirmed registered identity starts a listener; null, malformed, unsupported or unavailable discovery never registers a document or creates a listener.
@@ -47,7 +48,7 @@ No remote web API, tunnel, arbitrary remote operation dispatcher, headless spawn
 - Producer cap: 256 active endpoints per editor, 4096 retained editor/document pairs per namespace. Exact dead-process or confirmed retired-attachment cleanup belongs to Couch; failed inspection is unknown. Couch never removes editor directories or guesses ownership of socket paths.
 - Before publication, producer brackets a read-only native endpoint handshake with native process identity checks. The fixed code is return require("parley.remote_session").endpoint(...), args=[query]. Query contains Namespace, DocumentID, EditorIncarnation, AttachID, Buffer. Matching pending/current live attachment returns these fields plus PID, Socket and canonical current File; otherwise nil.
 - Displacement uses a bounded one-shot callback outside the registry lock: return require("parley.remote_session").superseded(...), args=[notice]. Notice contains exact Namespace, DocumentID, EditorIncarnation, AttachID, BindingGeneration. This is advisory; server-side authority remains current binding generation.
-- The final durable producer artifact, exact JSON shape and empty/unknown outcomes must be cross-checked before change-code. Do not infer a working producer from a fake.
+- The durable producer contract is pair#758 plan at aa24764a339d7f001dba02c0ec1db50727880362, workshop/plans/000758-editor-endpoints-plan.md, M1 wire section. Full contract checked and confirmed to pair:6; real conformance still requires the eventual landed producer merge pin. Register/unregister JSON objects carry Version=1; register success requires Changed boolean; reply Version=1/Code/Error/EditorEndpoint validates strictly. Lookup success-null alone proves no current binding. Duplicate/unknown request fields refuse. AttachID uses decimal-string increment/comparison through uint64 maximum, never Lua floating-point arithmetic. Do not infer a working producer from a fake.
 
 ## Lifecycle and visible behavior
 
@@ -79,12 +80,13 @@ The new lifecycle never changes modifiable, admission history, lock ownership, s
 
 ## Socket ownership and operating envelope
 
-- One process-owned directory, created with mkdtemp below Neovim's private runtime directory, mode 0700, physical directory owned by current uid. Verify lstat/type/uid/permissions; never chmod or reuse a foreign/symlinked directory.
+- One stable Parley-owned runtime parent beside Neovim's per-process runtime directories, below the same private uid-owned runtime base; each editor gets a fresh mkdtemp child, mode 0700. Verify physical directory/type/uid/permissions with lstat; never chmod/reuse a foreign or symlinked path. The parent admits at most256 process directories; excess or malformed ownership makes remote view unavailable, never falls back to public paths.
 - One listener per registered live attachment (at most 256), short serial socket names inside that directory. Check platform Unix socket length before serverstart; an overlong path or failed private allocation degrades only remote availability, never chooses a public directory or TCP port.
 - Keep every pre-existing Neovim server intact. Only listeners returned by this module's serverstart are stopped. Teardown unlinks/rmdirs only exact owned artifacts; no recursive glob/delete.
 - Normal open/publication is async through the existing bounded registry queue (4 active/64 queued). Request lifetime is 3 seconds; overload is a visible unavailable outcome. No subprocess, scan or new timer per keypress.
-- With N opens and N attached buffers, discovery/publication is O(N) total, callbacks O(1) keyed by buffer/attach; exit is one batch plus O(N) local listener cleanup. Count requests/listeners at 8 and 16 attachments; reject repeated open events causing extra registration. Memory is O(N), max256.
-- Runtime artifacts are needed only while a listener serves an attachment. Graceful close stops/removes exact owned sockets; last close removes the empty owned directory. On process death, Neovim runtime cleanup plus Couch's stale binding cleanup are the existing owners; validate crash residue behavior in M1 and pin a bounded owner before claiming completion (ARCH-FUNERAL).
+- With N opens and N attached buffers, discovery/publication is O(N) total, callbacks O(1) keyed by buffer/attach; exit is one batch plus O(N) local listener cleanup. Count requests/listeners at 8 and16 attachments and sweep/process observations at8 and16 process directories; reject repeated open events causing extra registration or per-buffer rescans. Startup sweep is O(P+S) for P bounded process directories and S their enumerated sockets, not one host process-table scan per endpoint. Memory is O(N), max256.
+- Runtime artifacts are needed only while a listener serves an attachment. Each process child has a versioned ownership marker with incarnation, PID, opaque native process start time, directory identity and enumerated socket leaves. Allocate the socket name in the marker before serverstart; cleanup never discovers socket names by a glob. Normal close removes exact owned sockets; last close removes marker and empty child. Marker codecs validate known fields/duplicates/bounds and preserve unknown members on rewrites.
+- Crash residue is real: on installed0.11.7, SIGKILL retained runtime directory and socket, and a subsequent nvim did not collect them. At the first endpoint startup only, sweep the stable owned parent. Obtain native process start-time evidence once per distinct PID, using bounded ps -o lstart semantics under LC_ALL=C (separate from Couch's opaque ProcessIdentity). Remove only exact marked owned directories on positive PID death. Live, reused or uncertain PID/start evidence, malformed/foreign markers, symlinked paths and unlisted entries remain untouched. Unlink only enumerated owned Unix sockets and the exact marker; rmdir only when empty. No recursion or watcher. At most256 directories bounds residue; admission refuses if retained uncertainty fills capacity. This lifecycle correction is approved by TL4967ea9e (ARCH-FUNERAL/SECURE).
 
 ## Architecture checks
 
@@ -109,13 +111,14 @@ The new lifecycle never changes modifiable, admission history, lock ownership, s
 | Function / boundary | Verification strategy |
 |---|---|
 | model.new/dispatch/snapshot | IO-free sequence tests; assert exact incarnation/generation ownership, copied state, ignored stale replies, notice-before-ack and detach-before-ack |
+| runtime marker codec/cleanup decision | pure malformed/type/unknown-member/foreign/symlink/live/reused/uncertain/dead controls; exact socket-list and directory cap, no IO in decision |
 | model.classify_reply | strict type/identity/namespace/path/code validation; truncated/missing/old replies remain unknown, extra harmless fields tolerated |
 | remote_session endpoint(query)/superseded(notice) | native RPC against real listeners; exact pending/current query echoes, malformed/stale notice ignored, exact displaced binding retires once |
-| listener allocation/stop | actual socket connect, 0700 uid-owned directory, symlink/foreign/length negatives; other Neovim servers survive cleanup |
+| listener allocation/stop/startup sweep | actual socket connect and0700 uid-owned directory; kill child nvim then next startup removes exact marked dead residue, preserving foreign/symlink/live/reused/uncertain controls, unlisted files and other Neovim servers; count process lookups8/16 |
 | endpoint CLI request | stateful executable fake covers current/superseded/retired and ordered delayed replies; byte/deadline/cancel bounds through production seam |
 | real conformance | isolated producer main pin plus real Neovim: registration, same-attach retry, second-editor takeover, stale unregister, lost ack and retired attachment cleanup |
 
-- [ ] Record the landed producer contract pin and settle runtime crash-residue ownership; do not begin implementation on an unpinned contract.
+- [ ] Record durable producer contract aa24764a and the TL-approved crash-residue correction before change-code; use the eventual landed producer merge pin for real conformance, never stack branches.
 - [ ] Add failing pure sequences, then the minimal sole owner; run unit specs red/green.
 - [ ] Add failing socket/CLI tests through the stateful fake, implement thin shell/transport, then run targeted integration red/green on 0.12.5 and0.11.7.
 - [ ] Extend real conformance with an intentional corrupt-fake negative control; run against producer merge pin in isolated roots.
@@ -141,4 +144,10 @@ The new lifecycle never changes modifiable, admission history, lock ownership, s
 
 ## Planning status
 
-TL approved producer-before-consumer order and one outside-pane discovery lookup (2026-10-22). Pair:6 owns pair#758 M1 and has agreed the contract sketch above. Await its durable contract/merge pin and TL approval of this plan; no implementation has begun, and no estimate is derived before change-code accepts the plan.
+TL approved producer-before-consumer order and one outside-pane discovery lookup (2026-10-22). Pair:6 owns pair#758 M1 and has agreed the contract sketch above. TL031822bc approved both milestones and pre-code checks; producer contract is durable at aa24764a and confirmed with the established-channel wording correction. TL4967ea9e approved the runtime-marker/startup-sweep lifecycle after the native crash probe. No implementation has begun; next is change-code plan-quality, then its estimate gate. Producer executable conformance waits for its landed merge pin.
+
+## Revisions
+
+### 2026-10-22 — durable producer pin and verified crash lifecycle
+
+Reason: the installed native crash probe disproved automatic Neovim runtime collection; the first later nvim left run directory,0700 Parley directory and socket intact. Delta: TL4967ea9e approves one private stable owned parent, PID+start-time ownership markers, positive-death startup cleanup only, exact enumerated sockets and empty rmdir, preserving foreign/symlink/live/reused/uncertain entries. No watcher or recursion. Add kill-then-next-start regression and count startup sweep growth. Pair:6 committed final M1 contract aa24764a; confirmed fixed callbacks and corrected the established-channel boundary: #405 retires advertised attachments/listeners; the later proxy gates existing channels by binding generation. Pair#798 now owns that deferred proxy/adapter work.
