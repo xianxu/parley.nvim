@@ -50,13 +50,13 @@ Operator-approved retirement revision (Couch 8f18c995): S1 owns admission from f
 - [ ] Replace the superseded handoff/deferred-write mechanism with S1-first ownership, one admission route and the not-protected presentation; prove retirement and compatibility through red/green tests.
 - [ ] Verify both runtimes, full mapped regressions, counts/deadlines, guards, lint and conformance; recorded suite, fresh close review and authorized live acceptance remain required before landing.
 
-## Estimate
+## Prior estimate (superseded by retirement)
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only; calibration source is marked stale/provisional.*
 
 This is a prospective estimate of the approved correction and remaining acceptance work after plan-quality cleared, not a reconstruction of the initial quick-flow work. One Lua/Neovim feature covers shared entry routing, production-order native regressions and both-runtime verification: v2 design 2.0 × thorough-spec 0.2 = 0.4; implementation 1.5 × v3.1 0.4 = 0.6. One small pure-owner extension uses the smaller-module analogue: design 0.2 × 0.2 = 0.04, implementation 0.5 × 0.4 = 0.2. Docs use 0.1 × 0.2 design and 0.1 × 0.4 implementation. One remaining review uses 0.1 × 0.2 design and 0.5 × 0.4 implementation; disposable conformance/profile acceptance uses real-API discovery 0.4 × 0.4 implementation. Existing owner, Couch seam, fake and native harness are reused; no greenfield library search or new protocol is needed. Familiarity is 1.0 and the thorough plan gets a 15% design buffer. Queue wait is excluded.
 
-```estimate
+```text
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: lua-neovim design=0.4 impl=0.6
@@ -125,6 +125,10 @@ Stopped without a product/test patch or another mechanism proposal, per TL c8405
 Cancelled obsolete queued suite lease-3241185062 through the supported exact-run command; runner exited context-cancelled and produced no suite result. No suite, review, stage or live profile is running. PR #333 is unlanded; issue remains working. Next action is TL/operator policy direction, not a third patch. Preserve the unrelated generated-workflow stash.
 
 ## Revisions
+
+### 2026-10-22 — accepted recovery guidance included in fresh review
+
+TL b128ed41 accepted the standalone route and required the old typed-lock refusal to say: “open it in nvim outside Couch and press Alt+Return to release”. The plan requires that exact instruction and path in the paired refusal regression, its successful restart/standalone action regression, README and atlas. Existing-path probes pass 1/0/0 on each runtime; no product/tracked test code changed. Cancelled the initial in-flight plan review without a verdict to include this requirement; next is fresh plan-quality on the committed amendment. Preserved the obsolete estimate as historical text so the gate requests a new derivation after quality clears, rather than validating the superseded scope's allowance.
 
 ### 2026-10-22 — name crashed-owner recovery before fresh plan-quality
 
