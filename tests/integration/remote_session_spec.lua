@@ -176,6 +176,95 @@ describe('private editor attachment dispatcher', function()
         assert.is_true(vim.bo[buf].modifiable)
     end)
 
+    for _, rejection in ipairs({ 'filename', 'invalid-buffer', 'socket', 'constructor-refused', 'constructor-throws' }) do
+        it('completes a rejected ' .. rejection .. ' attachment before a later native attach and close', function()
+            local _, bad = identity(rejection == 'filename' and 'unsupported\nname' or rejection)
+            local _, good = identity('ordinary-after-' .. rejection)
+            local child = require('tests.helpers.embedded_nvim').start()
+            local ok, err = pcall(function()
+                child:exec([[
+                    local root, bad, good, rejection = ...
+                    local uv = vim.uv or vim.loop
+                    local runtime = require('parley.remote_runtime')
+                    local model = require('parley.remote_session_model')
+                    local acquire, construct = runtime.acquire, model.new
+                    local probe = { bad_calls = 0, good_calls = 0, close_calls = 0, allocations = 0 }
+                    _G.admission_probe = probe
+                    vim.notify = function() end
+                    local replaced_socket, replaced_constructor
+                    runtime.acquire = function(options, callback)
+                        probe.allocations = probe.allocations + 1
+                        return acquire(options, function(result)
+                            if result.kind == 'ready' then
+                                local listen = result.runtime.listen
+                                result.runtime.listen = function(name, callback)
+                                    return listen(name, function(listening)
+                                        if listening.kind == 'listening' and not replaced_socket and rejection == 'socket' then
+                                            replaced_socket = true
+                                            probe.original_socket = listening.path
+                                            listening.path = listening.path .. '\ninvalid'
+                                        end
+                                        callback(listening)
+                                    end)
+                                end
+                            end
+                            callback(result)
+                        end)
+                    end
+                    model.new = function(context)
+                        if not replaced_constructor and rejection:match('^constructor') then
+                            replaced_constructor = true
+                            if rejection == 'constructor-throws' then error('controlled constructor rejection') end
+                            return nil, 'controlled constructor rejection'
+                        end
+                        return construct(context)
+                    end
+                    local options = { runtime = { parent = root .. '/native-runtime',
+                        source = require('tests.helpers.fake_process_source').new({
+                            [uv.os_getpid()] = { started = 'Thu Oct 22 05:00:00 2026' },
+                        }) } }
+                    local bad_buf = vim.fn.bufadd(bad.File); vim.fn.bufload(bad_buf)
+                    local good_buf = vim.fn.bufadd(good.File); vim.fn.bufload(good_buf)
+                    if rejection == 'invalid-buffer' then bad_buf = 2 ^ 60 end
+                    local frontend = require('parley.remote_session')
+                    frontend.attach(bad_buf, bad, function(result)
+                        probe.bad_calls = probe.bad_calls + 1
+                        probe.bad = result
+                        probe.bad_allocations = probe.allocations
+                        if rejection ~= 'invalid-buffer' then
+                            probe.modifiable, probe.modified = vim.bo[bad_buf].modifiable, vim.bo[bad_buf].modified
+                        end
+                        frontend.attach(good_buf, good, function(result)
+                            probe.good_calls = probe.good_calls + 1
+                            probe.good = result
+                            frontend.close(function() probe.close_calls = probe.close_calls + 1 end)
+                        end, options)
+                    end, options)
+                ]], root, bad, good, rejection)
+                local observed = child:exec([[
+                    local complete = vim.wait(..., function() return admission_probe.close_calls == 1 end, 10)
+                    return { complete = complete, probe = admission_probe }
+                ]], arrival.MS)
+                assert.is_true(observed.complete, 'rejected attachment stranded its completion or the shared queue')
+                local probe = observed.probe
+                assert.equals('unavailable', probe.bad.kind)
+                assert.equals(1, probe.bad_calls)
+                assert.equals(1, probe.good_calls)
+                assert.equals('confirmed', probe.good.kind)
+                assert.equals(1, probe.close_calls)
+                if rejection ~= 'invalid-buffer' then
+                    assert.is_true(probe.modifiable)
+                    assert.is_false(probe.modified)
+                end
+                if rejection == 'filename' or rejection == 'invalid-buffer' then assert.equals(0, probe.bad_allocations) end
+                if probe.original_socket then assert.is_nil(uv.fs_lstat(probe.original_socket)) end
+                assert.same({}, vim.fn.glob(root .. '/native-runtime/e-*', false, true))
+            end)
+            child:stop()
+            assert.is_true(ok, err)
+        end)
+    end
+
     it('answers nil after a native buffer rename until confirmed republish', function()
         local buf, registration = identity('old')
         attach(buf, registration)

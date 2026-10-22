@@ -203,6 +203,10 @@ function M.classify_reply(operation, exit_code, decoded, expected, null_sentinel
 end
 
 local context_fields = { 'Namespace', 'DocumentID', 'EditorIncarnation', 'AttachID', 'PID', 'Socket', 'Buffer', 'Mode', 'File' }
+local pending_fields = {}
+for _, field in ipairs(context_fields) do
+    if field ~= 'Socket' then pending_fields[#pending_fields + 1] = field end
+end
 local query_fields = { 'Namespace', 'DocumentID', 'EditorIncarnation', 'AttachID', 'Buffer' }
 local notice_fields = { 'Namespace', 'DocumentID', 'EditorIncarnation', 'AttachID', 'BindingGeneration' }
 local function exact_fields(value, fields, expected)
@@ -217,11 +221,24 @@ local function exact_fields(value, fields, expected)
     return true
 end
 
+-- Validate before allocation with stage='pending' (Socket must be absent),
+-- or after allocation with stage='listening'/nil (Socket is required). Both
+-- stages use the same tuple field validators, including canonical File.
+function M.validate_context(context, stage)
+    if stage ~= nil and stage ~= 'pending' and stage ~= 'listening' then
+        return nil, 'invalid attachment context stage'
+    end
+    local fields = stage == 'pending' and pending_fields or context_fields
+    if not exact_fields(context, fields, {}) then return nil, 'invalid attachment context' end
+    return true
+end
+
 -- context is an already allocated listening tuple. Events: publish/retry,
 -- reply{witness,result}, superseded{notice}, detach/close. Effects always form
 -- an array: register{request,witness}, unregister{request}, stop_listener, notify.
 function M.new(context)
-    assert(exact_fields(context, context_fields, {}), 'invalid attachment context')
+    local valid, err = M.validate_context(context)
+    if not valid then return nil, err end
     local tuple = copy(context)
     local state = { phase = 'listening', context = tuple }
     local witness = 0

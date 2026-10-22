@@ -194,18 +194,20 @@ function M.attach(buf, identity, callback, options)
         callback(state and state.result or { kind = 'unavailable', error = 'remote attachment pending' })
         return
     end
-    local prepared = type(identity) == 'table' and model.prepare_request('lookup', {
-        Namespace = identity.Namespace, DocumentID = identity.ID,
-    })
-    if not prepared or attachment_count >= 256 or current_file(buf) ~= identity.File then
-        callback({ kind = 'unavailable', error = 'confirmed document identity unavailable or endpoint capacity reached' })
-        return
-    end
     local next_id, err = model.next_attach_id(counter)
     if not next_id then callback({ kind = 'unavailable', error = err }); return end
+    local context = type(identity) == 'table' and {
+        Namespace = identity.Namespace, DocumentID = identity.ID, File = identity.File,
+        EditorIncarnation = incarnation, AttachID = next_id, PID = uv.os_getpid(), Buffer = buf, Mode = 'desktop',
+    }
+    local valid, reason = model.validate_context(context, 'pending')
+    if not valid or attachment_count >= 256 or current_file(buf) ~= context.File then
+        callback({ kind = 'unavailable', error = reason or 'confirmed document identity unavailable or endpoint capacity reached' })
+        return
+    end
     counter = next_id
     local record = { buf = buf, attach = counter, pending = 0, allocating = true,
-        options = options, callback = callback, identity = vim.deepcopy(identity), requests = {} }
+        options = options, callback = callback, identity = vim.deepcopy(identity), context = context, requests = {} }
     attachments[record], by_buffer[buf], by_attach[record.attach] = true, record, record
     attachment_count = attachment_count + 1
     get_runtime(record, options.runtime, function(result)
@@ -234,13 +236,23 @@ function M.attach(buf, identity, callback, options)
             record.listen_operation = runtime.listen('s' .. slot, function(listening)
                 record.listen_operation = nil
                 record.allocating = false
+                local completion
                 if listening.kind == 'listening' then
-                    record.owner = model.new({ Namespace = record.identity.Namespace, DocumentID = record.identity.ID,
-                        EditorIncarnation = incarnation, AttachID = record.attach, PID = uv.os_getpid(),
-                        Socket = listening.path, Buffer = buf, Mode = 'desktop', File = record.identity.File })
+                    local allocated = vim.tbl_extend('force', {}, record.context, { Socket = listening.path })
+                    local allocated_valid, allocated_reason = model.validate_context(allocated)
+                    if allocated_valid then
+                        local ok, owner, construction_error = pcall(model.new, allocated)
+                        if ok and owner then record.owner = owner
+                        else allocated_reason = ok and construction_error or owner end
+                    end
+                    if not record.owner then
+                        listening = { kind = 'unavailable', error = tostring(allocated_reason or 'attachment construction rejected') }
+                    end
+                end
+                if record.owner then
                     if retired(record) then
                         dispatch(record, { type = 'detach' })
-                        report(record, { kind = 'unavailable', error = 'attachment retired' })
+                        completion = { kind = 'unavailable', error = 'attachment retired' }
                     else dispatch(record, { type = 'publish' }) end
                 else
                     -- Join exact reservation cleanup even when another buffer
@@ -248,10 +260,13 @@ function M.attach(buf, identity, callback, options)
                     -- slot; only proven cleanup permits reuse.
                     stop_listener(record)
                     release_consumer(record)
-                    report(record, listening)
-                    if not retired(record) then notify(record, 'Remote view unavailable; reopen the file to retry') end
+                    completion = listening
                 end
                 done(listening); prune(record)
+                if completion then
+                    report(record, completion)
+                    if not retired(record) then notify(record, 'Remote view unavailable; reopen the file to retry') end
+                end
             end)
         end)
     end)

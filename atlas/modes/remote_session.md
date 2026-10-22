@@ -15,6 +15,10 @@ availability. Supersession also needs an explicit reopen to take the view back.
 Callbacks and notices use the pure owner's accepted outcome. A confirmation
 whose canonical file or attachment tuple does not match is reported as uncertain
 without owned binding evidence, even if it passed transport-level validation.
+The same pure context validator checks every known attachment field before
+runtime allocation, then the complete tuple including the allocated Socket.
+Rejected construction reports unavailable, joins exact listener cleanup and
+releases the shared queue so other attachments and teardown can proceed.
 
 The two fixed producer callbacks are `remote_session.endpoint(query)` (read-only
 pending/current witness, nil for retired or renamed buffers) and

@@ -291,6 +291,104 @@ describe('remote producer replies', function()
     end)
 end)
 
+local function pending_context()
+    local value = context(); value.Socket = nil
+    return value
+end
+local function validate_context(value, stage)
+    assert.is_function(Model.validate_context, 'shared attachment context validation is missing')
+    return Model.validate_context(value, stage)
+end
+
+describe('shared pending and listening attachment context validation', function()
+    it('accepts the complete pending tuple before a socket is allocated', function()
+        local value = pending_context()
+        assert.is_true(validate_context(value, 'pending'))
+        assert.same(pending_context(), value)
+    end)
+    it('accepts the complete listening tuple through the same default and explicit stage', function()
+        local value = context()
+        assert.is_true(validate_context(value))
+        assert.is_true(validate_context(value, 'listening'))
+        assert.same(context(), value)
+        local owner, err = Model.new(value)
+        assert.is_table(owner)
+        assert.is_nil(err)
+        assert.equals('listening', owner:snapshot().phase)
+    end)
+    it('refuses unknown stages and a socket supplied before allocation', function()
+        for _, stage in ipairs({ 'future', '', false, 1, {} }) do
+            local accepted, err = validate_context(context(), stage)
+            assert.is_nil(accepted)
+            assert.is_string(err)
+        end
+        local accepted, err = validate_context(context(), 'pending')
+        assert.is_nil(accepted)
+        assert.is_string(err)
+        accepted, err = validate_context(pending_context(), 'listening')
+        assert.is_nil(accepted)
+        assert.is_string(err)
+    end)
+    it('requires exactly every stage field with the same known type rules', function()
+        local invalid = { Namespace = 'relative', DocumentID = string.rep('A', 32),
+            EditorIncarnation = string.rep('g', 32), AttachID = '01', PID = 0,
+            Socket = 'relative', Buffer = 0, Mode = 'web', File = 'relative' }
+        for _, stage in ipairs({ 'pending', 'listening' }) do
+            local valid = stage == 'pending' and pending_context() or context()
+            for field in pairs(valid) do
+                for _, replacement in ipairs({ false, invalid[field] }) do
+                    local value = vim.deepcopy(valid); value[field] = replacement
+                    local accepted, err = validate_context(value, stage)
+                    assert.is_nil(accepted, stage .. ':' .. field)
+                    assert.is_string(err)
+                end
+                local value = vim.deepcopy(valid); value[field] = nil
+                local accepted, err = validate_context(value, stage)
+                assert.is_nil(accepted, stage .. ':' .. field)
+                assert.is_string(err)
+            end
+            local extra = vim.deepcopy(valid); extra.Future = true
+            local accepted, err = validate_context(extra, stage)
+            assert.is_nil(accepted)
+            assert.is_string(err)
+        end
+    end)
+    it('rejects every unsafe canonical File spelling before allocation and at construction', function()
+        for _, file in ipairs({ '/repo/new\nline.md', '/repo/carriage\rreturn.md', '/repo/nul\0name.md',
+            'relative.md', '', '/repo/./doc.md', '/repo/../doc.md', '/repo//doc.md', '/repo/doc.md/' }) do
+            for _, stage in ipairs({ 'pending', 'listening' }) do
+                local value = stage == 'pending' and pending_context() or context()
+                value.File = file
+                local accepted, err = validate_context(value, stage)
+                assert.is_nil(accepted, file)
+                assert.is_string(err)
+            end
+            local value = context(); value.File = file
+            local ok, owner, err = pcall(Model.new, value)
+            assert.is_true(ok, 'invalid context must be a normal constructor result')
+            assert.is_nil(owner)
+            assert.is_string(err)
+        end
+    end)
+    it('returns a nonthrowing constructor refusal for every malformed full tuple', function()
+        local cases = { false, 'invalid', {}, pending_context() }
+        for field in pairs(context()) do
+            local value = context(); value[field] = nil
+            cases[#cases + 1] = value
+        end
+        for _, value in ipairs(cases) do
+            local ok, owner, err = pcall(Model.new, value)
+            assert.is_true(ok, 'invalid context must not throw')
+            assert.is_nil(owner)
+            assert.is_string(err)
+        end
+        local ok, owner, err = pcall(Model.new, nil)
+        assert.is_true(ok)
+        assert.is_nil(owner)
+        assert.is_string(err)
+    end)
+end)
+
 describe('remote attachment lifecycle', function()
     it('publishes once with a private copied tuple and serves exact handshake', function()
         local original = context()
