@@ -427,3 +427,102 @@ findings:
    Add a `## Revisions` entry defining complete attachment-context validation before allocation and guaranteed completion/cleanup on rejection. Require a native sequence test: unsupported canonical filename → one unavailable result → ordinary attachment succeeds → close completes.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"72d1245b-ab98-424b-b7ea-7faf5f1f8a8c","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/fdff89dc44fd75be","reviewed_head":"3ae643672ab1a24d763cd40141533899ec980d07","slot":"parley.nvim:1","requested_at":"2026-10-22T14:19:27.681127Z"},"phase":"finished","pid":4997,"started_at":"2026-10-22T14:19:27.784398Z","finished_at":"2026-10-22T14:26:17.934885Z","session_id":"01a163fb-2db7-7de0-a101-866e044d9e3b","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T07:49:51-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 405 — remote-session: start a private RPC server when attached to a registered session file or side doc, and register its address with Couch |
+| repo | parley.nvim |
+| issue file | workshop/issues/000405-remote-session-start-a-private-rpc-server-when-attached-to-a-registered-session-file-or-side-doc-and-register-its-address-with-couch.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c..411be8ebf62e2b04ba101cd14225e04f13300a03 |
+| command | sdlc milestone-close --issue 405 --milestone M1 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T07:49:51-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+M1 is ready. BR-7 is addressed with executable regression evidence: removing the fix reproduced six pure-test failures and four native continuation failures. The focused suite passes on both supported runtimes. No new findings. Automatic attachment wiring and real-producer acceptance remain explicitly scoped to M2.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Existing cancellation regressions pass, including held acquisition, queued registration, all four listener startup boundaries, cleanup joining and slot reuse.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      remote_runtime.lua carries startup_deadline through first-listener durability; reservation and publication deadline regressions pass on both runtimes.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The plan's Pure entities table identifies remote_runtime_record.lua as RuntimeOwnershipRecord's location; that module implements the codec and cleanup decision.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Last-consumer drain closes the runtime automatically; final-detach cleanup and attach-during-drain regressions pass on both runtimes.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      README.md documents --editor-endpoints --fake-only and the deferred real prerequisites; the parser implements that invocation and its fake conformance check passed.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      The model normalizes unowned confirmations before storing results, and the dispatcher consumes that accepted result. Mismatched-identity and canonical-file regressions pass.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Shared validation precedes allocation and checks the allocated tuple; constructor refusal or exception follows cleanup/completion. Removing the production fix in a disposable checkout caused six pure failures and four native continuation failures, with zero test errors. Pinned-head tests pass.
+```
+
+1. **Strengths**
+
+   - Shared admission validation covers the complete pending and listening tuples, with construction failures contained by the dispatcher (`remote_session_model.lua:226`, `remote_session.lua:205`).
+   - Native continuation tests assert one rejection callback, successful subsequent attachment, completed close, resource cleanup and unchanged local editability (`tests/integration/remote_session_spec.lua:180`).
+   - Runtime cleanup uses exact ownership witnesses and retains foreign or uncertain artifacts (`remote_runtime.lua:238`).
+   - README, indexed atlas and traceability document the delivered foundation and its M2 boundaries.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - `make test-spec SPEC=modes/remote_session`: **195 passed** on Neovim **0.12.5** and **0.11.7**; both process censuses clean.
+   - Endpoint fake conformance and corrupt-identity negative control passed.
+   - BR-7 counterfactual: **10 failures, zero errors** after restoring the pre-fix production files while retaining current tests.
+   - Disposable checkout removed; reviewed checkout unchanged. Full repository suite and real-producer acceptance were not run in this review.
+
+6. **Architectural notes for upcoming work**
+
+   | Principle | Assessment |
+   |---|---|
+   | ARCH-DRY | Pass — shared field validation, registry transport and kernel lease reused. |
+   | ARCH-PURE | Pass — attachment authority and cleanup decisions are IO-free; native effects remain in shells. |
+   | ARCH-PURPOSE | Pass for M1 — lifecycle wiring and real acceptance are explicitly retained in M2. |
+   | ARCH-MOCK | Pass for M1 — stateful endpoint/process fakes share production seams; real conformance remains unqualified. |
+   | ARCH-CONSTRAINTS | Pass — capacity, byte, deadline and counted-work bounds have focused coverage. |
+   | ARCH-SECURE | Pass — complete admission validation, private directories and conservative ownership checks. |
+   | ARCH-ORDER | Pass — pure authority transitions and controlled startup/retirement sequences exercise production paths. |
+   | ARCH-FUNERAL | Pass — cancellation joining, last-consumer cleanup and bounded crash-residue reclamation are covered. |
+   | ARCH-EVOLVE | Pass — marker rewrites preserve unknown nested fields; strict known-field and duplicate-key tests pass. |
+
+   Core-concept locations and classifications match the delivered M1 modules. The `session_sync.lua` and `init.lua` integration rows belong to the documented M2 work.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ed381057-522d-43f9-bd65-00fac7aabb7b","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":5,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/399bef0f1bce698b","reviewed_head":"411be8ebf62e2b04ba101cd14225e04f13300a03","slot":"parley.nvim:1","requested_at":"2026-10-22T14:46:18.28294Z"},"phase":"finished","pid":92898,"started_at":"2026-10-22T14:46:18.416208Z","finished_at":"2026-10-22T14:49:51.323465Z","session_id":"01a16413-c1c9-77a0-be00-bb25d4dd8827","outcome":"returned"}] -->

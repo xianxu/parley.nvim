@@ -44,7 +44,7 @@ the file open, without the operator starting nvim with special flags.
 
 ## Plan
 
-- [ ] M1 — endpoint model, private listeners and producer conformance (see [durable plan](../plans/000405-remote-session-endpoint-plan.md)).
+- [x] M1 — endpoint model, private listeners and producer conformance (see [durable plan](../plans/000405-remote-session-endpoint-plan.md)).
 - [ ] M2 — attachment lifecycle, outside-pane discovery, native takeover/teardown and real-profile acceptance.
 
 ## Log
@@ -52,6 +52,7 @@ the file open, without the operator starting nvim with special flags.
 ### 2026-10-20
 
 ### 2026-10-22 — claimed and planned against producer prerequisite
+- 2026-10-22: closed M1 — TL0bb56c13 authorizes round5 after complete input/construction boundary sweep. Shared pure pending/listening validation RED46pass6fail ->52PASS both versions; native rejection sequence RED26pass4fail ->31PASS including unsupported filename before allocation, allocated Socket rejection, refused/throwing constructors, invalid native buffer control, subsequent ordinary attachment and close. Canonical195PASS both Neovim0.12.5/0.11.7, clean censuses; lint0warnings0errors834files; endpoint fake conformance and corrupt-identity negative controls pass both. Fresh recorded suite pending on411be8eb; no landing until final pass. Real producer acceptance remains M2 pending pair#758/#801. Any further new finding family returns to TL for scope decision before patching.; review verdict: SHIP
 
 Ran tl-worker/help and start-plan. The startup weave refresh changed only a generated CI workflow; restored that refresh delta under the TL's standing instruction, so no workflow/local-gates change is part of #405.
 
