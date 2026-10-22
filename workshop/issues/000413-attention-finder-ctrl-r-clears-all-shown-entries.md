@@ -49,7 +49,9 @@ one, so the list grows past what they can go through by hand. Add a one-key **cl
 
 - [x] Add red model/store cases for exact clear, all states, side retirement and resubmit; add native picker scope/filter/empty/late-refresh controls.
 - [x] Extend the existing picker action context with its shown-row snapshot; register finder-local Ctrl+R, clear once through the leased model, repaint and notify the removed count.
-- [ ] Document the key and native register-paste override; run focused checks on both nvim versions, recorded suite and close review, then land.
+- [x] Document the key and native register-paste override; run focused checks on both nvim versions and lint.
+
+Remaining workflow: await the recorded suite, close review and landing; the authorized real-profile acceptance is recorded below.
 
 Actions: clear shown rows; submit again. The existing store lease serializes clear with other writes (ARCH-ORDER); a failed write leaves rows intact and surfaces the existing warning. Successful clear removes only listed paths, preserving side retirement through the existing remove rule (ARCH-DRY/PURE); later submits restore waiting. No new durable format, watcher or retry. The picker snapshot includes filtered ancestor context, excludes hidden scope rows, and is empty while a status replaces rows. Snapshot/clear walks N rows once, N <=256; 8/16-entry tests count one batch with exactly N paths. Ctrl+R overrides native register paste only in this finder and is configurable under attention_finder_mappings.clear_shown. Other pickers keep native behavior.
 
@@ -66,3 +68,9 @@ Initial mapping RED327PASS/3FAIL/0ERROR: exact model/store clear missing and pro
 ### 2026-10-22 — exact hidden-row preservation
 
 The store normally sweeps expired seen entries after every write. Clear must skip that incidental sweep so its one write cannot remove a hidden entry whose grace has expired; ordinary sweep behavior is unchanged. Add the store counterexample. The new outer clear loop is O(N), but each side removal reuses the existing retirement bound check over R <=256 records: total bounded O(NR), rather than a claim of wholly linear removal. The8/16 tests count one store batch containing exactlyN paths; no new scan runs on typing.
+
+### 2026-10-22 — real-profile acceptance and queued suite
+
+PR335 code8de8db19808077bcc09e60eda98ac3b486ea9b1a. Recorded suite lease-1240027359 / attempt5d39ccb9e13866263164a6b4da198128 remains queued (initial position16, then14), detached /Volumes/TestScratch/local-checks/sdlc-local-2516358079; session89511. No suite pass claimed and no duplicate runner. The close review may overlap this queue per tl-worker; final passing evidence precedes landing.
+
+TLf1848963 authorized a brief parley:0 stage with isolated state/fixtures and no live nvim reload. PASS on the operator's actual nvim0.11.7 profile, loaded attention.lua from /Users/xianxu/workspace/parley.nvim: native Insert Ctrl+R cleared the3 mixed-state/filter/tree rows, retained hidden and other-slot rows, reported zero on empty, then Ctrl+A plus clear removed the1 other-slot match; the leased store persisted the result. XDG_STATE_HOME/XDG_CACHE_HOME and attention state were disposable; no live store or real document was opened. The initial probe incorrectly sent mapped Esc after clearing, closing its own picker before checking the query; it is not a product failure. Changed the probe to native Ctrl+R with a controlled stopinsert, then passed (parley-413-profile-final.log). Both stages were cleared immediately. Fresh clear verified parley:0 clean on main equal origin/main17bb5a2ce13566654fb8a94e5af2a66cf294c12b; disposable profile, state and fixtures removed. No Couch registry entries were created. Hub report sent.
