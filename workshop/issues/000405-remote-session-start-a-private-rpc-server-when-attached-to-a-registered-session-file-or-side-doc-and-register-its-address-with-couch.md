@@ -69,3 +69,7 @@ Reason: existing Couch document membership is not an editor endpoint registry, a
 TL031822bc approved the two-milestone plan. Native0.11.7 SIGKILL probe showed that run directory,0700 child and socket survive both kill and the next nvim. TL4967ea9e approved the explicit startup-only, positive-death cleanup lifecycle now detailed in the plan; no assumption of automatic runtime collection remains.
 
 Pair:6's durable producer M1 contract is aa24764a339d7f001dba02c0ec1db50727880362, workshop/plans/000758-editor-endpoints-plan.md. Checked exact JSON version/envelopes/codes/bounds, monotone uint64-string AttachID, native ProcessIdentity, registration Namespace, batch unregister and fixed callbacks. Confirmed by receipt7d43957e with established-channel wording correction: #405 cannot revoke native RPC calls on an existing connection; later pair#798 must fence each proxy operation by generation. No production code yet; change-code owns plan-quality/estimate next.
+
+### 2026-10-22 — plan-quality refinement approved
+
+Plan-quality R1 raised PQ-1 shared-resource-admission-serialization and PQ-2 external-process-boundary-contract (Important). TL396d2c15 approved reusing document_lease's kernel guard for runtime count/create/reclaim and the named remote_process seam/stateful fake,1s inspection/2s async startup budget. Plan revised with controlled concurrency, interruption and canceled-completion tests. No implementation yet; rerun plan-quality to dispose the two findings before estimating.
