@@ -1,6 +1,6 @@
 ---
 id: 000407
-status: codecomplete
+status: done
 created: 2026-10-21
 updated: 2026-10-22
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 114df050b8c3bb862e994c884d54e88d5440a05b
         evidence_commit: 327891e60aca3a258b8fe9a13c7f7d73ca45483c
+        landed_commit: 7bf23a5523fbbc1076a28bcceaf74b0a05cdca71
 ---
 
 # Alt+O: open links in tight bullet lists, and jump to #anchor headings
