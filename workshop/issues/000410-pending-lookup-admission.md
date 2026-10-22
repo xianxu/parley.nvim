@@ -1,13 +1,13 @@
 ---
 id: 000410
-status: working
+status: codecomplete
 deps: [parley.nvim#408]
 github_issue:
 created: 2026-10-21
 updated: 2026-10-22
 estimate_hours: 1.987
 collaboration-mode: collaboration
-card_mirror: 'edded94fe25fa518cd4dfabbf27fb0b183cb3cde' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'b799e2f3094e46ff56229f150bcc7a7325995c94' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T11:48:38-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: operator}
+actual_hours: 3.90
 ---
 
 # Bound insert admission across pending registration lookup
