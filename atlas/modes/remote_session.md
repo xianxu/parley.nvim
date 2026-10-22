@@ -35,6 +35,16 @@ available without retaining a listener; uncertain publication keeps its listener
 Cleanup failure retains ownership evidence and refuses remote availability;
 an explicit reopen may retry cleanup, with no automatic loop.
 
+Each consumer also owns its exact listener transaction handle, from marker
+reservation through native listen and durable publication. Retirement cancels
+and joins that transaction even when another buffer still needs the runtime.
+Cleanup removes a proven reservation before its slot can be reused. Interrupted
+marker writes retain an in-memory created-inode and intended-byte witness;
+matching committed writes are recognized for cleanup only. Unpublished runtime
+directories are removed only when their exact owned contents can be proved.
+Foreign replacements remain untouched, and cleanup completes before the kernel
+guard is released or a new runtime epoch is admitted.
+
 `remote_runtime` serializes parent allocation and cleanup through the existing
 `document_lease` kernel flock. One private parent holds at most 256 process
 directories, including unknown residue. Startup reads bounded ownership markers

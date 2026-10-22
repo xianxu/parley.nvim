@@ -7,6 +7,8 @@
 - Correct the authoritative concept table when a module moves; a later revision explaining the new location does not repair a contradictory table.
 - A native close can also unlink a pathname. Probe replacement behavior, then revalidate the exact owned socket identity immediately before serverstop; uncertain or replaced paths must never be passed to it.
 - Test retirement at each async resource boundary, including after the kernel listener exists but before its durable marker is finished. Ending the resource lifetime and reporting the caller's completion are separate obligations.
+- A shared acquisition handle cannot cancel a consumer's later transaction. Retain the exact reservation/listen/publication handle until its callback is delivered, and prove slot reuse while another consumer keeps the shared resource alive.
+- Capture created-file and directory identity in the native callback before a canceled coroutine resumes. Freeze the first created inode: an fd number may be reused during later reads. Identical bytes at a replacement inode are foreign, not ownership proof.
 
 
 ## 2026-10-16 (#353 — displayed ancestry and native history)

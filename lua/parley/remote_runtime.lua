@@ -11,31 +11,53 @@ local function now() return uv.hrtime() / 1000000 end
 local function same(a,b) return a and b and a.dev==b.dev and a.ino==b.ino and a.type==b.type end
 local function private(stat) return stat and stat.type=='directory' and stat.uid==uid and stat.mode==16832 end
 local function need(value,err) if not value then error(tostring(err or 'runtime unavailable'),0) end; return value end
+local finalize_owned_write
 
 -- A transaction has one outstanding fs request or joined process observation.
 -- Cancellation drains it before descriptors and the kernel guard are released.
 local function transaction(timeout, callback, body, deadline)
     local ctx = {deadline=deadline or now()+timeout, descriptors={}}
-    local co, timer, finished
+    local co, timer, finished, final_result
+    local resume
     local function check()
+        if ctx.finalizing then return end
         if ctx.stopped then error(ctx.stopped,0) end
         if now()>=ctx.deadline then error('runtime deadline',0) end
     end
     ctx.check=check
-    local function finish(result)
+    local function complete(result)
         if finished then return end
         finished=true
         if timer and not timer:is_closing() then timer:stop();timer:close() end
         for fd in pairs(ctx.descriptors) do pcall(uv.fs_close,fd) end
+        if ctx.finally then
+            local ok,err=pcall(ctx.finally,result)
+            if not ok then result={kind='unavailable',error=tostring(err)} end
+        end
         if ctx.guard then ctx.guard.release();ctx.guard=nil end
-        if ctx.finally then ctx.finally(result) end
         vim.schedule(function() callback(result) end)
     end
-    local function resume(...)
+    local function finish(result)
+        if result.kind~='unavailable' or (not ctx.owned_write and not ctx.created_directory) then complete(result);return end
+        -- Admission is over. Only this finite, exact-owned cleanup can run
+        -- beyond its deadline; it cannot start listeners or publish success.
+        ctx.finalizing,final_result=true,result
+        if timer and not timer:is_closing() then timer:stop();timer:close() end
+        co=coroutine.create(function() finalize_owned_write(ctx) end)
+        resume()
+    end
+    resume=function(...)
         if finished then return end
         local ok,result=coroutine.resume(co,...)
-        if not ok then finish({kind='unavailable',error=tostring(result)})
-        elseif coroutine.status(co)=='dead' then finish(result or {kind='unavailable',error='runtime unavailable'}) end
+        if not ok then
+            if ctx.finalizing then
+                final_result.error=final_result.error..'; owned cleanup retained: '..tostring(result)
+                complete(final_result)
+            else finish({kind='unavailable',error=tostring(result)}) end
+        elseif coroutine.status(co)=='dead' then
+            if ctx.finalizing then complete(final_result)
+            else finish(result or {kind='unavailable',error='runtime unavailable'}) end
+        end
     end
     function ctx.fs(name,...)
         check()
@@ -45,6 +67,17 @@ local function transaction(timeout, callback, body, deadline)
             ctx.request=nil
             if name=='fs_open' and result then ctx.descriptors[result]=true end
             if name=='fs_close' and not err then ctx.descriptors[args[1]]=nil end
+            if name=='fs_mkdtemp' and not err and result then
+                -- Capture this random directory before a canceled body can
+                -- lose its ownership. No yield separates path and identity.
+                ctx.created_directory={path=result,stat=uv.fs_lstat(result)}
+            end
+            local owned=ctx.owned_write
+            if owned and not err then
+                -- Capture native creation before the canceled body resumes.
+                if name=='fs_open' and args[1]==owned.temporary and args[2]=='wx' then owned.fd=result end
+                if name=='fs_fstat' and args[1]==owned.fd and not owned.stat then owned.stat=result end
+            end
             vim.schedule(function() resume(result,err) end)
         end
         ctx.request=uv[name](unpack(args,1,count+1))
@@ -69,7 +102,7 @@ local function transaction(timeout, callback, body, deadline)
     end
     local operation={}
     function operation.cancel(reason)
-        if finished or ctx.stopped then return end
+        if finished or ctx.stopped or ctx.finalizing then return end
         ctx.stopped=reason or 'runtime canceled'
         if ctx.observation then ctx.observation.cancel()
         elseif ctx.request then pcall(uv.cancel,ctx.request) end
@@ -113,12 +146,57 @@ local function witness_matches(ctx,directory,witness)
     local record,current=read_marker(ctx,directory)
     return record and current and same(current.stat,witness.stat) and current.bytes==witness.bytes
 end
+local function finalize_marker_write(ctx)
+    local owned=ctx.owned_write
+    local resource=owned.resource
+    local function owned_directory()
+        local stat=ctx.fs('fs_lstat',resource.directory)
+        return private(stat) and same(stat,resource.stat)
+    end
+    if not owned_directory() then return end
+    if not owned.stat and owned.fd and ctx.descriptors[owned.fd] then
+        owned.stat=ctx.fs('fs_fstat',owned.fd)
+    end
+    if not owned.stat or owned.stat.type~='file' or owned.stat.uid~=uid then return end
+    local temporary=ctx.fs('fs_lstat',owned.temporary)
+    if same(temporary,owned.stat) and temporary.uid==uid and temporary.mode%512==384 and owned_directory() then
+        need(ctx.fs('fs_unlink',owned.temporary))
+    end
+    local record,witness=read_marker(ctx,resource.directory)
+    if record and same(witness.stat,owned.stat) and witness.bytes==owned.bytes and owned_directory() then
+        -- The rename committed before cancellation was observed. This witness
+        -- permits later exact cleanup, never activation or successful publish.
+        resource.record,resource.witness=owned.record,witness
+    end
+end
+finalize_owned_write=function(ctx)
+    if ctx.owned_write then finalize_marker_write(ctx) end
+    local created=ctx.created_directory
+    if not created then return end
+    local function owned_directory()
+        local stat=ctx.fs('fs_lstat',created.path)
+        return private(stat) and same(stat,created.stat)
+    end
+    if not owned_directory() then return end
+    local names=entries(ctx,created.path,1)
+    if not names then return end
+    if #names==1 then
+        local resource=created.resource
+        if names[1]~='owner.json' or not resource or not resource.witness
+            or not witness_matches(ctx,created.path,resource.witness) or not owned_directory() then return end
+        need(ctx.fs('fs_unlink',created.path..'/owner.json'))
+    end
+    if owned_directory() then ctx.fs('fs_rmdir',created.path) end
+end
 local function write_marker(ctx,resource,record)
     need(same(ctx.fs('fs_lstat',resource.directory),resource.stat),'runtime directory changed')
     if resource.witness then need(witness_matches(ctx,resource.directory,resource.witness),'ownership marker changed') end
     local bytes=need(codec.encode(record),'invalid ownership marker')
     local temporary=resource.directory..'/.owner.tmp'
+    local owned={resource=resource,temporary=temporary,bytes=bytes,record=record}
+    ctx.owned_write=owned
     local fd=need(ctx.fs('fs_open',temporary,'wx',384))
+    owned.stat=need(ctx.fs('fs_fstat',fd))
     local offset=0
     while offset<#bytes do
         local size=need(ctx.fs('fs_write',fd,bytes:sub(offset+1),offset))
@@ -132,6 +210,7 @@ local function write_marker(ctx,resource,record)
     need(ctx.fs('fs_fsync',directory_fd));need(ctx.fs('fs_close',directory_fd))
     local stat=need(ctx.fs('fs_lstat',resource.directory..'/owner.json'))
     resource.record,resource.witness=record,{stat=stat,bytes=bytes}
+    ctx.owned_write=nil
 end
 local function facts(ctx,directory,record)
     local stat=ctx.fs('fs_lstat',directory)
@@ -368,8 +447,9 @@ function M.acquire(options,callback)
         ctx.check()
         local directory=need(ctx.fs('fs_mkdtemp',parent..'/e-XXXXXX'))
         local directory_stat=need(ctx.fs('fs_lstat',directory))
-        need(private(directory_stat),'unsafe new runtime directory')
+        need(private(directory_stat) and same(directory_stat,ctx.created_directory.stat),'unsafe new runtime directory')
         local resource={directory=directory,parent=parent,stat=directory_stat,startup_deadline=ctx.deadline}
+        ctx.created_directory.resource=resource
         local record={Version=1,EditorIncarnation=incarnation,PID=pid,Started=own.started,
             Directory={Name=vim.fn.fnamemodify(directory,':t'),Device=directory_stat.dev,Inode=directory_stat.ino},Sockets={}}
         write_marker(ctx,resource,record)

@@ -37,6 +37,10 @@ local function release_consumer(record)
     local owned = record.epoch
     if not owned or record.released then return end
     record.released = true
+    -- Acquisition is shared, but reservation/listen/publication belongs to
+    -- this consumer. Retain and join that exact transaction even when another
+    -- buffer still needs the epoch or its completion is already queued.
+    if record.listen_operation then record.listen_operation.cancel() end
     owned.live = owned.live - 1
     if owned.live == 0 then
         owned.draining = true
@@ -226,7 +230,8 @@ function M.attach(buf, identity, callback, options)
                 report(record, { kind = 'unavailable', error = 'attachment retired' })
                 done(); prune(record); return
             end
-            runtime.listen('s' .. slot, function(listening)
+            record.listen_operation = runtime.listen('s' .. slot, function(listening)
+                record.listen_operation = nil
                 record.allocating = false
                 if listening.kind == 'listening' then
                     record.owner = model.new({ Namespace = record.identity.Namespace, DocumentID = record.identity.ID,
@@ -237,8 +242,10 @@ function M.attach(buf, identity, callback, options)
                         report(record, { kind = 'unavailable', error = 'attachment retired' })
                     else dispatch(record, { type = 'publish' }) end
                 else
-                    -- A partial listen may have durable marker residue. Keep
-                    -- its slot reserved until explicit runtime teardown.
+                    -- Join exact reservation cleanup even when another buffer
+                    -- keeps this runtime alive. A refused cleanup retains the
+                    -- slot; only proven cleanup permits reuse.
+                    stop_listener(record)
                     release_consumer(record)
                     report(record, listening)
                     if not retired(record) then notify(record, 'Remote view unavailable; reopen the file to retry') end

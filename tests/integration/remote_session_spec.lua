@@ -35,7 +35,8 @@ describe('private editor attachment dispatcher', function()
     before_each(function()
         local base = uv.fs_stat('/Volumes/TestScratch') and '/Volumes/TestScratch' or (vim.env.TMPDIR or uv.os_tmpdir())
         root = assert(uv.fs_mkdtemp(base .. '/rs-XXXXXX')); buffers, notices, gates, releases = {}, {}, {}, {}
-        saved = { fs_rmdir = uv.fs_rmdir, serverstart = vim.fn.serverstart, editor = require('parley.document_registry').editor,
+        saved = { fs_fsync = uv.fs_fsync, fs_write = uv.fs_write,
+            acquire = require('parley.remote_runtime').acquire, fs_rmdir = uv.fs_rmdir, serverstart = vim.fn.serverstart, editor = require('parley.document_registry').editor,
             path = vim.env.PATH, registry = vim.env.FAKE_COUCH_REGISTRY,
             mode = vim.env.FAKE_COUCH_EDITOR_MODE, notify = vim.notify }
         require('tests.helpers.fake_couch').write(root, root .. '/sent', root .. '/argv')
@@ -52,7 +53,8 @@ describe('private editor attachment dispatcher', function()
     after_each(function()
         for _, gate in ipairs(gates) do vim.fn.writefile({}, gate) end
         for _, release in ipairs(releases) do release() end
-        uv.fs_rmdir = saved.fs_rmdir
+        uv.fs_rmdir, uv.fs_write, uv.fs_fsync = saved.fs_rmdir, saved.fs_write, saved.fs_fsync
+        require('parley.remote_runtime').acquire = saved.acquire
         if frontend.close then
             local done; frontend.close(function() done = true end)
             assert.is_true(vim.wait(arrival.MS, function() return done end, 10))
@@ -479,6 +481,199 @@ describe('private editor attachment dispatcher', function()
         assert.is_table(frontend.endpoint(query(fresh.context)))
         assert.is_nil(frontend.endpoint(query(old)))
         assert.equals('socket', uv.fs_lstat(fresh.context.Socket).type)
+    end)
+
+    -- Hold only delivery of real IO completions. The returned real listen
+    -- handle is observed independently from the shared acquisition handle.
+    local function hold_listen(stage, target_buf, target_name)
+        local control = { cancels = 0, shared_cancels = 0, starts = 0, later_starts = 0, later_writes = 0 }
+        local runtime_module = require('parley.remote_runtime')
+        local acquire = runtime_module.acquire
+        local descriptors = {}
+        local function hold(callback)
+            control.paused = true
+            local released = false
+            control.release = function()
+                if released then return end
+                released = true
+                callback()
+            end
+            releases[#releases + 1] = control.release
+        end
+        runtime_module.acquire = function(runtime_options, callback)
+            local operation = acquire(runtime_options, function(result)
+                if result.kind == 'ready' and not control.directory then
+                    local resource = result.runtime
+                    control.directory, control.path = resource.directory, resource.directory .. '/' .. target_name
+                    local stop = resource.stop
+                    resource.stop = function(name, ready)
+                        return stop(name, function(value)
+                            if ready then ready(value) end
+                            if name == target_name then
+                                control.stop_result = value
+                                control.stopped = value.kind == 'closed'
+                            end
+                        end)
+                    end
+                    local listen = resource.listen
+                    resource.listen = function(name, ready)
+                        local handle = listen(name, function(value)
+                            if name == target_name and stage == 'completed callback' and not control.paused then
+                                control.completed_result = value
+                                hold(function() ready(value) end)
+                            else ready(value) end
+                        end)
+                        if name == target_name then
+                            local cancel = handle.cancel
+                            handle.cancel = function(...)
+                                control.cancels = control.cancels + 1
+                                return cancel(...)
+                            end
+                            control.handle = handle
+                        end
+                        return handle
+                    end
+                end
+                callback(result)
+            end)
+            local cancel = operation.cancel
+            operation.cancel = function(...)
+                control.shared_cancels = control.shared_cancels + 1
+                return cancel(...)
+            end
+            return operation
+        end
+        uv.fs_write = function(fd, data, offset, callback)
+            if type(data) == 'string' then
+                local ok, record = pcall(vim.json.decode, data)
+                local last = ok and type(record) == 'table' and type(record.Sockets) == 'table'
+                    and record.Sockets[#record.Sockets]
+                if last and last.Name == target_name and control.directory
+                    and record.Directory.Name == vim.fn.fnamemodify(control.directory, ':t') then
+                    descriptors[fd] = last.State
+                    if control.retired then control.later_writes = control.later_writes + 1 end
+                end
+            end
+            return saved.fs_write(fd, data, offset, callback)
+        end
+        uv.fs_fsync = function(fd, callback)
+            if type(callback) == 'function' and not control.paused
+                and ((stage == 'reservation fsync' and descriptors[fd] == 'reserved')
+                    or (stage == 'listening marker fsync' and descriptors[fd] == 'listening')) then
+                return saved.fs_fsync(fd, function(err, result)
+                    hold(function() callback(err, result) end)
+                end)
+            end
+            return saved.fs_fsync(fd, callback)
+        end
+        vim.fn.serverstart = function(path)
+            local result = saved.serverstart(path)
+            if path == control.path then
+                control.starts = control.starts + 1
+                if control.retired then control.later_starts = control.later_starts + 1 end
+                if stage == 'native listen return' and not control.paused then
+                    control.paused, control.retired = true, true
+                    frontend.detach(target_buf)
+                end
+            end
+            return result
+        end
+        return control
+    end
+
+    for _, stage in ipairs({ 'reservation fsync', 'native listen return', 'listening marker fsync', 'completed callback' }) do
+        it('cancels the exact consumer listen at ' .. stage .. ' and joins its owned effects', function()
+            local buf, registration = identity('canceled-' .. stage:gsub(' ', '-'))
+            local keeper, keeper_registration, reuse, reuse_registration
+            if stage == 'reservation fsync' then
+                keeper, keeper_registration = identity('still-live-consumer')
+                reuse, reuse_registration = identity('reuse-canceled-listener-slot')
+            end
+            local control = hold_listen(stage, buf, keeper and 's2' or 's1')
+            if keeper then assert.equals('confirmed', attach(keeper, keeper_registration).kind) end
+            local calls, result = 0
+            frontend.attach(buf, registration, function(value) calls = calls + 1; result = value end, options)
+            assert.is_true(vim.wait(arrival.MS, function() return control.paused end, 10))
+            assert.is_table(control.handle)
+            if stage ~= 'native listen return' then
+                control.retired = true
+                frontend.detach(buf)
+            end
+            assert.equals(1, control.cancels)
+            assert.equals(0, control.shared_cancels)
+            assert.is_nil(frontend.snapshot(buf))
+            if control.release then control.release() end
+            assert.is_true(vim.wait(arrival.MS, function() return calls == 1 end, 10))
+            assert.equals('unavailable', result.kind)
+            assert.equals(0, control.later_starts)
+            assert.equals(0, control.later_writes)
+            assert.is_nil(uv.fs_lstat(control.path))
+            if keeper then
+                local keeper_state = frontend.snapshot(keeper)
+                assert.equals('active', keeper_state.phase)
+                assert.is_table(frontend.endpoint(query(keeper_state.context)))
+                assert.equals('socket', uv.fs_lstat(keeper_state.context.Socket).type)
+                local channel = vim.fn.sockconnect('pipe', keeper_state.context.Socket, { rpc = true })
+                assert.is_true(channel > 0)
+                vim.fn.chanclose(channel)
+                assert.is_true(vim.wait(arrival.MS, function() return control.stopped end, 10))
+                local marker = assert(require('parley.remote_runtime_record').decode(
+                    table.concat(vim.fn.readfile(control.directory .. '/owner.json'), '\n')))
+                for _, socket in ipairs(marker.Sockets) do assert.is_not.equals('s2', socket.Name) end
+                assert.equals('confirmed', attach(reuse, reuse_registration).kind)
+                assert.equals(control.path, frontend.snapshot(reuse).context.Socket)
+                assert.equals('active', frontend.snapshot(keeper).phase)
+                frontend.detach(reuse)
+                frontend.detach(keeper)
+            end
+            assert.is_true(vim.wait(arrival.MS, function() return not uv.fs_lstat(control.directory) end, 10))
+            local registers = 0
+            local launches = root .. '/registry.json.editor-launches'
+            if vim.fn.filereadable(launches) == 1 then
+                for _, operation in ipairs(vim.fn.readfile(launches)) do
+                    if operation == 'register' then registers = registers + 1 end
+                end
+            end
+            assert.equals(keeper and 2 or 0, registers)
+            local fresh, fresh_registration = identity('fresh-after-' .. stage:gsub(' ', '-'))
+            assert.equals('confirmed', attach(fresh, fresh_registration).kind)
+            local fresh_state = frontend.snapshot(fresh)
+            assert.is_not.equals(control.directory, vim.fn.fnamemodify(fresh_state.context.Socket, ':h'))
+            assert.equals('active', fresh_state.phase)
+            assert.equals(1, calls)
+        end)
+    end
+
+    it('retains a foreign socket replacement when a completed listen result retires before delivery', function()
+        local buf, registration = identity('foreign-completed-listen')
+        local control = hold_listen('completed callback', buf, 's1')
+        local calls = 0
+        frontend.attach(buf, registration, function() calls = calls + 1 end, options)
+        assert.is_true(vim.wait(arrival.MS, function() return control.paused end, 10))
+        assert.equals('listening', control.completed_result.kind)
+        local displaced = root .. '/displaced-owned-socket'
+        assert(uv.fs_rename(control.path, displaced))
+        vim.fn.writefile({ 'foreign replacement' }, control.path)
+        local foreign = assert(uv.fs_lstat(control.path))
+        -- Only test teardown removes the sentinel. Runtime cleanup must retain it.
+        releases[#releases + 1] = function()
+            local current = uv.fs_lstat(control.path)
+            if current and current.dev == foreign.dev and current.ino == foreign.ino then uv.fs_unlink(control.path) end
+            -- The socket itself was created by this test. End its native
+            -- lifetime after the foreign sentinel has passed its assertions.
+            pcall(vim.fn.serverstop, control.path)
+        end
+        control.retired = true
+        frontend.detach(buf)
+        assert.equals(1, control.cancels)
+        control.release()
+        assert.is_true(vim.wait(arrival.MS, function() return calls == 1 end, 10))
+        assert.same({ 'foreign replacement' }, vim.fn.readfile(control.path))
+        local current = assert(uv.fs_lstat(control.path))
+        assert.equals(foreign.dev, current.dev)
+        assert.equals(foreign.ino, current.ino)
+        assert.is_nil(frontend.snapshot(buf))
+        assert.equals(0, vim.fn.filereadable(root .. '/registry.json.editor-argv'))
     end)
 
     for _, count in ipairs({ 8, 16 }) do

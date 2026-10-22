@@ -31,7 +31,7 @@ describe('private editor RPC runtime ownership', function()
         local scratch_base=uv.fs_stat('/Volumes/TestScratch') and '/Volumes/TestScratch' or (vim.env.TMPDIR or uv.os_tmpdir())
         root = assert(uv.fs_mkdtemp(scratch_base .. '/rr-XXXXXX'))
         resources, children = {}, {}
-        saved_io={fsync=uv.fs_fsync,rename=uv.fs_rename,serverstart=vim.fn.serverstart}
+        saved_io={fsync=uv.fs_fsync,rename=uv.fs_rename,open=uv.fs_open,mkdtemp=uv.fs_mkdtemp,lstat=uv.fs_lstat,serverstart=vim.fn.serverstart}
         source = require('tests.helpers.fake_process_source').new({
             [uv.os_getpid()] = { started = 'Thu Oct 22 05:00:00 2026' },
         })
@@ -41,7 +41,7 @@ describe('private editor RPC runtime ownership', function()
         end }
     end)
     after_each(function()
-        uv.fs_fsync,uv.fs_rename,vim.fn.serverstart=saved_io.fsync,saved_io.rename,saved_io.serverstart
+        uv.fs_fsync,uv.fs_rename,uv.fs_open,uv.fs_mkdtemp,uv.fs_lstat,vim.fn.serverstart=saved_io.fsync,saved_io.rename,saved_io.open,saved_io.mkdtemp,saved_io.lstat,saved_io.serverstart
         for _, child in ipairs(children) do child:stop() end
         for _, resource in ipairs(resources) do close(resource) end
         vim.fn.delete(root, 'rf')
@@ -399,5 +399,165 @@ describe('private editor RPC runtime ownership', function()
         uv.fs_fsync=saved_io.fsync
         assert.equals('listening',result.kind,vim.inspect(result))
         assert.is_not_nil(uv.fs_lstat(result.path))
+    end)
+
+    local function hold_listen_io(resource,stage)
+        local release,fsyncs,renames=nil,0,0
+        local function held(callback)
+            return function(err,value)
+                release=function() callback(err,value) end
+            end
+        end
+        uv.fs_open=function(path,flags,mode,callback)
+            if stage=='open' and path==resource.directory..'/.owner.tmp' and flags=='wx' then
+                return saved_io.open(path,flags,mode,held(callback))
+            end
+            return saved_io.open(path,flags,mode,callback)
+        end
+        uv.fs_fsync=function(fd,callback)
+            fsyncs=fsyncs+1
+            local target=({reservation=1,['publication-before-rename']=3,['publication-directory-fsync']=4})[stage]
+            return saved_io.fsync(fd,fsyncs==target and held(callback) or callback)
+        end
+        uv.fs_rename=function(old,new,callback)
+            renames=renames+1
+            return saved_io.rename(old,new,stage=='publication-after-rename' and renames==2 and held(callback) or callback)
+        end
+        local result,calls=nil,0
+        local operation=resource.listen('s1',function(value) result=value;calls=calls+1 end)
+        assert(vim.wait(arrival.MS,function() return release~=nil end,10))
+        return {operation=operation,release=function() release() end,result=function() return result end,
+            calls=function() return calls end,restore=function()
+                uv.fs_open,uv.fs_fsync,uv.fs_rename=saved_io.open,saved_io.fsync,saved_io.rename
+            end}
+    end
+    for _,stage in ipairs({'open','reservation','publication-before-rename','publication-after-rename','publication-directory-fsync'}) do
+        it('finalizes only owned marker writes when canceled during '..stage,function()
+            local resource=assert(await_start().runtime)
+            local held=hold_listen_io(resource,stage)
+            held.operation.cancel();held.operation.cancel()
+            assert.is_nil(held.result(),'cancellation must join the held native completion')
+            held.restore();held.release()
+            vim.schedule(function() held.operation.cancel() end)
+            assert(vim.wait(arrival.MS,function() return held.result()~=nil end,10))
+            assert.equals('unavailable',held.result().kind,vim.inspect(held.result()))
+            assert.equals(1,held.calls())
+            assert.is_nil(uv.fs_lstat(resource.directory..'/.owner.tmp'),'owned temporary marker leaked')
+            assert.is_nil(uv.fs_lstat(resource.directory..'/s1'),'owned listener leaked')
+            local closed
+            resource.close(function(value) closed=value end)
+            assert(vim.wait(arrival.MS,function() return closed~=nil end,10))
+            assert.equals('closed',closed.kind,vim.inspect(closed))
+            assert.is_nil(uv.fs_lstat(resource.directory),'exact-owned runtime directory leaked')
+            local guard=assert(require('parley.document_lease').acquire('remote-session-runtime','allocation',{root=resource.parent}))
+            guard.release()
+        end)
+    end
+    for _,replacement in ipairs({'temporary','committed','committed-identical'}) do
+        it('retains a foreign '..replacement..' marker replacement during canceled finalization',function()
+            local resource=assert(await_start().runtime)
+            local stage=replacement=='temporary' and 'reservation' or 'publication-after-rename'
+            local held=hold_listen_io(resource,stage)
+            local path=resource.directory..'/'..(replacement=='temporary' and '.owner.tmp' or 'owner.json')
+            local foreign_bytes=replacement=='committed-identical' and vim.fn.readfile(path) or {'foreign replacement'}
+            assert(uv.fs_rename(path,path..'.owned-away'))
+            vim.fn.writefile(foreign_bytes,path,replacement=='committed-identical' and 'b' or '')
+            assert(uv.fs_chmod(path,384))
+            held.operation.cancel();held.restore();held.release()
+            vim.schedule(function() held.operation.cancel() end)
+            assert(vim.wait(arrival.MS,function() return held.result()~=nil end,10))
+            assert.equals('unavailable',held.result().kind)
+            assert.equals(1,held.calls())
+            assert.same(foreign_bytes,vim.fn.readfile(path))
+            assert.is_nil(uv.fs_lstat(resource.directory..'/s1'))
+            if replacement~='temporary' then
+                local stopped
+                resource.stop('s1',function(value) stopped=value end)
+                assert(vim.wait(arrival.MS,function() return stopped~=nil end,10))
+                assert.equals('unavailable',stopped.kind,'foreign marker must not become a cleanup witness')
+            end
+            local closed
+            resource.close(function(value) closed=value end)
+            assert(vim.wait(arrival.MS,function() return closed~=nil end,10))
+            assert.equals('unavailable',closed.kind)
+            assert.same(foreign_bytes,vim.fn.readfile(path))
+        end)
+    end
+
+    for _,stage in ipairs({'mkdir','initial-fsync','initial-rename','foreign-directory'}) do
+        it('finalizes unpublished acquisition ownership when canceled during '..stage,function()
+            local directory,release,operation,result,calls=nil,nil,nil,nil,0
+            uv.fs_mkdtemp=function(template,callback)
+                return saved_io.mkdtemp(template,function(err,path)
+                    directory=path
+                    callback(err,path)
+                    if stage=='mkdir' or stage=='foreign-directory' then
+                        if stage=='foreign-directory' then
+                            assert(saved_io.rename(path,path..'.owned-away'))
+                            assert(uv.fs_mkdir(path,448))
+                            local fd=assert(uv.fs_open(path..'/foreign','w',384))
+                            assert(uv.fs_write(fd,'foreign\n',0));assert(uv.fs_close(fd))
+                        end
+                        operation.cancel()
+                    end
+                end)
+            end
+            uv.fs_fsync=function(fd,callback)
+                if stage=='initial-fsync' and not release then
+                    return saved_io.fsync(fd,function(err,value) release=function() callback(err,value) end end)
+                end
+                return saved_io.fsync(fd,callback)
+            end
+            uv.fs_rename=function(old,new,callback)
+                if stage=='initial-rename' and new:match('/owner%.json$') then
+                    return saved_io.rename(old,new,function(err,value) release=function() callback(err,value) end end)
+                end
+                return saved_io.rename(old,new,callback)
+            end
+            operation=runtime.acquire({parent=root..'/runtime',incarnation=string.rep('a',32),source=source},
+                function(value) result=value;calls=calls+1 end)
+            if stage=='initial-fsync' or stage=='initial-rename' then
+                assert(vim.wait(arrival.MS,function() return release~=nil end,10))
+                operation.cancel()
+                assert.is_nil(result)
+                uv.fs_fsync,uv.fs_rename=saved_io.fsync,saved_io.rename
+                release()
+            end
+            assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+            uv.fs_fsync,uv.fs_rename,uv.fs_mkdtemp=saved_io.fsync,saved_io.rename,saved_io.mkdtemp
+            assert.equals('unavailable',result.kind,vim.inspect(result));assert.equals(1,calls)
+            assert.is_string(directory)
+            if stage=='foreign-directory' then
+                assert.same({'foreign'},vim.fn.readfile(directory..'/foreign'))
+                assert.is_not_nil(uv.fs_lstat(directory..'.owned-away'))
+            else assert.is_nil(uv.fs_lstat(directory),'unpublished exact-owned runtime leaked') end
+            local guard=assert(require('parley.document_lease').acquire('remote-session-runtime','allocation',{root=root..'/runtime'}))
+            guard.release()
+        end)
+    end
+
+    it('retains evidence but releases the guard when native finalization fails',function()
+        local resource=assert(await_start().runtime)
+        local held=hold_listen_io(resource,'reservation')
+        local temporary=resource.directory..'/.owner.tmp'
+        local before=assert(uv.fs_lstat(temporary))
+        held.operation.cancel();held.restore()
+        local faulted=false
+        uv.fs_lstat=function(path,callback)
+            if path==resource.directory and type(callback)=='function' and not faulted then
+                faulted=true;error('controlled native finalization failure')
+            end
+            return saved_io.lstat(path,callback)
+        end
+        held.release()
+        assert(vim.wait(arrival.MS,function() return held.result()~=nil end,10))
+        uv.fs_lstat=saved_io.lstat
+        assert.is_true(faulted)
+        assert.equals('unavailable',held.result().kind)
+        assert.matches('owned cleanup retained',held.result().error)
+        assert.equals(1,held.calls())
+        assert.equals(before.ino,assert(uv.fs_lstat(temporary)).ino)
+        local guard=assert(require('parley.document_lease').acquire('remote-session-runtime','allocation',{root=resource.parent}))
+        guard.release()
     end)
 end)

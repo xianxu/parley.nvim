@@ -130,7 +130,7 @@ The new lifecycle never changes modifiable, admission history, lock ownership, s
 - [x] Record durable producer contract aa24764a and the TL-approved crash-residue correction before change-code; use the eventual landed producer merge pin for real conformance, never stack branches.
 - [x] Add failing pure sequences, then the minimal sole owner; run unit specs red/green.
 - [x] Add failing socket/CLI tests through the stateful fake, implement thin shell/transport, then run targeted integration red/green on 0.12.5 and0.11.7.
-- [ ] Extend real conformance with an intentional corrupt-fake negative control; run against producer merge pin in isolated roots.
+- [ ] ~~Extend real conformance with an intentional corrupt-fake negative control; run against producer merge pin in isolated roots.~~ Deferred to M2 by the TL-approved bridge sequencing Revision below. M1 qualifies the fake driver and its corrupt-identity negative control; real conformance requires both pair#758 and pair#801 merge pins.
 - [ ] Update indexed atlas/traceability; commit; recorded suite and milestone-close M1 through SDLC.
 
 ### M2 — real attachment lifecycle and desktop acceptance
