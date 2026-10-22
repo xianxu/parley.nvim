@@ -138,6 +138,194 @@ describe("session-sync native edits", function()
         end)
     end
 
+    -- Hold a real fake-backed discovery reply, not a fabricated registration.
+    -- The release runs inside native InsertEnter while queued input is waiting.
+    local function pending_lookup(delay, absent)
+        open(false, false, true, true)
+        exec([[
+            local root, delay, absent = ...
+            require("parley.session_sync").detach(0)
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "scope-410", "tag-410"
+            vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
+            local identity = {ID="doc-1", File=path, Owner="ops:0", RegisteredOwner="ops:0", RegisteredAt="now"}
+            vim.fn.writefile({vim.json.encode({paths=absent and {} or {[path]=identity},moves={}})},vim.env.FAKE_COUCH_REGISTRY)
+            local couch = require("parley.couch")
+            _G.pending_original_run = _G.pending_original_run or couch.run
+            _G.pending_original_acquire = _G.pending_original_acquire or couch.operator_lock
+            local run, acquire = pending_original_run, pending_original_acquire
+            _G.lookup_launches, _G.acquire_calls, _G.acquire_acknowledged = 0, 0, nil
+            _G.before_first_char, _G.release_lookup, _G.lookup_action = nil, nil, nil
+            couch.run = function(argv, callback, options)
+                if argv[2]=="--session-sync" and argv[3]=="lookup" then
+                    lookup_launches = lookup_launches + 1
+                    return run(argv, function(result)
+                        _G.release_lookup = function() callback(result) end
+                    end, options)
+                end
+                return run(argv, callback, options)
+            end
+            couch.operator_lock = function(verb, ...)
+                if verb=="acquire" then
+                    acquire_calls=acquire_calls+1
+                    local args={...}
+                    _G.acquire_remaining=args[3] and args[3]-vim.uv.hrtime()/1e6
+                end
+                local result = acquire(verb, ...)
+                if verb=="acquire" then _G.acquire_acknowledged=result.kind=="confirmed" end
+                return result
+            end
+            vim.api.nvim_create_autocmd("InsertCharPre",{buffer=0,callback=function()
+                _G.first_char_confirmed=acquire_acknowledged==true
+                _G.before_first_char=vim.api.nvim_buf_get_lines(0,7,8,false)[1]
+                _G.entry_elapsed=(vim.uv.hrtime()-entry_started)/1e6
+            end})
+            vim.api.nvim_create_autocmd("InsertEnter",{buffer=0,callback=function()
+                _G.entry_started=vim.uv.hrtime()
+                if delay then vim.defer_fn(function()
+                    if _G.lookup_action then lookup_action() else release_lookup() end
+                end,delay) end
+            end})
+            require("parley.agentic_document").attach(vim.api.nvim_get_current_buf())
+        ]], root, delay, absent)
+        wait_for("return type(release_lookup)=='function'")
+    end
+
+    for _, kind in ipairs({"parent", "side"}) do
+        it("pending lookup protects queued first input in " .. kind .. " (#410)", function()
+            if kind=="side" then
+                local lines=vim.fn.readfile(file);lines[2]="type: prose";vim.fn.writefile(lines,file)
+            end
+            pending_lookup(50)
+            local fresh=vim.fn.readfile(file);fresh[8]="fresh pending lookup"
+            exec("vim.env.FAKE_COUCH_OPERATOR_ACQUIRE_WRITE=...",table.concat(fresh,"\n").."\n")
+            keys("iX")
+            wait_for("return _G.before_first_char ~= nil")
+            assert.is_true(exec("return first_char_confirmed"),"queued input preceded pending lookup acquisition")
+            assert.equals("fresh pending lookup",exec("return before_first_char"))
+            assert.equals("Xfresh pending lookup",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            assert.equals(1,exec("return lookup_launches"))
+            assert.equals(1,exec("return acquire_calls"))
+            keys("<Esc>")
+        end)
+    end
+
+    it("pending lookup exhausts one budget then reconciles late edits (#410)",function()
+        pending_lookup(nil)
+        keys("iX")
+        wait_for("return _G.before_first_char ~= nil")
+        assert.is_true(exec("return entry_elapsed>=450"),"pending lookup admitted input before budget expired")
+        assert.is_true(exec("return entry_elapsed<1500"),"pending input exceeded 500 ms plus scheduling allowance")
+        assert.is_true(exec("return require('parley.agentic_document').identity(vim.api.nvim_get_current_buf())==nil"))
+        assert.equals(0,exec("return acquire_calls"))
+        exec("vim.cmd('silent write');release_lookup()")
+        wait_for("return require('parley.agentic_document').identity(vim.api.nvim_get_current_buf()) ~= nil")
+        assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        keys("<Esc>")
+        wait_for("return vim.fn.mode()=='n'")
+        assert.is_true(exists(),"late attachment lost autosaved outstanding edit baseline")
+    end)
+
+    it("nested late attachment consumes only the original residual budget (#410)",function()
+        pending_lookup(300)
+        exec("vim.env.FAKE_COUCH_OPERATOR_DELAY='2'")
+        keys("iX")
+        wait_for("return _G.before_first_char ~= nil")
+        local evidence=exec("return {elapsed=entry_elapsed,remaining=acquire_remaining,calls=acquire_calls}")
+        assert.equals(1,evidence.calls)
+        assert.is_true(evidence.remaining<=210,vim.inspect(evidence))
+        assert.is_true(evidence.elapsed>=450,vim.inspect(evidence))
+        assert.is_true(evidence.elapsed<500+arrival.MS,vim.inspect(evidence))
+        assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        assert.is_true(exec([[return vim.wo.winbar:find("not locked: Couch unreachable",1,true)~=nil]]))
+        keys("<Esc>")
+    end)
+
+    for _, fault in ipairs({"held","invalid"}) do
+        it("pending lookup keeps "..fault.." acquisition refusal before input (#410)",function()
+            pending_lookup(50)
+            exec([[
+                if ...=="held" then
+                    vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock";vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
+                else vim.env.FAKE_COUCH_OPERATOR_ACK="{}" end
+            ]],fault)
+            keys("iX")
+            wait_for("return not vim.bo.modifiable")
+            assert.equals(1,exec("return acquire_calls"))
+            assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            keys("<Esc>")
+        end)
+    end
+
+    it("absent pending lookup admits a plain file without a new input lookup (#410)",function()
+        pending_lookup(50,true)
+        keys("iX")
+        wait_for("return _G.before_first_char ~= nil")
+        assert.equals(0,exec("return acquire_calls"))
+        assert.equals(1,exec("return lookup_launches"))
+        assert.is_true(exec("return require('parley.agentic_document').identity(vim.api.nvim_get_current_buf())==nil"))
+        keys("<Esc>iY")
+        wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]:find('Y',1,true)~=nil")
+        assert.equals(1,exec("return lookup_launches"),"plain entry launched another synchronous discovery")
+        keys("<Esc>")
+    end)
+
+    for _, change in ipairs({"detach","rename"}) do
+        it("stale pending lookup cannot gate after "..change.." (#410)",function()
+            pending_lookup(50)
+            exec([[
+                local change=...
+                _G.lookup_action=function()
+                    if change=="detach" then require("parley.agentic_document").detach(vim.api.nvim_get_current_buf())
+                    else vim.api.nvim_buf_set_name(0,path..".renamed.md") end
+                    release_lookup()
+                end
+            ]],change)
+            keys("iX")
+            wait_for("return _G.before_first_char ~= nil")
+            assert.equals(0,exec("return acquire_calls"))
+            assert.is_true(exec("return require('parley.agentic_document').identity(vim.api.nvim_get_current_buf())==nil"))
+            assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            keys("<Esc>")
+        end)
+    end
+
+    local pending_read_counts={}
+    for _, count in ipairs({4,8}) do
+        it("bounds discovery, acquisition and full reads for "..count.." pending entries (#410)",function()
+            local lines=vim.fn.readfile(file)
+            exec([[
+                _G.full_reads=0
+                local get_lines=vim.api.nvim_buf_get_lines
+                vim.api.nvim_buf_get_lines=function(buf,start,stop,strict)
+                    if start==0 and stop==-1 then full_reads=full_reads+1 end
+                    return get_lines(buf,start,stop,strict)
+                end
+            ]])
+            local lookups,acquires=0,0
+            for index=1,count do
+                file=root.."/entry-"..index..".md"
+                vim.fn.writefile(lines,file)
+                pending_lookup(5)
+                keys("i")
+                wait_for("return vim.fn.mode()=='i' and acquire_calls==1")
+                lookups=lookups+exec("return lookup_launches")
+                acquires=acquires+exec("return acquire_calls")
+                keys("<Esc>")
+                wait_for("return vim.fn.mode()=='n'")
+                assert.is_true(vim.wait(arrival.MS,function() return not exists() end))
+                exec("require('parley.agentic_document').detach(vim.api.nvim_get_current_buf())")
+            end
+            assert.equals(count,lookups,"input launched extra discovery")
+            assert.equals(count,acquires,"attachment acquired more than once per input scope")
+            local reads=exec("return full_reads")
+            assert.is_true(reads>=2*count and reads<=50*count,"unexpected full-buffer work: "..reads)
+            pending_read_counts[count]=reads
+            if count==8 then
+                assert.is_true(reads<=2*pending_read_counts[4]+4,"full-buffer work grew faster than entry count: "..reads)
+            end
+        end)
+    end
+
     it("insert intent stays locked after typing back to the baseline until escape (#404)", function()
         open(true, false, true, true)
         keys("ix<C-h>")

@@ -41,7 +41,7 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 
 ## Plan
 
-- [ ] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
+- [x] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
 - [ ] Native red/green pending-lookup ordering, exact incarnation/witness scope, and residual acquisition deadline through late attachment.
 - [ ] Both-runtime regressions, counted 4/8-entry costs, disposable Couch conformance, indexed docs, recorded suite and TL-directed live check; SDLC close owns fresh-context review.
 
@@ -54,3 +54,9 @@ Filed from #408 after TL approval a15354ef: use the existing pending lookup with
 Read #408's landed owner/refusal/reload history and current S1 adoption, session-sync acquisition dispatcher and Couch process seam. The proposed ephemeral entry scope carries one absolute deadline through callback/late attachment and permits one acquire attempt; #408's private operator_admission remains the sole lock/history owner (ARCH-DRY/STATE). No producer protocol or failure policy changes. Exact witness/incarnation checks reject stale handoffs. Plan includes native queued-input races, timed pending fallback, late edit reconciliation and 4/8-entry counted costs.
 
 Startup refreshed inherited tooling and produced an unrelated `.github/workflows/merge-check.yml` grep/SIGPIPE fix. Preserved that generated delta in stash `410: preserve weave-generated workflow delta before planning`; it is excluded from issue changes and no local-gates configuration is being shipped here. Planning branch created by `sdlc start-plan`. No code or tests edited; no stage or suite running. Next: TL review of committed durable plan before change-code.
+
+### 2026-10-22 — approved implementation checkpoint
+
+Verified submitted TL approval a1825097; change-code passed quick flow. Couch deadline seam delegated as bounded work: red 20 pass/5 expected fail/0 errors, green 25 pass/0 fail/0 errors; logs `/Volumes/TestScratch/parley-410-couch-2qky079j/`. Native initial red 142 pass/3 expected fail/0 errors, clean process census (`/tmp/parley-410-native-red.log`). The first native implementation exposed Normal-mode reporting during InsertEnter and a timeout-only wait overrun to 14889 ms. Explicit scope insert intent and a monotonic predicate restore confirmed first-edit freshness and a measured 500.25 ms fallback. Focused diagnostic snapshot: 11 pass/0 fail/0 errors, clean census (`/tmp/parley-410-focus-deadline.log`); corrected test use of actual S1 buffer numbers. No operator history policy was changed.
+
+Current full native run `/tmp/parley-410-native-final.log` includes new 4/8-entry process/read counters; both count cases have passed, run still active. No recorded suite, PR or stage yet. Next: finish native verification, operator-runtime and mapped/architecture/lint checks, disposable conformance, then push and recorded suite/live acceptance through TL. Plan Revision records the native findings.

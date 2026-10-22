@@ -7,11 +7,15 @@ no `type`, owner or instruction frontmatter is added or changed. Opening a
 registered file restores that identity through a bounded registry lookup. A
 positive null lookup proves a file plain; lookup failure leaves membership
 unknown. Plain files take no session-sync lock or watcher before admission.
-Insert admission below begins once that registration identity is known (from
-cache or a completed lookup). While an uncached lookup is still pending, S1
-keeps editing available and records outstanding edits for reconciliation on
-attachment. It does not block every Markdown insert on discovery. Sharing the
-500 ms budget with an already-pending lookup is tracked separately in #410.
+Insert admission below uses confirmed registration identity (from cache or a
+completed lookup). On InsertEnter, S1 can join an existing lookup for the exact
+buffer/controller incarnation and operation witness. That lookup and any
+resulting attachment/acquisition share one absolute 500 ms deadline (#410).
+The wait predicate checks the monotonic deadline itself; the native wait timeout
+alone can overrun inside InsertEnter. No new discovery request starts on input.
+A lookup still pending at expiry keeps editing available and retains its normal
+discovery lifetime. S1 records outstanding unknown-period edits for reconciliation
+on attachment, including edits already auto-saved.
 
 The default owner is the agent in this editor's own Couch pane, resolved from
 `COUCH_THREAD_SCOPE` / `COUCH_THREAD_TAG`. An explicit `couch-owner:` is an owner
@@ -67,6 +71,18 @@ admission removes those maps, restoring displaced local mappings and uncovering
 global ones. Refusal never creates a writable gap.
 No automatic retry or guessed unlock. The commands run locally without the
 Couch supervisor; its absence alone is not a degraded condition.
+
+An ephemeral S1 input scope carries the deadline through adoption to attachment
+and observed-edit acquisition. Session-sync claims one acquire attempt per
+scope, including refused/unavailable outcomes; it supplies only remaining time
+to the child and native process wait. Expiry before acquisition starts launches
+no child and uses the existing unavailable policy. Late attachment inside the
+InsertEnter callback uses the scope's insert intent because native mode still
+reports Normal there. S1 closes the exact scope on return/error; session-sync
+clears only the matching reference. No budget/history survives to another
+controller, input event or buffer. The original background lookup is not
+cancelled by the input deadline. The private operator_admission owner below
+continues to own all baseline, token, proof and outcome transitions.
 
 The pure `operator_admission.lua` owner retains the original baseline, token and
 proof through unavailable/refused retries, saved edits and status refreshes.

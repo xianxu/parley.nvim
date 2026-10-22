@@ -69,8 +69,10 @@ An explicit `couch-owner:` overrides the default; a business `owner:` does not
 once registration is known, entering insert mode confirms your turn with Couch
 before typing, then checks
 for and silently reloads a newer clean copy. Acquisition waits at most 500 ms.
-An uncached background lookup keeps editing available until identity is known;
-attachment reconciles edits made during that interval.
+If an uncached lookup is already pending, insert entry gives that request and
+any resulting acquisition the same total 500 ms budget. It starts no new
+discovery request. A lookup still pending after that bound keeps editing
+available; attachment reconciles edits made during the unknown interval.
 A namespace/store failure or timeout allows editing with `not locked: Couch
 unreachable; edits may conflict`; conflicting versions are kept through the
 existing clobber-copy path. A held-lock refusal or invalid acknowledgment blocks

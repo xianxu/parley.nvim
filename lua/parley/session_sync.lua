@@ -430,7 +430,7 @@ end
 
 -- The shell runs effects; only the private owner advances admission history.
 -- Every completion carries its operation witness back, including release.
-dispatch_admission = function(buf, event, release_path)
+dispatch_admission = function(buf, event, release_path, input_scope)
     local s = state[buf]
     if not s then return false, "document is detached" end
     local effect, error_message = s.operator_admission.dispatch(event)
@@ -441,7 +441,7 @@ dispatch_admission = function(buf, event, release_path)
     while effect do
         local outcome = { witness = effect.witness }
         if effect.kind == "acquire" then
-            local result = couch.operator_lock("acquire", s.identity, effect.token)
+            local result = couch.operator_lock("acquire", s.identity, effect.token, input_scope and input_scope.deadline_ms)
             if result.kind == "confirmed" and lock_bytes(M.lock_path(buf)) ~= result.lock.LockText then
                 result = { kind = "refused", error = "operator protection changed after acknowledgment" }
             end
@@ -721,21 +721,21 @@ local function define_highlights()
 end
 
 --- Install the turn autocmds on a session-sync buffer and render its turn. Idempotent.
-M.attach = function(buf, identity, observed, restoring_move)
+M.attach = function(buf, identity, observed, restoring_move, input_scope)
     buf = buffer_id(buf)
     if state[buf] then
         local current = state[buf].identity
         if identity and identity.File == current.File and (not current.ID or current.ID == identity.ID) then
             state[buf].identity = vim.deepcopy(identity)
         end
-        if observed then M.acquire_observed(buf, observed) end
+        if observed then M.acquire_observed(buf, observed, input_scope) end
         return
     end
     local h = header(buf)
     if not identity and not h then return end
     identity = identity or { File = file_of(buf), Owner = h.owner }
     if type(identity.File) ~= "string" or identity.File:sub(1, 1) ~= "/" then return end
-    local s = { stale = false, identity = vim.deepcopy(identity), epoch = 0,
+    local s = { stale = false, identity = vim.deepcopy(identity), epoch = 0, input_scope = input_scope,
         previous_autoread = vim.bo[buf].autoread, operator_admission = operator_admission.new() }
     state[buf] = s
 	require("parley.highlight_groups").keep("session_sync", define_highlights)
@@ -758,7 +758,10 @@ M.attach = function(buf, identity, observed, restoring_move)
 
     -- One admission policy serves insert intent and normal-mode first edits.
     -- Only a clean insert entry is allowed to establish a fresh native baseline.
-    local function acquire_registered(baseline, entering)
+    local function acquire_registered(baseline, entering, scope)
+        scope = scope or s.input_scope
+        if scope and scope.closed then scope = nil; s.input_scope = nil end
+        if scope and scope.attempted then return scope.admitted == true end
         local owned = admission(s)
         if owned.phase == "held" and owned.owned_lock and couch.operator_proof(owned.owned_lock)
             and lock_bytes(M.lock_path(buf)) == owned.owned_lock then return true end
@@ -769,8 +772,11 @@ M.attach = function(buf, identity, observed, restoring_move)
                 token = (random:gsub(".", function(byte) return ("%02x"):format(byte:byte()) end))
             end
         end
-        return dispatch_admission(buf, { type = "acquire", baseline = baseline,
-            content = content_hash(buf), token = token, clean = entering and not vim.bo[buf].modified })
+        if scope then scope.attempted = true end
+        local admitted = dispatch_admission(buf, { type = "acquire", baseline = baseline,
+            content = content_hash(buf), token = token, clean = entering and not vim.bo[buf].modified }, nil, scope)
+        if scope then scope.admitted = admitted end
+        return admitted
     end
 
     s.acquire_turn = acquire_registered
@@ -950,10 +956,18 @@ M.attach = function(buf, identity, observed, restoring_move)
     refresh(buf)
     restart_idle(buf)
     require("parley.edit_round").refresh(buf)
-    if observed then M.acquire_observed(buf, observed) end
-    if vim.api.nvim_get_current_buf() == buf and vim.fn.mode():match("^[iR]") then
+    if observed then M.acquire_observed(buf, observed, input_scope) end
+    -- Native InsertEnter still reports Normal mode while its callbacks run.
+    -- The live scope is the insert intent when lookup completes inside them.
+    if vim.api.nvim_get_current_buf() == buf and (input_scope or vim.fn.mode():match("^[iR]")) then
         if restoring_move then s.inserting = true else insert_enter() end
     end
+end
+
+-- S1 closes this exact input event; a stale cleanup cannot retire a new scope.
+M.finish_input_scope = function(buf, scope)
+    local s = state[buf]
+    if s and s.input_scope == scope then s.input_scope = nil end
 end
 
 -- Restore only the values this attachment still owns; never release a turn.
@@ -988,14 +1002,14 @@ end
 
 -- Unknown-period edits can already have been auto-saved: modified is not
 -- evidence that the operator has no outstanding edit turn.
-M.acquire_observed = function(buf, observed)
+M.acquire_observed = function(buf, observed, input_scope)
     buf = buffer_id(buf)
     local s = state[buf]
     if not s or s.moving or not observed or not observed.outstanding then return false end
     if observed.loaded then s.loaded = observed.loaded end
     if read_turn(buf) == "free" then
         if s.identity.ID then
-            if not s.acquire_turn(observed.baseline, false) then return false end
+            if not s.acquire_turn(observed.baseline, false, input_scope) then return false end
         elseif not write_lock(buf, "operator", observed.baseline) then return false end
     end
     dispatch_admission(buf, { type = "observed", baseline = observed.baseline, content = content_hash(buf) })

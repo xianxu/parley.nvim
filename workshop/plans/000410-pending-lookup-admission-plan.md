@@ -37,6 +37,7 @@ Recommended: carry one immutable absolute deadline through an ephemeral insert s
 | `M.attach` / insert-entry callback | `lua/parley/agentic_document.lua` | modified | native InsertEnter, exact active lookup, bounded event-loop wait |
 | `adopt` | `lua/parley/agentic_document.lua` | modified | registration adoption and session-sync handoff |
 | `M.attach`, `M.acquire_observed`, `dispatch_admission` | `lua/parley/session_sync.lua` | modified | existing admission owner and nested late attachment |
+| `M.finish_input_scope` | `lua/parley/session_sync.lua` | new | exact-scope cleanup after native input wait |
 | `M.operator_lock` | `lua/parley/couch.lua` | modified | synchronous operator acquire process and wait |
 | stateful registry/operator fixtures | `tests/helpers/fake_couch.lua`, `tests/fixtures/fake_couch_registry.py`, `tests/fixtures/fake_couch_operator.py` | modified as needed | controlled request completion and persisted registration/lock state |
 
@@ -46,7 +47,7 @@ Extend the internal attachment/observed-acquire handoff with an optional admissi
 
 On S1 InsertEnter, inspect the controller's current lifecycle operation. Join only an existing `lookup` for this loaded buffer/path/namespace/incarnation, with no confirmed identity; exclude register, confirm-parent, move/recovery and another buffer's operation. Snapshot that operation's witness. Allocate one scope with absolute monotonic deadline `now + couch.OPERATOR_LOCK_TIMEOUT_MS` and this controller/witness; install it before yielding to `vim.wait`.
 
-The scope has only `waiting`, `acquiring`, `settled`, `closed` phases. It is private to this input event; no module-global active deadline. Joining another callback cannot allocate a replacement scope. A nested callback for the same scope reuses it; an irrelevant or stale controller cannot receive it. Clear by exact scope identity on all exits, including errors, detach and supersession.
+~~The scope has only `waiting`, `acquiring`, `settled`, `closed` phases.~~ The scope uses a deadline, original incarnation/witness, one attempted/result guard and a closed marker; these schedule the single input event and never duplicate lock/history state (Revision below). It is private to this input event; no module-global active deadline. Joining another callback cannot allocate a replacement scope. A nested callback for the same scope reuses it; an irrelevant or stale controller cannot receive it. Clear by exact scope identity on all exits, including errors, detach and supersession.
 
 Lookup completion uses normal lifecycle dispatch and `adopt`. Adoption forwards the exact live scope through both attachment and outstanding-edit reconciliation. Session-sync's first acquire for that scope marks it acquiring before effects; further entry/observed callbacks join its result rather than launching another acquisition, including when the first result is unavailable/refused. The original admission owner still makes every lock/history transition. Do not write admission history from S1 or store parallel proof/token/baseline fields on the scope.
 
@@ -115,3 +116,13 @@ Files: native/integration tests above, `tests/unit/operator_admission_spec.lua` 
 ## Approval checkpoint
 
 Planning only. Send this committed plan to ops:0 and wait for approval before `sdlc change-code` or product/test implementation. The explicit dispatch asks for plan-before-code; no quick-flow self-approval substitutes for that checkpoint.
+
+## Revisions
+
+### 2026-10-22 — native timing and explicit insert intent
+
+TL approval a1825097 accepted this design before implementation. The quick-flow change-code gate passed. Native red reproduced input before acquisition in both parent/side cases and premature input while lookup remained pending; Couch seam red reproduced five missing residual-budget behaviors.
+
+Native late attachment reports mode `n` during InsertEnter, so the exact live scope explicitly carries insert intent into attachment. Scope cleanup has its own small integration function, `M.finish_input_scope`, checking exact reference identity. The scope's attempted/result guard represents a single synchronous call; no additional history model or user-visible state was introduced.
+
+The timeout-only native input wait overran to the registry timeout (measured 14889 ms). An explicit monotonic deadline predicate, within the approved absolute-deadline mechanism, restored the bound (measured 500.25 ms) while leaving discovery outstanding. Focused native cases now cover confirmed freshness, bounded pending fallback and late saved-edit reconciliation, nested residual acquisition, held/invalid refusal, absence and stale detach/rename. The full native file and broader checks remain required. Test helpers use actual S1 buffer IDs; unlike session-sync, S1 does not normalize buffer 0.

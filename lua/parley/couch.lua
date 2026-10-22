@@ -40,6 +40,11 @@ end
 -- child deadline and synchronous wait are bounded by this operator-facing budget.
 M.OPERATOR_LOCK_TIMEOUT_MS = 500
 
+--- Pure residual budget; callers pass monotonic millisecond readings.
+M.remaining_ms = function(deadline_ms, now_ms)
+	return math.max(0, math.floor(deadline_ms - now_ms))
+end
+
 local function valid_turn(token)
 	return type(token) == "string" and #token == 32 and token:match("^[0-9a-f]+$") ~= nil
 end
@@ -100,14 +105,24 @@ end
 
 --- Acquire/release before input can apply. Spawn exceptions are explicit
 --- failures, not evidence that Couch's registry transaction is unavailable.
-M.operator_lock = function(verb, identity, token)
+--- Optional deadline_ms is an absolute monotonic input-admission deadline.
+M.operator_lock = function(verb, identity, token, deadline_ms)
 	if not operator_request_valid(verb, identity, token) then
 		return { kind = "refused", error = "invalid operator lock request" }
 	end
+	local function budget()
+		return deadline_ms and M.remaining_ms(deadline_ms, vim.uv.hrtime() / 1e6) or M.OPERATOR_LOCK_TIMEOUT_MS
+	end
+	local timeout = budget()
+	if timeout <= 0 then return M.operator_result({ code = 124 }, verb, identity, token) end
 	local argv = { "couch", "--session-sync", "operator-" .. verb, identity.File,
 		"--id", identity.ID, "--turn", token, "--json" }
 	local ok, result = pcall(function()
-		return vim.system(argv, { text = true, timeout = M.OPERATOR_LOCK_TIMEOUT_MS }):wait(M.OPERATOR_LOCK_TIMEOUT_MS)
+		local child = vim.system(argv, { text = true, timeout = timeout })
+		-- Spawning may consume the last of an enclosing admission's budget.
+		-- Native wait(0) kills the child but may precede its exit delivery.
+		local waited = child:wait(budget())
+		return waited or (deadline_ms and { code = 124 } or nil)
 	end)
 	if not ok then return { kind = "refused", error = tostring(result) } end
 	return M.operator_result(result, verb, identity, token)

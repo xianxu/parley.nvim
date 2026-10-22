@@ -283,15 +283,18 @@ local function cache(s, registration, remove)
     return found
 end
 
-local function adopt(s, registration)
+local function adopt(s, registration, witness)
     local feedback = s.feedback
     s.feedback = nil
     band(s, "")
     local ss = require("parley.session_sync")
-    ss.attach(s.buf, registration)
+    local scope = s.input_scope
+    if scope and (scope.closed or scope.incarnation ~= s.incarnation
+        or not witness or not vim.deep_equal(scope.witness, witness)) then scope = nil end
+    ss.attach(s.buf, registration, nil, nil, scope)
     if feedback then ss.set_submission_feedback(s.buf, feedback.label, feedback.is_error) end
     if s.outstanding or vim.bo[s.buf].modified then
-        ss.acquire_observed(s.buf, { baseline = s.baseline or s.content, loaded = s.loaded, outstanding = true })
+        ss.acquire_observed(s.buf, { baseline = s.baseline or s.content, loaded = s.loaded, outstanding = true }, scope)
     end
     s.outstanding, s.baseline = false, nil
     cache(s, registration)
@@ -358,7 +361,7 @@ local function execute(s, effects)
             else ok, err = pcall(vim.api.nvim_buf_call, s.buf, function() vim.cmd("stopinsert"); vim.cmd("silent write") end) end
             if ok then s.saved_hash = hash(s.buf) end
             dispatch(s, { type = "saved", witness = effect.witness, ok = not not ok, error = err, hash = s.saved_hash })
-        elseif kind == "attach" then adopt(s, effect.registration)
+        elseif kind == "attach" then adopt(s, effect.registration, effect.witness)
         elseif kind == "resubmit" then
             end_submit(s)
             M.submit(s.buf)
@@ -492,6 +495,25 @@ function M.attach(buf)
     end
     attach_edits()
     s.group = vim.api.nvim_create_augroup("ParleyAgenticDocument" .. buf, { clear = true })
+    vim.api.nvim_create_autocmd("InsertEnter", { group = s.group, buffer = buf, nested = true, callback = function()
+        local snapshot = s.model.snapshot()
+        local operation = snapshot.operation
+        if s.input_scope or not valid(s) or s.reading or s.move or s.recovery_pending
+            or snapshot.registration or not operation or operation.witness.operation ~= "lookup" then return end
+        local scope = { incarnation = s.incarnation, witness = operation.witness,
+            deadline_ms = uv.hrtime() / 1000000 + couch.OPERATOR_LOCK_TIMEOUT_MS }
+        s.input_scope = scope
+        local ok, err = pcall(vim.wait, couch.remaining_ms(scope.deadline_ms, uv.hrtime() / 1000000), function()
+            if uv.hrtime() / 1000000 >= scope.deadline_ms then return true end
+            if not valid(s) or s.incarnation ~= scope.incarnation then return true end
+            local current = s.model.snapshot().operation
+            return not current or not vim.deep_equal(current.witness, scope.witness)
+        end, 5)
+        scope.closed = true
+        if s.input_scope == scope then s.input_scope = nil end
+        require("parley.session_sync").finish_input_scope(buf, scope)
+        if not ok then error(err, 0) end
+    end })
     vim.api.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, { group = s.group, buffer = buf, callback = function()
         -- A guarded mechanical move read checks its editor preimage and the IO
         -- dispatcher rechecks the raw postimage. It must not stale its own move
