@@ -124,9 +124,9 @@ async def editor_bridge_probe(bridge, repo, root, *, binary=None, launch_env=Non
     root.mkdir(parents=True, exist_ok=True)
     # Unix sockets need short physical parents even under a long TMPDIR.
     base = Path("/tmp").resolve()  # native wrapper sockets need the shortest system parent
-    producer_parent = Path(tempfile.mkdtemp(prefix="cb-", dir=base)).resolve()
+    producer_parent = base  # shared owner allocates its own private roots here
     runtime_parent = Path(tempfile.mkdtemp(prefix="pe-", dir=base)).resolve()
-    witnesses = {path: path.stat() for path in (producer_parent, runtime_parent)}
+    witnesses = {runtime_parent: runtime_parent.stat()}
     argv = [str(bridge), "--scratch-parent", str(producer_parent)]
     if binary:
         argv += ["--couch", str(binary)]
@@ -156,12 +156,12 @@ async def editor_bridge_probe(bridge, repo, root, *, binary=None, launch_env=Non
             if (current.st_dev, current.st_ino, current.st_uid, current.st_mode) != (
                     witness.st_dev, witness.st_ino, witness.st_uid, witness.st_mode):
                 raise RuntimeError("consumer scratch parent replaced: " + str(path))
-        # The shared bridge must have removed its own root. Never recurse into it.
-        producer_parent.rmdir()
+        # The bridge alone removes its exact pc/candidate roots. The system
+        # scratch parent is shared and never removed by this consumer.
         shutil.rmtree(runtime_parent)  # native probe succeeded and joined its editors
         return result
     except BaseException as error:
-        retained = "retained consumer evidence: " + str(producer_parent) + "; " + str(runtime_parent)
+        retained = "retained consumer evidence: " + str(runtime_parent)
         if isinstance(error, Exception):
             raise RuntimeError(str(error) + "; " + retained) from error
         print(retained, file=sys.stderr)

@@ -36,7 +36,7 @@ class BridgeConsumerTest(unittest.TestCase):
 
     def tearDown(self):
         for instance in self.instances:
-            for key in ("bridge_parent", "runtime_parent"):
+            for key in ("runtime_parent",):
                 path = getattr(instance, key, None)
                 if path and Path(path).exists():
                     shutil.rmtree(path)  # stateful double started no native processes
@@ -86,9 +86,9 @@ class BridgeConsumerTest(unittest.TestCase):
         self.assertEqual(str(self.bin / "couch"), instance.config["binary"])
         self.assertEqual(["/candidate/bridge", "--scratch-parent", instance.bridge_parent,
                           "--couch", "/candidate/couch"], instance.argv)
-        self.assertEqual(Path("/tmp").resolve(), Path(instance.bridge_parent).parent)
+        self.assertEqual(Path("/tmp").resolve(), Path(instance.bridge_parent))
         self.assertEqual(Path("/tmp").resolve(), Path(instance.runtime_parent).parent)
-        self.assertFalse(Path(instance.bridge_parent).exists())
+        self.assertTrue(Path(instance.bridge_parent).is_dir())
         self.assertFalse(Path(instance.runtime_parent).exists())
 
     def test_joined_native_probe_never_signals_a_retired_process_group(self):
