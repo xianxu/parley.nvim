@@ -26,7 +26,7 @@ A decoded result must prove the requested registration identity, canonical file 
 
 | Name | Lives in | Status | Wraps |
 | --- | --- | --- | --- |
-| `operator_lock` — Couch process seam | `lua/parley/couch.lua` | modified | bounded synchronous acquire using the existing process owner/deadline |
+| `operator_lock` — Couch process seam | `lua/parley/couch.lua` | new | bounded synchronous acquire using the existing process owner/deadline |
 | `attach` — insert admission and validated move restoration | `lua/parley/session_sync.lua` | modified | InsertEnter and late attachment, existing owned lock/baseline state |
 | Native freshness | `lua/parley/session_sync.lua` | modified | checktime, FileChangedShell/native reread and window-view restoration |
 | Stateful fake Couch | `tests/helpers/fake_couch.lua` | modified | delayed acquire, ack success/refusal/timeout, external write before ack |
@@ -229,3 +229,48 @@ Alt+Return release semantics; actual message delivery is unavailable by design
 in the isolated store. Every stage was cleared; final :0 equals origin/main.
 Pre-close acceptance checkboxes are complete. Separate future gate-owned review
 and landing from those checkboxes so they do not claim an unperformed action.
+
+### 2026-10-22 — close R1: preserve turns through an admission state owner (proposed)
+
+Review REWORK (BR-1/2) exposes a legal-state omission: changing an unavailable
+acquire to a refused retry lets refresh erase the original baseline, so a later
+confirmed retry adopts saved edited bytes and unchanged exit releases an
+unsubmitted turn. BR-3 corrects operator_lock's integration status to new; the
+base has no such function. No wording-presence test is needed for that table.
+
+Proposed replacement: one pure operator_admission component owns baseline,
+acknowledged proof, turn token and admission result. Its encapsulated transition
+function is their sole writer (ARCH-ORDER/ARCH-PURE). session_sync is the IO
+dispatcher; consumers read snapshots, never write authoritative fields. Sweep
+refresh, entry/edits, explicit and automatic release, observed edits, restored
+move witnesses and move rebase. Existing watcher, document journal and visible
+policy stay unchanged. Await TL approval before production edits.
+
+| State/event | Next state / effect | History rule |
+| --- | --- | --- |
+| idle + acquisition intent | acquiring; bounded acquire effect | establish pre-edit baseline and one token |
+| acquiring + confirmed, clean and no outstanding work | freshening; checktime/read effect | keep prior history until validated read completes |
+| acquiring + confirmed with outstanding work | held | preserve original baseline |
+| acquiring + unavailable or timeout | unconfirmed, editable warning | preserve token and baseline; absence not inferred |
+| acquiring + explicit refusal/invalid ack | refused, block edits | preserve token and baseline |
+| unconfirmed/refused + retry | acquiring | reuse same token and original baseline |
+| freshening + clean validated snapshot | held | fresh snapshot may establish baseline only with no outstanding work |
+| freshening + failed/changed snapshot | refused | preserve original history and any acquired proof |
+| live turn + edit/save/status | same admission knowledge | update observed content; never retire original baseline |
+| live turn + confirmed owned release | idle | sole ordinary retirement of token/proof/baseline |
+| move restore/rebase | proof-restored/rebased live turn | adopt only validated journal witness; translate baseline only when equal to preimage |
+
+Operator mapping remains waiting / protected / editable-not-locked / refused;
+existing leave-insert-and-retry and explicit submit actions remain. Acquire is
+synchronous and bounded; no child outlives return, so no late process callback
+can apply a reply. Match outcome generation/turn against the active intent;
+detach discards the instance, and observation/refresh cannot retire history.
+Failed/unknown release retains ownership history until confirmed release or a
+validated journal completion, never clears it by a failed observation.
+
+Proof: add the complete native unavailable -> edit/save -> refused -> confirmed
+-> unchanged-exit regression (and a no-refusal control) on both runtimes. Pure
+sequence tests assert original-baseline preservation independently of phases
+through repeated failures, retries, save/status, duplicate/stale outcomes,
+release failure and journal rebase. Add a dependency guard rejecting bypasses.
+Fresh recorded suite and close review follow the revised implementation.

@@ -250,6 +250,23 @@ on main, HEAD and origin/main both
 landing from this slot; no stage is held. Recorded suite on 5d2d9768 still covers
 all code/tests, with subsequent changes limited to documentation.
 
+### 2026-10-22 — close round 1 REWORK; state-owner revision proposed
+
+The gate's independent review reproduced premature release after unavailable
+acquire, edit/save, refused retry, then confirmed retry. refresh clears the
+baseline when admission is refused and sidecar absent, losing outstanding edit
+history. Review also requires the admission lifecycle to have one pure explicit
+transition owner, and corrects operator_lock's plan-table status to new. The
+review independently reran all mapped cases, 126 native cases and 19 Couch
+unit cases on both versions, plus fake conformance; existing tests omit that
+failure sequence. Gate sidecars record BR-1/2/3; issue remains working.
+
+Sent the proposed state-owner sweep to hub for approval before production edits.
+Plan Revision enumerates phases/events/history invariants, all existing field
+writers, move/journal bridge, unchanged UX, and sequence/native regression proof.
+No stage is held. Prior suite remains evidence for the old code, not a future
+correction. A fresh suite and review will be required after implementing it.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
