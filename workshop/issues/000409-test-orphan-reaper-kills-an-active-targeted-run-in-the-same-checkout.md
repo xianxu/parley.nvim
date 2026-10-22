@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "aa96a8c4", done: "99af27e8"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Test orphan reaper kills an active targeted run in the same checkout
@@ -48,6 +48,8 @@ Reproduce with one deliberately gated targeted spec running, then start another 
 Filed unclaimed as an independent harness defect discovered during #407 close rework. The #407 worker serializes its remaining targeted checks; its previous recorded full suite was green and this targeted interruption is infrastructure evidence only.
 
 ### 2026-10-22 — claim and investigation
+- 2026-10-22: closed — 32 direct Python tests pass (19 lease/process/entry + 13 census/watchdog); alias/default entry regressions red before BR-1 fix, green after; guard rejects new unwrapped public test/harness recipes. Mapped infra/test_harness passes with clean census; lint passes 822 files. Recorded suite lease-3768588579 on pushed code 1b3ac8f9959f is queued and required before landing; review overlaps per tl-worker.; review verdict: SHIP
+- 2026-10-22: flow upgraded quick → full — 113 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Claimed by parley.nvim:3 and entered planning on its own branch from main. No implementation yet; dispatch requested claim and plan.
 - Signal-free process-table reproduction: first run make=100, shell=101, healthy harness=102; second census=201 under make=200. Current ancestry excludes [1, 200, 201], while select_orphans selects healthy pid 102. The grace period proves persistence, not abandonment.

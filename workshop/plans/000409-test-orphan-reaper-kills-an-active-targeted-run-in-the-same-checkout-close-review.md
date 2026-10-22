@@ -84,3 +84,88 @@ findings:
    Add a `## Revisions` entry specifying that ownership applies to protected targets reached directly, through prerequisites, or as default goals. Require controlled regressions for those entry paths and retain the existing lifetime and dry-run guarantees.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"6b22dcb8-6eb5-429b-bc56-6050b3e7e02f","repository":"github.com/xianxu/parley.nvim","issue_id":"000409","recipe":"milestone-review","round":1,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/fc89e8224a9f19b3","reviewed_head":"aae4e70e14ac4b1eac5aa10da7bc94836e8bcb0a","slot":"parley.nvim:3","requested_at":"2026-10-22T18:41:07.471911Z"},"phase":"finished","pid":37820,"started_at":"2026-10-22T18:41:08.04492Z","finished_at":"2026-10-22T18:44:47.576653Z","session_id":"01a164ea-c127-7993-9a3a-47d2ae48f9d4","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T12:03:26-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 409 — Test orphan reaper kills an active targeted run in the same checkout |
+| repo | parley.nvim |
+| issue file | workshop/issues/000409-test-orphan-reaper-kills-an-active-targeted-run-in-the-same-checkout.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c..92168f8e0df941de0c7ca17ea201071d3a9ace00 |
+| command | sdlc close --issue 409 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T12:03:26-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation satisfies the ownership contract and fixes BR-1 across direct, prerequisite-chain, and default-goal entry. No new blocking findings. The recorded full-suite pass and green CI remain separate landing requirements; this review does not claim those results.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Makefile.parley:14-19 unconditionally wraps protected targets and guards internal bodies before effects. Alias-chain and default-goal regressions pass at the pinned head; both fail with “second run entered instead of waiting” when the prior Makefile and lease helper are restored together in a disposable checkout, removed after testing.
+```
+
+1. **Strengths**
+
+   - One target registry supplies public wrappers and guarded internal bodies.
+   - Make and standalone live census share the lease implementation.
+   - Gated process tests verify waiting before scratch mutation, cancellation, descendant lifetime, independent checkouts, and retained orphan cleanup.
+   - Atlas and TOOLING document ownership, recovery, dry runs, and rollout.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - All **32 direct Python tests passed**.
+   - BR-1’s alias/default regressions failed against the prior implementation, confirming meaningful regression coverage.
+   - The mapped `infra/test_harness` run passed except scratch-placement assertions caused by review-provided `TMPDIR` residing inside the checkout. All **10 scratch-placement checks passed** with external scratch.
+   - Both final censuses were clean.
+   - Lint passed: **0 warnings/errors across 822 files**.
+   - `git diff --check` passed; tracked files remain unchanged.
+
+6. **Architectural notes for upcoming work**
+
+   | Principle | Assessment |
+   |---|---|
+   | ARCH-DRY | Pass — shared helper and target registry. |
+   | ARCH-PURE | Pass — lease code remains IO glue; process selection remains pure. |
+   | ARCH-PURPOSE | Pass — admission now covers protected-target execution across entry paths. |
+   | ARCH-MOCK | Pass — recorded process observations and gated real-process conformance exercise the production seams. |
+   | ARCH-CONSTRAINTS | Pass — constant lease footprint, cancellable waiting, existing bounded test fan-out. |
+   | ARCH-SECURE | Pass — descriptor/inode validation, no-follow creation, argv execution, explicit refusal. |
+   | ARCH-ORDER | Pass — admission precedes effects; tests control competing runs and owner/descendant exit ordering. |
+   | ARCH-FUNERAL | Pass — descriptors release ownership; the fixed lock file ends with checkout removal. |
+   | ARCH-EVOLVE | Pass — no persisted application-format change. |
+
+   The Core concepts table matches the changed entities and their integration classification. Atlas covers the new architectural surface. No new public command, flag, or configuration invocation requires a README addition.
+
+7. **Plan revision recommendations**
+
+   None. Existing revisions describe the target-execution correction and prerequisite ordering accurately.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"9ad775b5-0ddd-4b48-9cd6-70c299346c00","repository":"github.com/xianxu/parley.nvim","issue_id":"000409","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/c1e036218a27396a","reviewed_head":"92168f8e0df941de0c7ca17ea201071d3a9ace00","slot":"parley.nvim:3","requested_at":"2026-10-22T18:59:51.215648Z"},"phase":"finished","pid":15402,"started_at":"2026-10-22T18:59:51.433233Z","finished_at":"2026-10-22T19:03:26.024036Z","session_id":"01a164fb-e3f9-7b30-8d84-b17e0e5331de","outcome":"returned"}] -->
