@@ -18,6 +18,7 @@ collaboration-mode: discussion
 
 | Name | Lives in | Status |
 | --- | --- | --- |
+| `new` — encapsulated operator admission transitions (`dispatch`, `snapshot`) | `lua/parley/operator_admission.lua` | new |
 | `operator_result`, `operator_proof` — acknowledgment and ownership validation | `lua/parley/couch.lua` | new |
 
 A decoded result must prove the requested registration identity, canonical file and effective operator protection; missing/mismatched fields and explicit refusals do not admit input; structured unavailability and the bounded timeout use the approved editable-degraded state below. Exact command/fields and ownership evidence are pinned through the hub with pair:2 before implementation, not invented by the consumer. Validation is pure and unit-tested with malformed/mismatched acknowledgments. There is one acknowledgment per newly admitted turn, not per character. Unknown fields remain tolerated; no persisted schema is introduced.
@@ -274,3 +275,26 @@ sequence tests assert original-baseline preservation independently of phases
 through repeated failures, retries, save/status, duplicate/stale outcomes,
 release failure and journal rebase. Add a dependency guard rejecting bypasses.
 Fresh recorded suite and close review follow the revised implementation.
+
+### 2026-10-22 — state-owner revision approved
+
+TL 767f4323 approved the proposed six-phase owner and sole-writer sweep. The
+reviewer's full native failure sequence goes red before implementation. After
+new state logic passes a fresh suite and close review, repeat the approved
+isolated real-profile stage/clear before landing; earlier live evidence does
+not substitute for the new implementation.
+
+The component exposes only new() -> dispatch(event) / snapshot(); snapshot is a
+copy, with compatibility-derived admission labels and unconfirmed-work flags.
+Commands issue bounded acquire/freshness/release effects with private operation
+witnesses. Outcomes must match their active witness; duplicate/stale outcomes
+are ignored. Edit/save/observation never retire history. Confirmed owned release
+is the only normal reset; validated journal restore/rebase are explicit events
+and cannot overwrite outstanding history except the existing preimage-equality
+translation. Existing unregistered legacy turns use the same owner with opaque
+exact proof bytes; their established disk/submit policy is unchanged.
+
+- [ ] Add native BR-1 red and no-refusal control; add independent pure sequence tests.
+- [ ] Implement the encapsulated owner and dispatch effects; sweep every old history writer.
+- [ ] Guard the ownership boundary structurally, verify both runtimes and run the fresh recorded suite.
+- [ ] Close review approves; then repeat the authorized real-profile stage and clear before landing.

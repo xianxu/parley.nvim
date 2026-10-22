@@ -267,6 +267,15 @@ writers, move/journal bridge, unchanged UX, and sequence/native regression proof
 No stage is held. Prior suite remains evidence for the old code, not a future
 correction. A fresh suite and review will be required after implementing it.
 
+### 2026-10-22 — state-owner approval and regression work
+
+TL 767f4323 approved the six-phase pure operator_admission owner, sole writer
+for baseline/proof/token/admission history, with an IO dispatcher and unchanged
+failure UX. Native full-sequence red is in progress through the executable fake;
+a bounded subagent owns only that native spec. Main owns the pure model and
+integration sweep. Approval requires repeating the brief isolated profile check
+only after the revised close review approves, then clear before landing.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
