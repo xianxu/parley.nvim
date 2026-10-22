@@ -1,13 +1,13 @@
 ---
 id: 000411
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-21
 updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'a21d1c8e7b6066f565d930077b34f44a2c5c5d05' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '818be153fe767e72559d34d5a48a9b69374ec3c6' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T03:59:29-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "f33d115e", done: "54cccc96"}
+actual_hours: 0.68
 ---
 
 # Handle nvim's file-changed event for registered session files and side docs: silent reload when unmodified, keep-a-copy when modified, never the prompt
