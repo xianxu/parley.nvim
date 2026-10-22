@@ -317,3 +317,14 @@ callback. #408 leaves unknown-period edits available and reconciled on
 attachment; its first-edit exclusion/freshness guarantee starts when identity
 is known, including cached identity. README and atlas explicitly state that
 boundary. No new blocking registration lookup is introduced.
+
+### 2026-10-22 — R1 native red and recovery approval
+
+BR-1 native controls pass; refusal cases fail E21 before retry InsertEnter on
+both runtimes (2 pass/2 fail/0 errors). Scratch explicit-event isolation confirms
+independent baseline loss. Log: /Volumes/TestScratch/parley-408-br1-wqyesjzj/red-bounded.log.
+TL b5c63266 approved refused-only local i/a/o/I/A/O retry maps and
+:ParleySessionRetry through the shared dispatcher, with the buffer blocked
+until admission succeeds or the approved unavailable outcome. Plan Revision
+records the recovery delta. Pure state owner and tests delegated; IO integration
+remains in this session. No live stage is held.

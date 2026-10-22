@@ -44,7 +44,7 @@ The acquire response must distinguish newly obtained protection from an existing
 
 ## User state and recovery
 
-Actions: enter insert, leave insert, retry by leaving and entering insert again, edit, undo, submit, reopen interrupted move.
+Actions: enter insert, leave insert, retry with i/a/o/I/A/O while refused or :ParleySessionRetry, edit, undo, submit, reopen interrupted move.
 
 | Internal state / failure | Visible state | Recovery action | Possible loss |
 | --- | --- | --- | --- |
@@ -52,7 +52,7 @@ Actions: enter insert, leave insert, retry by leaving and entering insert again,
 | Confirmed + clean; disk changed during acquire | Native clean reload, then normal operator band and insertion | Edit | No unsaved bytes replaced |
 | Confirmed + clean; unchanged disk | Normal insert and operator band | Edit | None |
 | Existing changed operator turn | Existing operator band; no baseline reset/reload | Submit | None |
-| Held-lock refusal, other explicit refusal, malformed or mismatched ack | Visible acquisition failure; buffer non-modifiable | Leave insert and retry insert | Typed characters while refused are not applied or saved; state this in notice |
+| Held-lock refusal, other explicit refusal, malformed or mismatched ack | Visible acquisition failure; buffer non-modifiable | Press i to retry, or :ParleySessionRetry | Typed characters while refused are not applied or saved; state this in notice |
 | Namespace/store unavailable (not a stopped supervisor) | Editable, band: not locked: Couch unreachable; edits may conflict | Edit | Concurrent agent changes may conflict; existing clobber-copy handling preserves both copies |
 | 500 ms timeout, including possible unacknowledged acquisition | Same editable warning; retain witnessed protection, never delete on guess | Edit | No guaranteed exclusion; conflicts use clobber-copy handling, no silent unlock |
 | Genuine dirty-buffer foreign write | Existing violation handling | Submit through existing reconciliation | Existing clobbered-copy policy retained |
@@ -298,3 +298,20 @@ exact proof bytes; their established disk/submit policy is unchanged.
 - [ ] Implement the encapsulated owner and dispatch effects; sweep every old history writer.
 - [ ] Guard the ownership boundary structurally, verify both runtimes and run the fresh recorded suite.
 - [ ] Close review approves; then repeat the authorized real-profile stage and clear before landing.
+
+### 2026-10-22 — native refusal recovery revision approved
+
+Native BR-1 red/control runs on both runtimes produced two passing controls and
+two failures: after refusal makes the buffer non-modifiable, native i fails E21
+before InsertEnter. A scratch-only explicit InsertEnter diagnostic separately
+reproduced the original baseline loss. Evidence:
+/Volumes/TestScratch/parley-408-br1-wqyesjzj/red-bounded.log.
+
+TL b5c63266 approved one explicit :ParleySessionRetry action using the same
+admission dispatcher, plus buffer-local Normal i/a/o/I/A/O maps only while
+refused. Those maps retry first and enter insert only when admitted; remove
+them on leaving refusal and restore displaced buffer-local mappings. Keep the
+buffer non-modifiable throughout refusal: no automatic retry, writable gap or
+input interception. The band names the holder/reason and says press i to retry;
+notification also names the command and says refused keys were not applied.
+This supersedes the earlier leave-and-reenter-only recovery rule.

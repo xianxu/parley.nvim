@@ -297,6 +297,53 @@ describe("session-sync native edits", function()
         keys("<Esc>")
     end)
 
+    for _, intervening_refusal in ipairs({false,true}) do
+        it("preserves saved unconfirmed edits through "..(intervening_refusal and "a refused then confirmed retry" or "a confirmed retry without refusal").." (#408 BR-1)",function()
+            open(false,false,true,true)
+            exec([[
+                _G.retry_insert_entries=0
+                vim.api.nvim_create_autocmd("InsertEnter",{buffer=0,callback=function() retry_insert_entries=retry_insert_entries+1 end})
+                vim.env.FAKE_COUCH_OPERATOR_CODE="session-sync-unavailable"
+                vim.env.FAKE_COUCH_OPERATOR_EXIT="7"
+            ]])
+            keys("iX")
+            wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='Xfirst bullet'")
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+            exec("vim.cmd('silent write')")
+            assert.equals("Xfirst bullet",vim.fn.readfile(file)[8])
+            assert.is_false(exists(),"unavailable acquire unexpectedly published a lock")
+            if intervening_refusal then
+                exec([[
+                    vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock"
+                    vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
+                ]])
+                keys("i");wait_for("return vim.fn.mode()=='i'")
+                assert.is_false(exec("return vim.bo.modifiable"))
+                assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"),"refused retry applied queued input")
+                assert.is_true(exec([[return table.concat(notifications,"\n"):find("not applied",1,true)~=nil]]))
+                keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+            end
+            exec([[
+                vim.env.FAKE_COUCH_OPERATOR_CODE=nil
+                vim.env.FAKE_COUCH_OPERATOR_EXIT=nil
+            ]])
+            keys("i")
+            exec("vim.schedule(function() _G.retry_entry_settled=true end)")
+            wait_for("return _G.retry_entry_settled==true")
+            local final_entry=exec("return {mode=vim.fn.mode(),entries=retry_insert_entries,error=vim.v.errmsg,modifiable=vim.bo.modifiable}")
+            assert.equals("i",final_entry.mode,"confirmed retry did not enter insert: "..vim.inspect(final_entry))
+            assert.is_true(final_entry.modifiable)
+            locked()
+            assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+            exec("vim.schedule(function() _G.retry_exit_settled=true end)")
+            wait_for("return _G.retry_exit_settled==true")
+            assert.is_true(exists(),"confirmed unchanged exit retired the earlier outstanding edit")
+            assert.equals("Xfirst bullet",vim.fn.readfile(file)[8])
+            assert.is_nil(vim.uv.fs_stat(sent_file),"retry submitted an outstanding edit")
+        end)
+    end
+
     it("lost acquire acknowledgment retries the same turn without advancing baseline (#408)",function()
         open(true,false,true,true)
         exec('vim.env.FAKE_COUCH_OPERATOR_DELAY="2"')
