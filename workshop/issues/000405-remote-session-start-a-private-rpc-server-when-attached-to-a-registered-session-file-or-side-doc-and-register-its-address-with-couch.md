@@ -260,3 +260,9 @@ This is candidate qualification, not final landed-producer acceptance; wait for 
 TL reported headless nvim PID69636. Repeated native ps established start Thu Oct22 08:55:00 2026, PPID1, exact0.12.5 clean embedded argv and this slot1 checkout cwd. lsof tied its open temporary directory/socket to /Volumes/TestScratch/parley-405-runtime-fixture-red/tmp/nvim.xianxu/LFa2op/nvim.69636.0; all standard streams were /dev/null. That completed08:55 red run exercised embedded_nvim_spec, remote_runtime_fixture_spec and remote_runtime_spec. The exact individual case cannot be established from its log. The red log incorrectly ended with a clean census, despite this surviving child; its missing fixture/default getter failures and later parent/child cleanup corrections are already documented above. No live run owns this process.
 
 After rechecking exact PID/start/PPID/argv/cwd, SIGTERM did not exit within5s. Rechecked the same identity, sent SIGKILL to that exact PID only and confirmed native ps absence. No process group, other PID or runtime directory was removed. This is historical leak evidence, not a claim that the census had detected it or that an additional harness fix was verified today.
+
+### 2026-10-22 — returned to numbered slot after #413 landing
+
+#413 landed as PR335 and its merge runner ended. Verified both worktrees clean; detached the auxiliary #405 worktree at36027746 and resumed the original #405 branch in its claimant slot parley.nvim:1. Current origin/main merged without conflict, including the registered-file FileChangedShell handling from #411 and #413. The auxiliary checkout remains detached, with no live native tests or branch ownership. No code is stacked on an unlanded issue.
+
+Next: push this integrated checkpoint and run the recorded pre-close suite. Candidate bridge qualification on both runtimes remains provisional pending pair#801 merge pin; no :0 stage or final acceptance claimed.
