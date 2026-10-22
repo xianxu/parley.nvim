@@ -74,15 +74,15 @@ Files: `Makefile.parley`, `scripts/test-run-lease.py`, `tests/unit/test_isolatio
 - [x] Update the existing source guard that identifies check-couch-actors-live to understand its internal recipe name; retain its real environment/sentinel assertions.
 - [x] Extend target coverage checks to map every census/scratch body to a public wrapper and required lease guard. Verify a directly requested internal body refuses without ownership.
 - [x] Run all direct Python lease and census/watchdog tests. Expected: all green, no surviving fixture processes. Keep status/cancellation, owner/descendant death, unrelated-command and separate-checkout controls.
-- [ ] Commit code/tests with the issue log and learned rule; record the BR-1 counterexample and fix without claiming disposition before gate review.
+- [x] Commit code/tests with the issue log and learned rule; record the BR-1 counterexample and fix without claiming disposition before gate review.
 
 ## Task 3: verify and finish
 
 Files: `TOOLING.md`, `atlas/infra/test_harness.md`, issue details, `workshop/lessons.md`.
 
 - [x] Document target-execution admission, internal refusal, aliases/default goals, serial Make goals and dry-run behavior; retire old request-dispatch claims with this Revision.
-- [ ] Run `make test-spec SPEC=infra/test_harness` and `make lint`; inspect actual mapped output and final census. Run required authoring/architecture checks through the mapped harness and recorded suite.
-- [ ] Push with `sdlc pr`; run `sdlc local-check run --name suite` on final code. The old queued run lease-3134723290 was cancelled via its supported command after BR-1; it provides no passing evidence.
+- [x] Run `make test-spec SPEC=infra/test_harness` and `make lint`; inspect actual mapped output and final census. Run required authoring/architecture checks through the mapped harness and recorded suite. (Mapped/lint passed; the retained recorded suite remains a separate pending landing requirement below.)
+- [x] Push with `sdlc pr`; run `sdlc local-check run --name suite` on final code. The old queued run lease-3134723290 was cancelled via its supported command after BR-1; it provides no passing evidence.
 - [ ] Run `sdlc close --issue 409 --verified '<fresh evidence>'` for full boundary review. It may overlap the new retained suite per tl-worker; fix/dispute findings by their class.
 - [ ] Require a recorded suite pass on final code plus green CI before landing. Follow TL landing direction and `sdlc merge --yes`, report the PR outcome, then stop.
 
