@@ -1,13 +1,21 @@
 ---
 id: 000416
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '1ae44815edf8b30535d7ab63b7e72ea747beb44c' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '6dc1b2badbd7c24225c180237497ec8cc4c539b8' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-22T16:14:29-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Test census reports clean while an orphaned embedded Neovim survives
@@ -41,10 +49,26 @@ The leaked run predates the later #405 fixture and parent/child cleanup changes.
 
 ## Plan
 
-- [ ]
+- [ ] Implement the approved design in [the durable plan](../plans/000416-false-clean-census-plan.md), with native red/green coverage before changing cleanup.
+- [ ] Verify exact ownership, observed death, refusal paths, both supported runtimes, and #409 serialization; record the pushed-head full suite and close review.
+
+## Revisions
+
+### 2026-10-22 — proposed design after native false-clean reproduction
+
+Extend the existing spec-job birth ledger through the terminal census, scoped to the existing checkout lease. Retain PID plus native start identity; join exact children on every runner return and let the independent census verify retained records. Unknown observations fail visibly and preserve evidence. See the durable plan for the state table, alternatives and bounds. This is proposed to the TL; implementation has not started.
 
 ## Log
 
 ### 2026-10-22 — filed unclaimed at the TL's request
 
 Historical survivor reported by ops:0, attributed through native process identity and its open run-specific socket by parley.nvim:1, and removed after exact revalidation. #405 records this incident at commit 36027746. This issue tracks the false clean census separately; no fix or new reproduction is claimed here.
+
+
+### 2026-10-22 — investigation and proposed plan
+
+Claimed and started on main-based branch `000416-false-clean-census`. The selector requires the checkout's `tests/` substring before considering any process, so the historical bare embedded command is categorically invisible. Current `spec_runner.execute` deletes the per-spec jobs directory after an ordinary exit without reconciling recorded jobs; `embedded_nvim.stop` ignores its wait result. #405's unlanded branch adds on-exit/join proof for fixture deletion but leaves the independent census classifier blind. Its exact historical leaking test remains unknown; no claim is made that the same test still leaks.
+
+A disposable native probe on Neovim 0.12.5 spawned the historical exact argv, sent an RPC that published readiness then spun, and let its launcher exit. Native ps observed PID 48080 with PPID 1; TERM left it alive. The current signal-free census on that real captured snapshot returned 0 and `clean: no surviving test processes`. The probe's finally block sent KILL only to its own created child. Evidence: `/Volumes/TestScratch/parley416-census-d93c83gn/{owner.py,ps.txt,ready}`. Regression must record the new PID/start at birth rather than treating these historical numbers as authority.
+
+`start-plan` refreshed the base and encountered ariadne#557's generated workflow change. Saved its exact diff to `/Volumes/TestScratch/parley416-seeded-jnnx_p97/merge-check.patch`, restored only that seeded file, then reran start-plan successfully. The separate pre-#409 named stash remains untouched. ARCH-DRY motivates reusing the existing native identity reader and spec-job ledger; ARCH-PURPOSE requires an independent terminal check, not only a nicer stop helper.
