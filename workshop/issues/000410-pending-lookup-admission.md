@@ -43,7 +43,7 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 
 - [x] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
 - [x] Complete R1 production-order red/green through the revised one-owner handoff, including the exact owned legacy-proof exception; retain original deadline and history.
-- [x] Complete corrected implementation and local verification preparation on both runtimes, counted effects, conformance/docs and guards; recorded suite and post-review live acceptance remain required before landing (Log).
+- [ ] Resolve the R2 deferred-legacy settlement policy with the TL/operator before further implementation; reverify mapped regressions, recorded suite and post-review live acceptance before landing (Log).
 
 ## Estimate
 
@@ -110,6 +110,14 @@ Production-order native red reproduced unconfirmed first input from a pre-owned 
 Expanded native verification adds post-removal unavailable/refused retries and standalone typed S1 attachment. The latter red caught using the header-aware is_session_sync predicate where the plan requires an actually attached controller; now checks the existing identity accessor. The timeout fixture writes protection before delaying its reply, so lack of acknowledgment cannot assert absent sidecar; corrected that oracle to exercise same-turn retry. Operator stale-rename diagnosis traced the stall inside nvim_buf_set_name before callback return: typed unknown legacy migration is deliberately refused by the existing #359 preflight. The preflight also refuses unknown prose, so the stale-name test narrowly ignores BufFilePre/Post while changing the name, modeling external name invalidation without exercising migration admission. Migration policy is unchanged. Both-runtime final checks, lint, recorded suite, fresh boundary review and live acceptance remain outstanding. No :0 stage held.
 
 Final-code evidence at 6d34f535: preferred full native 159/0/0; operator focused new native 17/0/0 (including all four pre-owned outcomes and 4/8 counters); owner 25/0/0; prior integrated focus includes Couch 25/0/0 and affected architecture guards. Whole-tree lint 822 files, zero warnings/errors. Disposable real/fake producer conformance and corrupted-fake negative control pass. Full operator native regression is running separately. Recorded suite lease-3241185062, attempt 58772d90cf8ca491fcf530bfd75bc091, is queued normally at position 12 on the pushed code head. Per the permitted overlap, fresh close review may run while it queues; no recorded-suite pass, live acceptance or landing is claimed. Prepared copied-profile fixture now preserves the parent's production legacy-before-S1 order and remains unrun.
+
+### 2026-10-22 — R2 REWORK; stopped for operator policy decision
+
+Fresh boundary review on 8f42416f disposed BR-1 addressed and raised Critical BR-2 in the same `admission-handoff-covers-existing-controllers` family (second instance). Deferring tokenless writes during pending discovery has no background settlement when lookup finishes absent: normal-mode outstanding edits remain unlocked after pending=false/no identity unless another input action happens. Existing regression `tests/integration/session_sync_spec.lua:411` (unresolvable owner, no submission, legacy lock retained) fails at this head and passes with pre-correction c8e811f1 modules. Source inspection confirms the observer defers at session_sync.lua:797–799 and lookup completion at agentic_document.lua:347–355 has no legacy continuation. This is a further mechanism gap, not the separate #412 native refusal timing issue.
+
+Stopped without a product/test patch or another mechanism proposal, per TL c8405302/f0654bf4. Sent the finding and retire-legacy question to the hub; the existing plan paragraph records why retirement changes unknown/absent/unavailable legacy policy and needs an operator decision. BR-1 regressions remain fixed: the reviewer verified 17 native cases on each runtime and owner/Couch 25 each, with substitution red. My complete native runs passed 159/0/0 on EACH runtime; lint and real/fake conformance passed. These do not outweigh the mapped legacy regression. The reviewer's mapped run also stalled and had an overlapping preparation cleanup, so it cannot establish a complete suite pass.
+
+Cancelled obsolete queued suite lease-3241185062 through the supported exact-run command; runner exited context-cancelled and produced no suite result. No suite, review, stage or live profile is running. PR #333 is unlanded; issue remains working. Next action is TL/operator policy direction, not a third patch. Preserve the unrelated generated-workflow stash.
 
 ## Revisions
 

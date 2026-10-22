@@ -75,3 +75,94 @@ findings:
    Add a `## Revisions` entry explicitly covering existing-controller adoption, legacy InsertEnter ordering, and native regressions with and without outstanding saved edits. Preserve production attachment order in those tests.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"008812c4-feb7-4fd2-9bf7-47e5b2a1a62a","repository":"github.com/xianxu/parley.nvim","issue_id":"000410","recipe":"small-diff-review","round":1,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/eb5b13688580f6b8","reviewed_head":"adf97f9c0ceed3c0085a9857acd3d2a430dc2aa6","slot":"parley.nvim:4","requested_at":"2026-10-22T19:16:34.97545Z"},"phase":"finished","pid":96134,"started_at":"2026-10-22T19:16:35.074286Z","finished_at":"2026-10-22T19:22:16.753209Z","session_id":"01a1650b-338a-7fe3-b6b7-d627a5de240d","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T13:02:18-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 410 — Bound insert admission across pending registration lookup |
+| repo | parley.nvim |
+| issue file | workshop/issues/000410-pending-lookup-admission.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c..8f42416fc1223719f4a1de940185280f3f8ea844 |
+| command | sdlc close --issue 410 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T13:02:18-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-1’s confirmed-registration paths are corrected and backed by meaningful regression tests. However, the correction strands deferred legacy edit turns when discovery finishes without registration: existing protection is never restored. This reproducible behavior regression blocks SHIP.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Existing-controller attachment now consumes the input scope and observed edits. Production-order regressions pass on Neovim 0.11.7 and 0.12.5; substituting the pre-correction c8e811f1 modules makes the clean-input, saved-edit, and pre-owned-turn regressions fail.
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: admission-handoff-covers-existing-controllers
+    title: |
+      Deferred legacy edit turns remain unlocked after lookup completes without registration
+    detail: |
+      lua/parley/session_sync.lua:797-799 records an observed turn and suppresses legacy protection while lookup is pending. Background lookup completion at lua/parley/agentic_document.lua:347-355 has no continuation restoring that protection on absence; only an active InsertEnter waiter resumes legacy behavior. The existing tests/integration/session_sync_spec.lua:411 regression fails at head with a missing .lock, and an isolated check confirms pending=false, no registered identity, and lock=0 after completion. The same test passes with pre-correction c8e811f1 modules. This violates the plan's promise that proven absence restores existing legacy behavior and leaves outstanding edits without their previous protection. ARCH-PURPOSE / ARCH-ORDER: this is the 2nd finding in family admission-handoff-covers-existing-controllers. Earlier rounds fixed instances. Do NOT fix only this test: state and enforce the rule for settling deferred turns across lookup outcomes, normal-mode edits, and completion after input-scope expiry, preserving the original baseline and ownership checks.
+```
+
+1. **Strengths**
+
+   - Existing and newly created controllers share attachment completion through `s.complete_attach` at `lua/parley/session_sync.lua:835`.
+   - The pure owner’s `legacy_release` continuation preserves history through failure and retry at `lua/parley/operator_admission.lua:49`.
+   - Residual process budgets account for spawn time and avoid spawning after expiry.
+   - README and atlas changes document the shared deadline and retained unknown-period behavior.
+
+2. **Critical findings**
+
+   - The finding above requires a completion path for deferred legacy turns when discovery establishes absence. Preserve outstanding history and settle protection without requiring another edit or insert entry.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - All 17 issue-specific native cases passed on both Neovim 0.11.7 and 0.12.5.
+   - Owner and Couch unit suites passed, 25 cases each. Isolated real/fake Couch conformance and its corrupted-fake negative control passed.
+   - Three BR-1 regression tests failed with the previous implementation substituted in memory.
+   - The legacy fallback regression failed at head and passed with the previous implementation.
+   - The mapped suite was unsuccessful: it exposed that regression and stalled during the full native file. An overlapping harness preparation also reaped one mapped process, so this run cannot establish a complete suite pass. Focused reruns passed; the checkout remains unchanged.
+
+6. **Architectural notes**
+
+   | Principle | Assessment |
+   |---|---|
+   | ARCH-DRY | Pass — shared admission entry and attachment completion. |
+   | ARCH-PURE | Pass — history transitions remain pure and directly tested. |
+   | ARCH-PURPOSE | **Flag** — deferred legacy fallback is incomplete. |
+   | ARCH-MOCK | Pass — production seams use stateful fakes; conformance passed. |
+   | ARCH-CONSTRAINTS | Pass — focused deadline and counted-work tests passed. |
+   | ARCH-SECURE | Pass — witness and exact-proof checks remain enforced. |
+   | ARCH-ORDER | **Flag** — non-registration completion does not settle deferred turns. |
+   | ARCH-FUNERAL | Pass — scopes have explicit cleanup; no new durable family. |
+   | ARCH-EVOLVE | Pass — no persisted-format change. |
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry defining how deferred legacy turns settle for confirmed, absent, and unavailable lookup outcomes, including normal-mode edits and completion after scope expiry. Require regression coverage for those transitions while preserving the original dirty or autosaved baseline.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"c6e20723-aa74-4785-b71b-c902edaa45df","repository":"github.com/xianxu/parley.nvim","issue_id":"000410","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/8442cc1717c71343","reviewed_head":"8f42416fc1223719f4a1de940185280f3f8ea844","slot":"parley.nvim:4","requested_at":"2026-10-22T19:52:00.202536Z"},"phase":"finished","pid":37065,"started_at":"2026-10-22T19:52:00.430149Z","finished_at":"2026-10-22T20:02:13.374958Z","session_id":"01a1652b-a28f-7062-b338-c0e1748750b7","outcome":"returned"}] -->

@@ -956,3 +956,10 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   satisfy a global-only oracle. Assert absence from ordinary contexts and
   presence on an actual attached buffer, using the existing executable fake
   for attachment's status/round queries; even a declaration check can spawn IO.
+
+- #410 R2: deferring an existing owner's effect needs a settlement rule for
+  every terminal result and every initiating context, including normal edits
+  and completion after an input scope expires. Test the established fallback
+  regression mapping as well as the new successful handoff; native insert-only
+  coverage cannot prove background absence/unavailability preserves policy.
+  A second hole in the admission mechanism goes to the TL/operator before code.
