@@ -44,7 +44,7 @@ Identify whether native mode becomes observable before admission settles, or the
 
 - [x] Pin the observed distinction with controlled native cases: completed explicit operator-lock refusal blocks editing; completed timeout/unavailable remains editable with the existing visible warning. Record outcome, elapsed time, mode, notifications, runtime and load; never infer refusal from mode alone (ARCH-ORDER).
 - [x] In refuse_insert_entry only, give the external stateful fake the existing arrival.MS test budget; retain the production 500ms constant and real-deadline tests, including #410's pending-lookup cases. The override lives only in each disposable child. Observe completion after the attached InsertEnter handler returns, then assert the completed refusal and modifiable=false with diagnostics. Retain every native I/i/a/o/A/O retry assertion and queued-input oracle (ARCH-DRY, ARCH-PURPOSE).
-- [ ] Prove the refusal oracle goes RED if refusal protection is removed. Run the relevant native retry/policy matrix on Neovim0.11.7 and preferred0.12.5, then the existing native/Couch/architecture tests serially with make -k. Update the harness guidance/lesson for separating product latency tests from behavioral fixtures; preserve diagnostic evidence for any further load failure.
+- [x] Prove the refusal oracle goes RED if refusal protection is removed. Run the relevant native retry/policy matrix on Neovim0.11.7 and preferred0.12.5, then the existing native/Couch/architecture tests serially with make -k. Update the harness guidance/lesson for separating product latency tests from behavioral fixtures; preserve diagnostic evidence for any further load failure.
 - [x] Check the available registry contract: current flake register accepts Go package.TestName identities only. Lua registration remains conditional on ariadne#556; no Go identity is fabricated.
 
 After targeted verification, push and run the recorded suite, close and land under normal gates.
@@ -53,6 +53,8 @@ No product state, deadline, parser or durable format changes are planned. Existi
 
 
 ## Log
+
+- Final targeted GREEN: /tmp/parley412-target-operator.log (Neovim0.11.7) exits0 with native144/144, Couch19/19, arrival2/2, owner2/2 and documentation4/4. Preferred0.12.5 passes the same native144/Couch19/arrival2/owner2 in /tmp/parley412-target-preferred.log; corrected documentation4/4 exits0 in /tmp/parley412-docs-preferred.log. Lint823/823,0warnings/errors; diff-check clean. PR334 opened. Required recorded suite and boundary review are the remaining gates; no live product change/stage is needed for this test-only fix.
 
 - Implementation is test/docs only. The refusal helper now uses arrival.MS solely in its disposable child, observes the attached InsertEnter handler's completion, then asserts explicit refused/operator-lock plus nonmodifiable with elapsed time, mode, notice, bar, runtime and load diagnostics. Two deterministic raw-transport outcome controls drive the actual classifier/admission/native event path; existing stateful-process retry scenarios and all six native keys remain intact. No production file changed.
 - Mutation RED /tmp/parley412-mutation-red.log: temporarily disabling only the production modifiable=false gate makes both the controlled refusal test and native o retry fail (0pass/2fail/0error, make exit2); original production bytes restored in finally and verified no diff. Refusal diagnostics identify actual refused/operator-lock at138.28ms with budget15000 and modifiable=true, so the enlarged fixture budget does not hide missing protection.
