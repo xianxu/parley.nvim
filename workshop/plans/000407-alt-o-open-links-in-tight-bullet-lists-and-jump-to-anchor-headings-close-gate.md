@@ -410,6 +410,212 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: f89d949a-3a46-438f-b5a5-d46d670ce6cf
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000407"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Volumes/TestScratch/review-checkouts/c624baa0b933b62b
+            reviewed_head: 114df050b8c3bb862e994c884d54e88d5440a05b
+            slot: parley.nvim:2
+            requested_at: "2026-10-22T08:00:16.396112Z"
+          phase: finished
+          pid: 67590
+          started_at: "2026-10-22T08:00:16.56428Z"
+          finished_at: "2026-10-22T08:05:13.773206Z"
+          session_id: 01a162a0-064c-7200-9e38-f4c15f138274
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 114df050b8c3bb862e994c884d54e88d5440a05b
+        tracker_head: 3821fadb4d0bfac2e58f74dead32cfc4d76e8856
+        branch_point: 220b67af621c39fce796dc9a901b81d4d33c8d50
+        since: "2026-10-21T08:52:51-07:00"
+        until: "2026-10-22T00:59:53-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-21T08:52:51-07:00"
+              end: "2026-10-22T00:59:53-07:00"
+              began: "2026-10-21T08:52:51-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a13b56-32ec-7310-8650-104071939f2f
+              slot: parley.nvim:2
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: 112d7be5d5239bcde3679e2e4c1097d8ec0bf9a59cdce632c2aa8bd45b374f5a
+              started: "2026-10-14T16:54:39.906Z"
+              spawned: false
+              bytes: 69654645
+              windows:
+                - start: "2026-10-21T08:52:51-07:00"
+                  end: "2026-10-22T00:59:53-07:00"
+            - harness: codex
+              id: 01a15f2a-cb84-75e2-ac43-0756ea7d3166
+              slot: parley.nvim:2
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: e11f7236b68fea41303a58d0d0f1f0c10584246b86a5f3fd310c34645cf5bb77
+              started: "2026-10-21T15:53:22.681Z"
+              spawned: true
+              bytes: 464175
+              windows:
+                - start: "2026-10-21T15:53:22.681Z"
+                  end: "2026-10-22T00:59:53-07:00"
+            - harness: codex
+              id: 01a15f2c-08fd-7e41-b003-4e483a250212
+              slot: parley.nvim:2
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: 3266063c816da0abc2c4f9be4d55ca7f52432ce3cdba187da6556d3c134a4ef9
+              started: "2026-10-21T15:54:44.03Z"
+              spawned: true
+              bytes: 365783
+              windows:
+                - start: "2026-10-21T15:54:44.03Z"
+                  end: "2026-10-22T00:59:53-07:00"
+            - harness: codex
+              id: 01a16044-5881-74c0-a2b6-ead7290fb9ed
+              slot: parley.nvim:2
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: 15f0962aa54ae5424cf9e89322d91442796e24a5a54e5497421708fac7d92593
+              started: "2026-10-21T21:00:54.365Z"
+              spawned: true
+              bytes: 736494
+              windows:
+                - start: "2026-10-21T21:00:54.365Z"
+                  end: "2026-10-22T00:59:53-07:00"
+            - harness: codex
+              id: 01a160e6-e83d-7442-afe2-dd0ae6d79092
+              slot: parley.nvim:2
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: 153c7c0a07dcb55c3c8e392226d5416b5e55e34d84f47dafb70f5e272513a51a
+              started: "2026-10-21T23:58:28.077Z"
+              spawned: true
+              bytes: 869288
+              windows:
+                - start: "2026-10-21T23:58:28.077Z"
+                  end: "2026-10-22T00:59:53-07:00"
+            - harness: codex
+              id: 01a161c7-a772-7240-a714-fa781a3b06bf
+              slot: parley.nvim:2
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: 523d12abaaa7f34b5dccd7d86e4754fcaaf20597e1c0e552baa669562643a8c6
+              started: "2026-10-22T04:03:56.961Z"
+              spawned: true
+              bytes: 574240
+              windows:
+                - start: "2026-10-22T04:03:56.961Z"
+                  end: "2026-10-22T00:59:53-07:00"
+            - harness: codex
+              id: 01a161ca-c137-7a20-ace9-db9964f2c6d9
+              slot: parley.nvim:2
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: bcea5753b001b7202df84d6326324f47b5201c9d55c76969f0bc4bf0b237378f
+              started: "2026-10-22T04:07:20.205Z"
+              spawned: true
+              bytes: 661167
+              windows:
+                - start: "2026-10-22T04:07:20.205Z"
+                  end: "2026-10-22T00:59:53-07:00"
+        queue_waits:
+            - attempt_id: b82743bbb46e9281aaf07b62cd3fa8a5
+              slot: parley.nvim:2
+              record_digest: a39c969e463bac1818051ab6d4b66ac7aa7c82947ea00df65413fef2cd65f422
+              start: "2026-10-21T16:07:08.824199Z"
+              end: "2026-10-21T17:33:16.104628Z"
+              queue_seconds: 5167.280429
+              raw_seconds: 5167.280429
+              exact: true
+            - attempt_id: 61931a910072cb5f0afd04b1c306ef11
+              slot: parley.nvim:2
+              record_digest: 7b4149bd9f67a09aaaa7a389a0e81928810e4e1e8be92a80a156dd006bcfb247
+              start: "2026-10-21T21:12:53.382512Z"
+              end: "2026-10-21T22:23:56.872603Z"
+              queue_seconds: 4263.490091
+              raw_seconds: 4263.490091
+              exact: true
+            - attempt_id: aa7b70d092639e85051983e51eb972a5
+              slot: parley.nvim:2
+              record_digest: e54140153d4aabfee409c5899a0c17a98d59ffe38aa931e132704955a0cb0de0
+              start: "2026-10-22T00:08:32.304692Z"
+              end: "2026-10-22T01:19:33.77842Z"
+              queue_seconds: 4261.473728
+              raw_seconds: 4261.473728
+              exact: true
+            - attempt_id: d4c3cbfb60b5dc221e3b92784ca6c6fa
+              slot: parley.nvim:2
+              record_digest: 6d3a9645ec239954fda87dbef12074c8fe9bde3ff60e0e61ee1a8f9b38927ebe
+              start: "2026-10-22T04:15:20.076351Z"
+              end: "2026-10-22T04:50:49.693166Z"
+              queue_seconds: 2129.616815
+              raw_seconds: 2129.616815
+              exact: true
+        cuts:
+            - dispatched: "2026-10-21T13:03:01-07:00"
+              finalized: "2026-10-21T13:06:20-07:00"
+              finalizing: false
+            - dispatched: "2026-10-21T16:31:16-07:00"
+              finalized: "2026-10-21T16:34:58-07:00"
+              finalizing: false
+            - dispatched: "2026-10-21T19:58:11-07:00"
+              finalized: "2026-10-21T20:03:27-07:00"
+              finalizing: false
+      "n": 4
+      timestamp: "2026-10-22T01:05:14-07:00"
+      dispatched: "2026-10-22T01:00:16-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: All 33 heading tests pass; substituting the pre-replacement resolver produces 17 failures, including the eight supported-Markdown regressions. HTML/entity exclusions are explicitly documented in the approved revision.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Fence tests pass 10/10; substituting the base lexical module produces six failures covering delimiter identity, width, suffix and partition handling.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: Dedented-fence range and native mapping regressions pass. Substituting the base range module makes the containment regressions fail.
+          round: 4
+        - id: BR-4
+          disposition: addressed
+          note: Shared block-opener metadata and content indentation drive item boundaries. The boundary matrix passes; substituting the base range module produces 179 failures across the range suite.
+          round: 4
+      findings:
+        - id: BR-5
+          severity: Important
+          title: Done when still requires the superseded GitHub slug contract
+          detail: 'workshop/issues/000407-alt-o-open-links-in-tight-bullet-lists-and-jump-to-anchor-headings.md:42-44 requires GitHub-style slugging, but the final approved revision and lua/parley/markdown_heading.lua:64-105 implement canonical keys, unchanged non-ASCII case and full-key-before-duplicate precedence. Update Done when to cover the approved matching, parser fallback and unsupported-input outcomes. ARCH-PURPOSE: acceptance criteria must validate the delivered contract.'
+          family: acceptance-contract-sync
+          round: 4
+        - id: BR-6
+          severity: Minor
+          title: Atlas still labels parser-backed anchor lookup pure
+          detail: atlas/context/file_references.md:115 calls markdown_heading.lua a pure heading anchor lookup, although anchor_row invokes treesitter and editor codepoint APIs. Update this label to distinguish pure level detection from integration anchor lookup, matching the plan's Core concepts table. ARCH-PURE.
+          family: architectural-doc-accuracy
+          round: 4
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 114df050b8c3bb862e994c884d54e88d5440a05b
+      blocked: false
 disputes:
     - id: BR-1
       rationale: The remaining round-2 instances require HTML rendering and character-reference decoding. Hub delivery 8887bf7d-ec9d-40df-8c27-89b898c13b51 explicitly narrows the approved contract to Markdown ATX headings with inline Markdown formatting and excludes HTML/entity decoding; Spec, plan Revisions, README and atlas record that scope. Unsupported headings now define no anchor and use the existing file-top notice.
@@ -457,6 +663,22 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-2 — addressed — Previously accepted correction remains intact: shared fence state retains opener character and width and requires a matching whitespace-only closer. Current lexical tests pass 10/10, with heading-consumer false-closer regressions also passing.
 - BR-3 — addressed — Previously accepted correction remains intact through the shared fence-opener metadata. Range and native mapping regressions retain dedented-fence exclusion and indented-fence ownership.
 
+## Round 4 — 2026-10-22T01:05:14-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — All 33 heading tests pass; substituting the pre-replacement resolver produces 17 failures, including the eight supported-Markdown regressions. HTML/entity exclusions are explicitly documented in the approved revision.
+- BR-2 — addressed — Fence tests pass 10/10; substituting the base lexical module produces six failures covering delimiter identity, width, suffix and partition handling.
+- BR-3 — addressed — Dedented-fence range and native mapping regressions pass. Substituting the base range module makes the containment regressions fail.
+- BR-4 — addressed — Shared block-opener metadata and content indentation drive item boundaries. The boundary matrix passes; substituting the base range module produces 179 failures across the range suite.
+
+### Raised
+
+- **BR-5** [Important] `acceptance-contract-sync` Done when still requires the superseded GitHub slug contract
+  workshop/issues/000407-alt-o-open-links-in-tight-bullet-lists-and-jump-to-anchor-headings.md:42-44 requires GitHub-style slugging, but the final approved revision and lua/parley/markdown_heading.lua:64-105 implement canonical keys, unchanged non-ASCII case and full-key-before-duplicate precedence. Update Done when to cover the approved matching, parser fallback and unsupported-input outcomes. ARCH-PURPOSE: acceptance criteria must validate the delivered contract.
+- **BR-6** [Minor] `architectural-doc-accuracy` Atlas still labels parser-backed anchor lookup pure
+  atlas/context/file_references.md:115 calls markdown_heading.lua a pure heading anchor lookup, although anchor_row invokes treesitter and editor codepoint APIs. Update this label to distinguish pure level detection from integration anchor lookup, matching the plan's Core concepts table. ARCH-PURE.
+
 ## Disputes
 
 Findings the implementer declined (`sdlc finding dispute`), each answered by the
@@ -468,4 +690,5 @@ next review round.
 
 ## Open findings
 
-- **BR-1** [Critical] `heading-anchor-normalization` GitHub-style anchors fail for whitespace and formatted headings
+- **BR-5** [Important] `acceptance-contract-sync` Done when still requires the superseded GitHub slug contract
+- **BR-6** [Minor] `architectural-doc-accuracy` Atlas still labels parser-backed anchor lookup pure

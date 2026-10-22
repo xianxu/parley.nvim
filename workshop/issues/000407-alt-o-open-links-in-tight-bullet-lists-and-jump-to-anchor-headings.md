@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "ba2d58a3", done: "957e14cc"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Alt+O: open links in tight bullet lists, and jump to #anchor headings
@@ -39,10 +39,11 @@ Current scope (hub Revision2026-10-21): anchors refer to Markdown ATX headings1�
 
 ## Done when
 
-- Headless tests: Alt+O opens links in tight and loose bullet lists, nested items and paragraphs; a link with
-  `#anchor` opens the file and puts the cursor on the matching heading (GitHub-style slugging, including headings
-  with digits, parentheses and colons); an unknown anchor opens the file at the top with a short notice.
-- Plain file links without anchors behave as today.
+- Headless Alt+O tests open links in tight and loose bullet lists, nested items and paragraphs, confined to the enclosing item's content indentation; plain file links retain existing behavior.
+- Local file fragments match Markdown ATX headings1–6 using bundled markdown_inline structure for emphasis, code and inline-link label text. Both sides use the same key: lowercase/keep ASCII letters and digits, drop other ASCII and U+2000–U+206F/U+3000–U+303F, preserve every other non-ASCII codepoint unchanged.
+- The first equal key answers the bare fragment and subsequent equal keys answer -1, -2, etc. A complete fragment key takes priority over duplicate-suffix interpretation, including natural numeric headings such as10-21-0040.
+- Parser absence uses raw heading content through that key. Empty/unmatched keys and unsupported HTML/entity headings open the file at top with a notice. An exotic symbol outside the two punctuation ranges can cause a stripped GitHub fragment to miss visibly; exact GitHub slug reproduction is not required.
+- Regression tests cover the reviewer's eight Markdown/duplicate cases, CJK and accented headings, em dashes/curly quotes, numeric precedence, missing parser, empty keys and unknown-anchor notices in real editor mappings.
 
 ## Plan
 
@@ -57,6 +58,10 @@ Actions: follow a link; retry/correct a missing heading. Found anchor: show dest
 
 ## Log
 
+
+
+- 2026-10-22: closed — Required recorded suite passed on6dddbafefbc497873df9f87147a9839c59b96082, attempt d4c3cbfb60b5dc221e3b92784ca6c6fa, exit0 in290.1445s, log SHA2563bd0f2ce93b36fae91335d82028b2476539bd27180dd995d1aaf64c95c79607d. Reviewer8 fail before replacement; actual bundled grammar heading33/33 passes after. Serial complete mapped navigation passes native54/range256/scanner22/heading33; native old-resolver counterfactual fails4 Unicode cases. Conformance1/docs4/lint818 clean; diff-check clean. Handwritten inline normalizer removed. Hub-approved codepoint key keeps/lowercases ASCII alnum, drops other ASCII plus U+2000–206F/U+3000–303F, preserves all other nonASCII unchanged; documented on both sides with full-fragment-first duplicate precedence and raw fallback when parser unavailable. HTML/entity scope excluded. No stage/live acceptance. Further review rule gap returns to hub rather than another patch. (done-when: contract moved since change-code; judged by the close review); review verdict: FIX-THEN-SHIP
+- 2026-10-22: flow upgraded quick → full — 188 added lines in code files (limit 100); an earlier round of this close already ran the full review
 ### 2026-10-21
 
 - Root-cause inspection: ordinary Markdown resolution requires a URL ending in .md, so a fragment bypasses that opener and reaches gf without a heading jump. Navigation owns numbered items but unordered items fall back to a paragraph spanning adjacent list items. Existing issue/chat slug helpers have different punctuation/stopword semantics; use a heading-specific pure lookup rather than changing their contracts. No persisted format changes or external service dependencies.
@@ -123,3 +128,7 @@ Hub deliveryee127634-4137-417c-9b63-998d982fe878 replaces the general Unicode-le
 - RED/GREEN: /tmp/parley407-parser-rule-red3.log17 failures before replacement, /tmp/parley407-parser-rule-green.log33/33 after. Native counterfactual /tmp/parley407-native-rule-red.log fails4 Unicode mapping checks against the previous resolver; restored replacement passes full context/file_references mapping, /tmp/parley407-parser-mapped-green.log (native54, heading33, range256, scanner22 plus all mapped consumers). Heading dialect conformance1/1 passes. A mistaken unit documentation-spec path produced a load failure; corrected integration path passes4/4 in /tmp/parley407-parser-docs.log. Lint818 files0warnings/errors (/tmp/parley407-parser-lint.log), diff-check clean. Required fresh suite and full re-close remain pending; another rule gap from review goes to the hub, without another patch.
 
 - Parser/key replacement recorded suite passed on6dddbafefbc497873df9f87147a9839c59b96082, attempt d4c3cbfb60b5dc221e3b92784ca6c6fa, exit0 in290.1445s; log SHA2563bd0f2ce93b36fae91335d82028b2476539bd27180dd995d1aaf64c95c79607d. Queued/acquired/finished endpoints retained; fresh full pass, not a flake resume. Full re-close now disposes BR-1 against the approved parser/codepoint rule. Any further rule gap from review returns to the hub before additional patching; no stage/live acceptance claimed.
+
+### 2026-10-22 — FIX-THEN-SHIP prose synchronization
+
+Round4 accepts all behavioral findings BR-1–4. Synchronize Done when with the already-approved parser/codepoint rule instead of the superseded exact-GitHub-slug wording (BR-5); no scope or executable change. Correct the atlas module label to distinguish PURE level detection from INTEGRATION anchor lookup (BR-6), and replace the plan's obsolete used-slug-set description with the implemented duplicate counter/deferred candidate. Existing33 heading/54 native tests and the fresh full suite supply behavioral evidence; these are prose fixes. Finalize the pending FIX-THEN-SHIP receipt, then normal merge; no stage.

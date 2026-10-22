@@ -112,7 +112,7 @@ literals. Operator-configured paths have a separate audited allowlist.
 - `lua/parley/init.lua` — editor opening chain, picker origin guard and remote-context cache.
 - `lua/parley/reference_candidates.lua` — shared occurrence scanners and pure picker completion.
 - `lua/parley/entity_range.lua` — navigation ranges sharing existing structural boundaries.
-- `lua/parley/markdown_heading.lua` — pure heading anchor lookup.
+- `lua/parley/markdown_heading.lua` — PURE outline/editing level detection; INTEGRATION anchor lookup using bundled treesitter and codepoint decoding.
 - `lua/parley/artifact_ref.lua` — selected artifact resolution with optional final-effect validation.
 - `lua/parley/chat_respond.lua` — request inclusion.
 - `tests/unit/build_messages_spec.lua`, `tests/unit/remote_references_spec.lua` — context assembly and caching.

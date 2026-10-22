@@ -22,7 +22,7 @@ collaboration-mode: discussion
 | Parser-backed heading lookup | lua/parley/markdown_heading.lua | modified | INTEGRATION |
 | File destination plus fragment | lua/parley/issues.lua | modified | PURE |
 
-Navigation owns one transient range per invocation; nested items are bounded by their enclosing indentation. The memo is one boolean per input row; its private opener retains delimiter character and run length. Heading lookup owns a transient used-slug set so normalized duplicate headings get unique suffixes. No persisted formats change; all temporary values end with the call (ARCH-FUNERAL, ARCH-EVOLVE).
+Navigation owns one transient range per invocation; nested items are bounded by their enclosing indentation. The memo is one boolean per input row; its private opener retains delimiter character and run length. Heading lookup owns an invocation-local duplicate counter and a deferred candidate row; it prefers a complete canonical key and otherwise returns the selected duplicate. No persisted formats change; all temporary values end with the call (ARCH-FUNERAL, ARCH-EVOLVE).
 
 | Integration | Lives in | Status | Wraps |
 |---|---|---|---|
@@ -144,3 +144,7 @@ Parser replacement verification: reviewer8 and canonical/fallback cases fail bef
 ### 2026-10-22 — Parser/codepoint replacement suite complete
 
 Recorded required suite passes on6dddbafefbc497873df9f87147a9839c59b96082, attempt d4c3cbfb60b5dc221e3b92784ca6c6fa, exit0 in290.1445s, log SHA2563bd0f2ce93b36fae91335d82028b2476539bd27180dd995d1aaf64c95c79607d. Full re-close is next. This evidence covers the replacement, unlike prior suites of the hand-written normalizer. Another rule gap from review goes to the hub, not another patch. No stage.
+
+### 2026-10-22 — Round4 FIX-THEN-SHIP prose corrections
+
+All behavioral findings are addressed. BR-5 replaces stale exact-GitHub-slug acceptance wording with the approved parser/codepoint key, fallback and full-key-before-duplicate contract in Done when. BR-6 corrects the atlas module classification. The Core concepts lifetime description now matches the implemented duplicate count/deferred candidate, replacing the superseded used-slug set. No executable changes or further rule gap; existing focused/full-suite proof remains applicable. Commit these prose corrections and finalize the pending close through issue recovery reconcile, then normal merge.

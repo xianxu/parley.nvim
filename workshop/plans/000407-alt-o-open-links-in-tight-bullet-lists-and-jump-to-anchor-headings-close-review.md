@@ -298,3 +298,111 @@ Core-concept entities exist at their documented paths, and their classifications
 Add a `## Revisions` entry reopening BR-1 verification for nested emphasis, code-span normalization, and quoted inline-link destinations. Enumerate those supported grammar classes and require regressions for first occurrences and normalized duplicates before marking normalization complete.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"7bc92e0c-3066-43e2-adb7-8575fe9c3115","repository":"github.com/xianxu/parley.nvim","issue_id":"000407","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/1f88525da1432c80","reviewed_head":"fd85af66acd406f68f6f7dc65cb59bc85a6357df","slot":"parley.nvim:2","requested_at":"2026-10-22T02:58:11.470274Z"},"phase":"finished","pid":27169,"started_at":"2026-10-22T02:58:11.666531Z","finished_at":"2026-10-22T03:03:26.70307Z","session_id":"01a1618b-75f6-7e32-998c-780f11583d59","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T01:05:14-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 407 — Alt+O: open links in tight bullet lists, and jump to #anchor headings |
+| repo | parley.nvim |
+| issue file | workshop/issues/000407-alt-o-open-links-in-tight-bullet-lists-and-jump-to-anchor-headings.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 220b67af621c39fce796dc9a901b81d4d33c8d50..114df050b8c3bb862e994c884d54e88d5440a05b |
+| command | sdlc close --issue 407 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T01:05:14-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The implementation satisfies the latest approved parser/canonical-key design, and all prior behavioral findings are addressed. Focused checks passed 376 tests; counterfactual runs confirmed meaningful regressions. Before closing, update the acceptance criteria to match the revised contract.
+
+Done-when: stale — it still requires GitHub-style slugging, while the approved revision explicitly replaces that behavior with canonical matching and different Unicode rules.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      All 33 heading tests pass; substituting the pre-replacement resolver produces 17 failures, including the eight supported-Markdown regressions. HTML/entity exclusions are explicitly documented in the approved revision.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Fence tests pass 10/10; substituting the base lexical module produces six failures covering delimiter identity, width, suffix and partition handling.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Dedented-fence range and native mapping regressions pass. Substituting the base range module makes the containment regressions fail.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Shared block-opener metadata and content indentation drive item boundaries. The boundary matrix passes; substituting the base range module produces 179 failures across the range suite.
+findings:
+  - id: new
+    severity: Important
+    family: acceptance-contract-sync
+    title: |
+      Done when still requires the superseded GitHub slug contract
+    detail: |
+      workshop/issues/000407-alt-o-open-links-in-tight-bullet-lists-and-jump-to-anchor-headings.md:42-44 requires GitHub-style slugging, but the final approved revision and lua/parley/markdown_heading.lua:64-105 implement canonical keys, unchanged non-ASCII case and full-key-before-duplicate precedence. Update Done when to cover the approved matching, parser fallback and unsupported-input outcomes. ARCH-PURPOSE: acceptance criteria must validate the delivered contract.
+  - id: new
+    severity: Minor
+    family: architectural-doc-accuracy
+    title: |
+      Atlas still labels parser-backed anchor lookup pure
+    detail: |
+      atlas/context/file_references.md:115 calls markdown_heading.lua a pure heading anchor lookup, although anchor_row invokes treesitter and editor codepoint APIs. Update this label to distinguish pure level detection from integration anchor lookup, matching the plan's Core concepts table. ARCH-PURE.
+```
+
+1. **Strengths**
+
+   - Structural inline parsing replaces the repeatedly failing handwritten normalizer.
+   - Navigation reuses shared block metadata and fence containment, preserving editing behavior.
+   - Real Normal/Insert mapping tests verify arrival, notices, same-file jumps and sibling exclusion.
+   - README and atlas explain the new matching rule and fallback behavior.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   Update the issue’s `Done when` at lines 42–44 as described above. This is a prose correction; existing behavioral tests supply the evidence.
+
+4. **Minor findings**
+
+   Correct the atlas classification at line 115.
+
+5. **Test coverage notes**
+
+   - Passed: native navigation 54, ranges 256, lexical fences 10, candidates 22, heading lookup 33, heading conformance 1.
+   - Counterfactual tests failed with previous implementations, confirming the fixes are reachable.
+   - The broader mapped run had two unchanged `src:` fixture failures: harness temporary files reside inside this checkout, causing Git discovery to select the repository instead of the fixture’s configured fallback root. The complete mapped run therefore was not green here.
+   - Production files remained unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared classifier and fence memo own their rules.
+   - **ARCH-PURE — pass in code:** Core concepts classifications match implementation; atlas label needs correction.
+   - **ARCH-PURPOSE — flag:** stale acceptance criteria; latest approved executable scope is delivered.
+   - **ARCH-MOCK — pass:** no new external service or binary dependency; real grammar tests and injected parser-failure seam cover the integration.
+   - **ARCH-CONSTRAINTS — pass:** command-time scans; no new background work or fan-out.
+   - **ARCH-SECURE — pass:** no new credential handling or command-expansion sink.
+   - **ARCH-ORDER — pass:** destination identity is checked before jumping; existing selection guards remain.
+   - **ARCH-FUNERAL — pass:** new parser/range values are invocation-local.
+   - **ARCH-EVOLVE — pass:** no persisted-format changes.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry recording synchronization of `Done when` with the approved canonical-key contract, and replace the obsolete “used-slug set” description at plan line 25 with the implemented count/candidate selection.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"f89d949a-3a46-438f-b5a5-d46d670ce6cf","repository":"github.com/xianxu/parley.nvim","issue_id":"000407","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/c624baa0b933b62b","reviewed_head":"114df050b8c3bb862e994c884d54e88d5440a05b","slot":"parley.nvim:2","requested_at":"2026-10-22T08:00:16.396112Z"},"phase":"finished","pid":67590,"started_at":"2026-10-22T08:00:16.56428Z","finished_at":"2026-10-22T08:05:13.773206Z","session_id":"01a162a0-064c-7200-9e38-f4c15f138274","outcome":"returned"}] -->
