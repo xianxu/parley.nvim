@@ -5,9 +5,9 @@ deps: [parley.nvim#408]
 github_issue:
 created: 2026-10-21
 updated: 2026-10-22
-estimate_hours:
+estimate_hours: 1.752
 collaboration-mode: collaboration
-card_mirror: 'e9210df141ad1832e3258ba1b5fb35ffaed5733d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'ee380c1dd15e3f66ec0d9e1def52878a07689beb' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T11:48:38-07:00
 claimant:
     operator: Xian Xu
@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "ddcc7221", done: "f5e0d899"}
+flow: {kind: full, provenance: operator}
 ---
 
 # Bound insert admission across pending registration lookup
@@ -44,6 +44,24 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 - [x] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
 - [ ] Complete R1 production-order red/green through the revised one-owner handoff, including the exact owned legacy-proof exception; retain original deadline and history.
 - [ ] Reverify both runtimes, counted effects, conformance/docs and guards on the corrected implementation; recorded suite and post-review live acceptance still precede landing.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only; calibration source is marked stale/provisional.*
+
+This is a prospective estimate of the approved correction and remaining acceptance work after plan-quality cleared, not a reconstruction of the initial quick-flow work. One Lua/Neovim feature covers shared entry routing, production-order native regressions and both-runtime verification: v2 design 2.0 × thorough-spec 0.2 = 0.4; implementation 1.5 × v3.1 0.4 = 0.6. One small pure-owner extension uses the smaller-module analogue: design 0.2 × 0.2 = 0.04, implementation 0.5 × 0.4 = 0.2. Docs use 0.1 × 0.2 design and 0.1 × 0.4 implementation. One remaining review uses 0.1 × 0.2 design and 0.5 × 0.4 implementation; disposable conformance/profile acceptance uses real-API discovery 0.4 × 0.4 implementation. Existing owner, Couch seam, fake and native harness are reused; no greenfield library search or new protocol is needed. Familiarity is 1.0 and the thorough plan gets a 15% design buffer. Queue wait is excluded.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.6
+item: smaller-go-module design=0.04 impl=0.2
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0.02 impl=0.2
+item: real-api-discovery design=0 impl=0.16
+design-buffer: 0.15
+total: 1.752
+```
 
 ## Log
 

@@ -1,4 +1,24 @@
 ---
+reviewer_runs:
+    - version: 1
+      intent:
+        id: 00df19d1-f71a-41f1-8697-0113baf3db97
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000410"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        reviewed_head: 0f27be940a2c58a5bc06dfd164c96d24552f5490
+        slot: parley.nvim:4
+        requested_at: "2026-10-22T19:38:24.773884Z"
+      phase: finished
+      pid: 82190
+      started_at: "2026-10-22T19:38:24.90016Z"
+      finished_at: "2026-10-22T19:38:59.199203Z"
+      session_id: 01a1651f-3024-7de0-bd64-012aab41bfd4
+      outcome: returned
 gate: plan-quality
 issue: 410
 id_prefix: PQ
@@ -41,6 +61,75 @@ rounds:
           family: test-plan-strategy-over-enumeration
           round: 1
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: a1d878a6-1131-43ac-9391-aafe7dda8636
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000410"
+            recipe: plan-quality
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+            reviewed_head: 0f27be940a2c58a5bc06dfd164c96d24552f5490
+            slot: parley.nvim:4
+            requested_at: "2026-10-22T19:36:04.518373Z"
+          phase: finished
+          pid: 45470
+          started_at: "2026-10-22T19:36:04.70205Z"
+          finished_at: "2026-10-22T19:36:38.052035Z"
+          session_id: 01a1651d-0d5d-7983-aea8-b86ee0c93ee2
+          outcome: returned
+      "n": 2
+      timestamp: "2026-10-22T12:36:38-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: The owner-controlled legacy_release continuation specifies retained history, freshness eligibility and protection across failure, expiry and foreign replacement, with controlled dispatch-sequence verification.
+          round: 2
+        - id: PQ-2
+          disposition: addressed
+          note: Active verification uses named functions with adversarial strategies and mechanical guards, retaining production-order native coverage and measured deadline/count assertions.
+          round: 2
+      blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: 59c496ad-63b6-4401-96d1-ccfd359c10e5
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000410"
+            recipe: plan-quality
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+            reviewed_head: 0f27be940a2c58a5bc06dfd164c96d24552f5490
+            slot: parley.nvim:4
+            requested_at: "2026-10-22T19:37:51.323198Z"
+          phase: finished
+          pid: 77594
+          started_at: "2026-10-22T19:37:51.543886Z"
+          finished_at: "2026-10-22T19:38:23.315378Z"
+          session_id: 01a1651e-ae65-7bd1-a0ec-fac87785e922
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-22T12:38:23-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: Owner-controlled acquisition continuation preserves history without ordinary release or an intermediate writable gap.
+          round: 3
+        - id: PQ-2
+          disposition: addressed
+          note: Active verification names functions, adversarial input classes and mechanical guards instead of enumerating test cases.
+          round: 3
+      blocked: false
+content_hash: af33627c2cd553e23de4067160ff2057b8776cedca51108ad1b1a9ca5d140552
 ---
 
 # Gate ledger — parley.nvim#410 (plan-quality)
@@ -57,7 +146,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **PQ-2** [Important] `test-plan-strategy-over-enumeration` Replace test-case inventories with named function strategies
   The remaining_ms paragraph, Tasks 1–2 and revision step 5 enumerate individual test cases and outcome combinations rather than the required compact strategies. Compress these into named functions under test and one adversarial-input or event-sequence strategy with a mechanical guard per risky function, including the revised admission handoff; retain production-order native coverage and measured deadline/count assertions without a prose case inventory.
 
+## Round 2 — 2026-10-22T12:36:38-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — The owner-controlled legacy_release continuation specifies retained history, freshness eligibility and protection across failure, expiry and foreign replacement, with controlled dispatch-sequence verification.
+- PQ-2 — addressed — Active verification uses named functions with adversarial strategies and mechanical guards, retaining production-order native coverage and measured deadline/count assertions.
+
+## Round 3 — 2026-10-22T12:38:23-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — Owner-controlled acquisition continuation preserves history without ordinary release or an intermediate writable gap.
+- PQ-2 — addressed — Active verification names functions, adversarial input classes and mechanical guards instead of enumerating test cases.
+
 ## Open findings
 
-- **PQ-1** [Important] `ownership-handoff-preserves-history` Specify the history-preserving legacy-to-registered handoff
-- **PQ-2** [Important] `test-plan-strategy-over-enumeration` Replace test-case inventories with named function strategies
+(none — every finding has been disposed)
