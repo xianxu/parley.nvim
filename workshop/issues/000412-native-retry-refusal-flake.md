@@ -1,13 +1,13 @@
 ---
 id: 000412
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'a41eddb50f8e229260100258f886f32522d30388' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2af85da4ea9c3ee0cac7ae6bacb352ec9e0f8640' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T12:53:55-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "2a278ef4", done: "738788d6"}
+actual_hours: 0.18
 ---
 
 # Investigate native o-retry refusal flake on Neovim 0.11
