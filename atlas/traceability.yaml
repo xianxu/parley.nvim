@@ -697,6 +697,7 @@ atlas:
 
   infra/test_harness:
     code:
+      - tests/helpers/discovery_registry_fixture.lua
       - lua/parley/test_isolation.lua
       - scripts/golden_fixture.lua
       - Makefile.parley
@@ -733,6 +734,7 @@ atlas:
       - tests/fixtures/orphan_me.sh
       - tests/perf/chat_typing.lua
     tests:
+      - tests/integration/discovery_registry_fixture_spec.lua
       - tests/unit/test_isolation_spec.lua
       - tests/unit/version_support_spec.lua
       - tests/integration/test_isolation_spec.lua

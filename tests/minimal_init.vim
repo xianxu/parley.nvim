@@ -65,6 +65,7 @@ local tmp = (vim.env.TMPDIR or "/tmp"):gsub("/$", "")
 local query_dir = tmp .. "/parley-query-" .. vim.fn.getpid()
 vim.env.PARLEY_QUERY_DIR = query_dir
 vim.fn.mkdir(query_dir, "p")
+require("tests.helpers.discovery_registry_fixture").install(query_dir .. "/discovery")
 -- The removal lives beside the creation: `make test` cleans its env, but
 -- test-spec, test-changed and a direct PlenaryBustedFile run do not, and one
 -- directory per spec process would simply accumulate (#261 M5 review round 4).

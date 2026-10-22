@@ -111,6 +111,12 @@ fake shadows records the call in the target's own `$(TEST_ENV_ROOT)/sentinel-<ta
 and every target fails afterwards on a non-empty log (`SENTINEL_CHECK`, beside
 the orphan gate). That's the proof no spec reached the real CLI or its registry
 socket. A spec that wants Couch installs a fake bin ahead of the sentinel.
+Ordinary outside-pane Markdown discovery has one harness default: when Couch
+resolves to the sentinel, the exact read-only registry lookup runs through the
+existing persisted registry fake with a private empty store. Explicit spec fakes
+win. The shared bootstrap installs this boundary in parent and embedded editors;
+it changes neither PATH nor ambient registry variables. Direct CLI calls and
+all other verbs still reach the sentinel.
 Pinned by `test_isolation_spec`: `ambient()` is empty in a spec process, the
 launcher's output is exactly the list, the sentinel refuses and logs, and no
 Makefile nvim launch bypasses the launcher.
