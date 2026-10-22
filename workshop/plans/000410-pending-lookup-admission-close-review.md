@@ -248,3 +248,75 @@ findings:
 7. **Plan revision recommendations:** None. Deliver the documentation already required by the active revision.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"0fed17ef-288e-441c-a375-0134179812d4","repository":"github.com/xianxu/parley.nvim","issue_id":"000410","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/97c94788183d1112","reviewed_head":"199c3b90373e3007fc023d50a8f00652588aec93","slot":"parley.nvim:4","requested_at":"2026-10-22T20:48:03.329318Z"},"phase":"finished","pid":42890,"started_at":"2026-10-22T20:48:03.550171Z","finished_at":"2026-10-22T20:55:36.231223Z","session_id":"01a1655e-f47d-7e60-afe8-4a65966e1e03","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T14:06:38-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 410 — Bound insert admission across pending registration lookup |
+| repo | parley.nvim |
+| issue file | workshop/issues/000410-pending-lookup-admission.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c..bca7cf786a290f84c66037f358cd20b2475515da |
+| command | sdlc close --issue 410 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T14:06:38-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation matches the active RETIRE plan. BR-3 is addressed: both recovery passages now specify the required environment-clearing launch command. No new findings. Runtime regressions, conformance, and lint passed.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The pinned documentation diff adds env -u COUCH_THREAD_SCOPE -u COUCH_THREAD_TAG nvim /absolute/file.md at README.md:103 and atlas/modes/session_sync.md:124. This matches couch.thread() at lua/parley/couch.lua:202 and the restarted standalone recovery fixture at tests/integration/session_sync_native_spec.lua:335. The recovery regression passed on both runtimes; this correction changes prose only.
+```
+
+1. **Strengths**
+
+   - S1-first setup and central attachment/write guards enforce tokenless retirement across callers (`lua/parley/init.lua:3190`, `lua/parley/session_sync.lua:740`).
+   - Exact lookup witnesses and one absolute deadline carry through adoption and acquisition (`lua/parley/agentic_document.lua:474`).
+   - Native tests cover queued-input freshness, late autosaved edits, retained old proof, and actual standalone restart recovery.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - Neovim 0.12.5 session-sync mapping: **854 passed**, 32 files, zero failures/errors.
+   - Neovim 0.11.7: **23 focused native cases and 25 Couch tests passed**. The opt-in live actor test was pending.
+   - Disposable real/fake registry conformance and corrupted-fake negative control passed.
+   - Lint: **822 files**, zero warnings/errors.
+   - Process censuses were clean; tracked checkout remained unchanged.
+   - Recorded-suite and copied-profile acceptance remain separate workflow steps.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** central writer guards and existing admission owner are reused.
+   - **ARCH-PURE — pass:** arithmetic, warning projection, and admission transitions remain pure; IO stays in existing seams.
+   - **ARCH-PURPOSE — pass:** retirement covers opening, pending/absent/unavailable membership, adoption, and explicit compatibility completion.
+   - **ARCH-MOCK — pass:** production seams use stateful filesystem fakes; real/fake conformance passed.
+   - **ARCH-CONSTRAINTS — pass:** residual deadlines, zero-spawn expiry, and 4/8-entry count tests enforce the declared envelope.
+   - **ARCH-SECURE — pass:** old protection requires exact evidence; unknown lock states retain refusal.
+   - **ARCH-ORDER — pass:** witnessed transitions, stale completions, late attachment, and interrupted recovery are exercised.
+   - **ARCH-FUNERAL — pass:** input scopes close explicitly; discovery retains its existing bounded lifecycle.
+   - **ARCH-EVOLVE — pass:** no persisted format change; existing journal recovery remains covered.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"0b20d9e0-06e7-4bfc-8195-438a351cd3a8","repository":"github.com/xianxu/parley.nvim","issue_id":"000410","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/ee532ee4d33ebdc5","reviewed_head":"bca7cf786a290f84c66037f358cd20b2475515da","slot":"parley.nvim:4","requested_at":"2026-10-22T21:00:30.466242Z"},"phase":"finished","pid":26589,"started_at":"2026-10-22T21:00:30.640011Z","finished_at":"2026-10-22T21:06:37.962134Z","session_id":"01a1656a-5a16-7970-b93a-fb96e742349a","outcome":"returned"}] -->
