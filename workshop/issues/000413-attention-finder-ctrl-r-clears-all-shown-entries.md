@@ -1,13 +1,21 @@
 ---
 id: 000413
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '0d23fd6748519de3a4962e6a2db2f02e178829b8' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2500cd50d69b642371f096011c6f86205279142a' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-22T12:56:14-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Attention finder: Ctrl+R clears all shown entries
@@ -38,7 +46,11 @@ one, so the list grows past what they can go through by hand. Add a one-key **cl
 
 ## Plan
 
-- [ ]
+- [ ] Add red model/store cases for exact clear, all states, side retirement and resubmit; add native picker scope/filter/empty/late-refresh controls.
+- [ ] Extend the existing picker action context with its shown-row snapshot; register finder-local Ctrl+R, clear once through the leased model, repaint and notify the removed count.
+- [ ] Document the key and native register-paste override; run focused checks on both nvim versions, recorded suite and close review, then land.
+
+Actions: clear shown rows; submit again. The existing store lease serializes clear with other writes (ARCH-ORDER); a failed write leaves rows intact and surfaces the existing warning. Successful clear removes only listed paths, preserving side retirement through the existing remove rule (ARCH-DRY/PURE); later submits restore waiting. No new durable format, watcher or retry. The picker snapshot includes filtered ancestor context, excludes hidden scope rows, and is empty while a status replaces rows. Snapshot/clear walks N rows once, N <=256; 8/16-entry tests count one batch with exactly N paths. Ctrl+R overrides native register paste only in this finder and is configurable under attention_finder_mappings.clear_shown. Other pickers keep native behavior.
 
 ## Log
 
