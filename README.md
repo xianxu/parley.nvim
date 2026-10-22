@@ -97,6 +97,14 @@ For a stale typed tokenless lock, follow this recovery instruction:
 
 open it in nvim outside Couch and press Alt+Return to release
 
+Launch the standalone editor with both inherited Couch variables removed:
+
+```sh
+env -u COUCH_THREAD_SCOPE -u COUCH_THREAD_TAG nvim /absolute/file.md
+```
+
+Then press Alt+Return in that file.
+
 Other unproven protection requires its owner to release it; retry never guesses
 ownership or removes a lock.
 Leaving a document with an unsubmitted turn gives three short red winbar pulses

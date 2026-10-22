@@ -166,3 +166,85 @@ findings:
    Add a `## Revisions` entry defining how deferred legacy turns settle for confirmed, absent, and unavailable lookup outcomes, including normal-mode edits and completion after scope expiry. Require regression coverage for those transitions while preserving the original dirty or autosaved baseline.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"c6e20723-aa74-4785-b71b-c902edaa45df","repository":"github.com/xianxu/parley.nvim","issue_id":"000410","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/8442cc1717c71343","reviewed_head":"8f42416fc1223719f4a1de940185280f3f8ea844","slot":"parley.nvim:4","requested_at":"2026-10-22T19:52:00.202536Z"},"phase":"finished","pid":37065,"started_at":"2026-10-22T19:52:00.430149Z","finished_at":"2026-10-22T20:02:13.374958Z","session_id":"01a1652b-a28f-7062-b338-c0e1748750b7","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T13:55:43-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 410 — Bound insert admission across pending registration lookup |
+| repo | parley.nvim |
+| issue file | workshop/issues/000410-pending-lookup-admission.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c..199c3b90373e3007fc023d50a8f00652588aec93 |
+| command | sdlc close --issue 410 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T13:55:43-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The implementation matches the revised RETIRE contract and addresses BR-2 through S1 ownership from opening. Shared deadlines, late-edit reconciliation, old-proof refusal, and standalone recovery are validated. One inexpensive documentation correction remains.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      S1-first setup and guarded legacy attachment preserve the correction; queued-first-input tests pass for parent, side, and directly attached documents on both runtimes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The approved RETIRE revision explicitly replaces legacy restoration with editable, visibly unprotected S1 ownership. Pending/absent/unavailable regressions fail against pre-correction modules and pass at head; late saved-edit reconciliation and explicit old-turn completion also pass.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: recovery-guidance-names-launch-context
+    title: |
+      Standalone recovery documentation omits required environment conditions
+    detail: |
+      README.md:98 and atlas/modes/session_sync.md:119 say to open nvim outside Couch but omit the scope/tag condition explicitly required by workshop/plans/000410-pending-lookup-admission-plan.md:303. Couch context is inherited through environment variables (lua/parley/couch.lua:202); the successful restart regression explicitly clears both variables at tests/integration/session_sync_native_spec.lua:335. Add `env -u COUCH_THREAD_SCOPE -u COUCH_THREAD_TAG nvim /absolute/file.md` to both recovery passages so readers can reach the advertised standalone release route. ARCH-PURPOSE: complete the agreed recovery workflow.
+```
+
+1. **Strengths**
+   - Central attachment and writer guards enforce retirement across existing callers.
+   - One absolute deadline reaches acquisition, with exact-scope cleanup and stale-witness rejection.
+   - Old tokenless proof/history survives refusal; explicit completion and validated journal recovery retain separate authority.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** Document the standalone launch prerequisites above. This requires a prose correction; existing native tests validate the advertised behavior.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Focused #410 native cases: **23 passed on each supported runtime**.
+   - Full preferred-runtime native file: **165 passed**.
+   - Full session-sync mapping: **853 passed, 1 timing failure, 0 errors**. The existing registered-`:saveas` test exceeded its 500 ms assertion; an isolated rerun at head passed. The mapped run is therefore not wholly green.
+   - Couch tests: **25 passed**; admission architecture checks: **7 passed**.
+   - Real/fake conformance and corrupted-fake negative control passed.
+   - Lint: **822 files, zero warnings/errors**. No surviving test processes; disposable substitution checkout removed.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** central writer guard and shared acquisition seam.
+   - **ARCH-PURE — pass:** arithmetic, warning projection, and admission transitions remain pure.
+   - **ARCH-PURPOSE — flag:** recovery documentation omits an agreed prerequisite.
+   - **ARCH-MOCK — pass:** stateful fake shares production boundaries; conformance passed.
+   - **ARCH-CONSTRAINTS — pass:** residual deadlines and 4/8-entry bounds are exercised.
+   - **ARCH-SECURE — pass:** exact proof and unknown-lock handling remain conservative.
+   - **ARCH-ORDER — pass:** controlled completion, expiry, stale events, and recovery sequences are covered.
+   - **ARCH-FUNERAL — pass:** input scopes retire explicitly; no new durable artifact family.
+   - **ARCH-EVOLVE — pass:** persisted formats remain unchanged; existing journal compatibility is retained.
+
+7. **Plan revision recommendations:** None. Deliver the documentation already required by the active revision.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"0fed17ef-288e-441c-a375-0134179812d4","repository":"github.com/xianxu/parley.nvim","issue_id":"000410","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/97c94788183d1112","reviewed_head":"199c3b90373e3007fc023d50a8f00652588aec93","slot":"parley.nvim:4","requested_at":"2026-10-22T20:48:03.329318Z"},"phase":"finished","pid":42890,"started_at":"2026-10-22T20:48:03.550171Z","finished_at":"2026-10-22T20:55:36.231223Z","session_id":"01a1655e-f47d-7e60-afe8-4a65966e1e03","outcome":"returned"}] -->

@@ -118,6 +118,14 @@ An unproven sidecar remains in place. For a stale typed tokenless lock:
 
 open it in nvim outside Couch and press Alt+Return to release
 
+Launch the standalone editor with both inherited Couch variables removed:
+
+```sh
+env -u COUCH_THREAD_SCOPE -u COUCH_THREAD_TAG nvim /absolute/file.md
+```
+
+Then press Alt+Return in that file.
+
 That uses the existing standalone typed submit path. Other unknown or foreign
 protection requires its owner to finish/release it. Retry cannot sweep a lock,
 reconstruct proof or convert tokenless protection to a registered turn.
