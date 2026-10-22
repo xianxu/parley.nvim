@@ -49,7 +49,7 @@ Current scope (hub Revision2026-10-21): anchors refer to Markdown ATX headings1â
 - [x] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
 - [x] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
 - [x] Split file/fragment before existing path resolution; ~~pure heading lookup uses GitHub-style slugs~~ parser-backed text uses the approved shared codepoint key (latest Revision), then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
-- [ ] Run mapped tests and recorded suite; update README/atlas.
+- [x] Run mapped tests and recorded suite; update README/atlas.
 
 Close review and normal landing follow verification. Per the hub, no stage: operator receives the landed change in normal use.
 
@@ -121,3 +121,5 @@ Hub deliveryee127634-4137-417c-9b63-998d982fe878 replaces the general Unicode-le
 
 - Parser replacement implemented: deleted the handwritten inline normalizer; bundled markdown_inline source spans omit delimiter/destination/title nodes. Raw heading fallback covers parser error/nil root. Exact approved codepoint rule is documented in README/atlas; complete-fragment priority protects naturally numeric headings before duplicate fallback. Public heading lookup is now explicitly INTEGRATION, while level/range/fence contracts remain unchanged.
 - RED/GREEN: /tmp/parley407-parser-rule-red3.log17 failures before replacement, /tmp/parley407-parser-rule-green.log33/33 after. Native counterfactual /tmp/parley407-native-rule-red.log fails4 Unicode mapping checks against the previous resolver; restored replacement passes full context/file_references mapping, /tmp/parley407-parser-mapped-green.log (native54, heading33, range256, scanner22 plus all mapped consumers). Heading dialect conformance1/1 passes. A mistaken unit documentation-spec path produced a load failure; corrected integration path passes4/4 in /tmp/parley407-parser-docs.log. Lint818 files0warnings/errors (/tmp/parley407-parser-lint.log), diff-check clean. Required fresh suite and full re-close remain pending; another rule gap from review goes to the hub, without another patch.
+
+- Parser/key replacement recorded suite passed on6dddbafefbc497873df9f87147a9839c59b96082, attempt d4c3cbfb60b5dc221e3b92784ca6c6fa, exit0 in290.1445s; log SHA2563bd0f2ce93b36fae91335d82028b2476539bd27180dd995d1aaf64c95c79607d. Queued/acquired/finished endpoints retained; fresh full pass, not a flake resume. Full re-close now disposes BR-1 against the approved parser/codepoint rule. Any further rule gap from review returns to the hub before additional patching; no stage/live acceptance claimed.

@@ -135,8 +135,12 @@ Current replacement verification:
 - [x] Checkpoint the approved parser/codepoint rule and reviewer8 RED before replacing production normalization.
 - [x] Replace handwritten inline normalization; parser/key focused checks pass33/33 in /tmp/parley407-parser-rule-green.log.
 - [x] Pass the serial real-input counterfactual and full mapped tests, lint and whitespace checks; update shipped docs to the exact rule.
-- [ ] Commit/push the replacement and pass a fresh required recorded suite on its exact head.
+- [x] Commit/push the replacement and pass a fresh required recorded suite on its exact head.
 
 Full re-close and normal landing follow those checks; a further rule gap from review goes to the hub.
 
 Parser replacement verification: reviewer8 and canonical/fallback cases fail before replacement (/tmp/parley407-parser-rule-red3.log,17 failures); /tmp/parley407-parser-rule-green.log passes33/33 against actual bundled grammar. Native Unicode counterfactual fails4 mapping cases with the previous resolver, /tmp/parley407-native-rule-red.log; restored replacement passes the complete mapped context/file_references selection including native54/54, heading33/33, range256/256 and scanner22/22, /tmp/parley407-parser-mapped-green.log. Existing heading dialect conformance passes1/1; an initial consumer map named a nonexistent unit documentation path (load failure, not assertion/flake), corrected integration/documentation passes4/4 in /tmp/parley407-parser-docs.log. Lint passes818 files with0warnings/errors in /tmp/parley407-parser-lint.log; diff-check clean. No generated Unicode/HTML data, runtime dependencies or editor buffer state. Fresh recorded suite remains pending.
+
+### 2026-10-22 — Parser/codepoint replacement suite complete
+
+Recorded required suite passes on6dddbafefbc497873df9f87147a9839c59b96082, attempt d4c3cbfb60b5dc221e3b92784ca6c6fa, exit0 in290.1445s, log SHA2563bd0f2ce93b36fae91335d82028b2476539bd27180dd995d1aaf64c95c79607d. Full re-close is next. This evidence covers the replacement, unlike prior suites of the hand-written normalizer. Another rule gap from review goes to the hub, not another patch. No stage.
