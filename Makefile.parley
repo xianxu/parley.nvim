@@ -1,11 +1,28 @@
 # Parley-specific targets (Lua/Neovim plugin) — include from your project Makefile:
 #   include Makefile.parley
 
+# #409: hold one lease across the entire requested make invocation, including
+# recursive targets and scratch cleanup. Dry runs only print recipes.
+PARLEY_TEST_TARGETS := test test-unit test-integration test-compat test-spec test-changed perf perf-finder goldens fixtures check-couch-actors-live test-clean-env
+PARLEY_TEST_DRY_RUN := $(findstring n,$(filter-out --%,$(firstword $(MAKEFLAGS))) $(filter -%,$(filter-out --%,$(MAKEFLAGS))))
+ifneq ($(filter $(PARLEY_TEST_TARGETS),$(MAKECMDGOALS)),)
+ifeq ($(PARLEY_TEST_DRY_RUN),)
+override PARLEY_TEST_LEASE := $(or $(shell python3 scripts/test-run-lease.py --root "$(CURDIR)" --check),missing)
+endif
+endif
+ifeq ($(PARLEY_TEST_LEASE),missing)
+.PHONY: $(MAKECMDGOALS) parley-test-leased
+$(MAKECMDGOALS): parley-test-leased
+parley-test-leased:
+	+@python3 scripts/test-run-lease.py --root "$(CURDIR)" -- $(MAKE) --no-print-directory -f "$(firstword $(MAKEFILE_LIST))" $(MAKECMDGOALS)
+else
+
 .PHONY: help-parley test test-unit test-integration test-compat test-spec test-changed perf perf-finder lint fixtures goldens model-check model-checker test-clean-env
 
 help-parley:
 	@printf '%s\n' \
 	"Parley (Lua/Neovim):" \
+	"  Test runs in the same checkout serialize; waiting runners print the lease holder." \
 	"  make test             Run the whole suite" \
 	"  make test-unit        Run unit tests" \
 	"  make test-integration Run integration + arch tests" \
@@ -354,3 +371,5 @@ check-couch-actors-live:
 
 check-couch-registry-conformance:
 	@python3 scripts/check-couch-registry-conformance.py
+
+endif # outer checkout-lease wrapper / protected recipes

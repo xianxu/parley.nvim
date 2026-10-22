@@ -37,9 +37,9 @@ Reproduce with one deliberately gated targeted spec running, then start another 
 
 ## Plan
 
-- [ ] Add a controlled-process regression: gate the first target after entry, start a second target with a different scratch root, and prove the second cannot reach preparation/census until the first finishes. Red-check against the current harness. Exercise before and after census, nested make, cancellation, and a separate-checkout control.
-- [ ] Add one Python checkout-lease wrapper using stdlib `fcntl.flock`, an inherited descriptor, and command argv. Route every harness target and standalone live reaper through that owner; acquire before scratch changes or census, retain through final checks. Preserve exit status and native signal behavior.
-- [ ] Extend existing recorded-table and native reaper tests for dead-owner leftovers, own leaks, unrelated path mentions, and unchanged cleanup identity checks. Add a Makefile coverage guard for every harness entry; map new tests into infra/test_harness.
+- [x] Add a controlled-process regression: gate the first target after entry, start a second target with a different scratch root, and prove the second cannot reach preparation/census until the first finishes. Red-check against the current harness. Exercise before and after census, nested make, cancellation, and a separate-checkout control.
+- [x] Add one Python checkout-lease wrapper using stdlib `fcntl.flock`, an inherited descriptor, and command argv. Route every harness target and standalone live reaper through that owner; acquire before scratch changes or census, retain through final checks. Preserve exit status and native signal behavior.
+- [x] Extend existing recorded-table and native reaper tests for dead-owner leftovers, own leaks, unrelated path mentions, and unchanged cleanup identity checks. Add a Makefile coverage guard for every harness entry; map new tests into infra/test_harness.
 - [ ] Update TOOLING and atlas ownership/recovery guidance; run direct Python regressions, mapped infra/test_harness and architecture guards, then the recorded full suite before close. Let measured added code decide quick/full flow.
 
 ## Log
@@ -53,6 +53,12 @@ Filed unclaimed as an independent harness defect discovered during #407 close re
 - TOOLING explicitly prohibits overlapping runs, including distinct TEST_ENV_ROOT values, because the census is checkout-wide. Full runs also delete shared scratch before tests. Protect the whole run, not only the reaper's signal loop.
 - start-plan refreshed the ariadne dependency and generated an unrelated tracked merge-check workflow diff (quiet grep pipefail correction). Preserved separately in the named stash `pre-409 weave refresh generated merge-check workflow`; it is not part of this issue and must not be committed with it. Retrying start-plan succeeded.
 - Proposed lease design below awaits TL approval: it adds an ownership mechanism, so tl-worker's design-approval rule applies even if the implementation fits quick flow.
+
+### 2026-10-22 — approved implementation and regression evidence
+
+- TL approved the lease design in Couch delivery 437c8ee8-aff9-43b7-916f-216987746bb5; additionally required a holder diagnostic while waiting and help text explaining same-checkout serialization. Entered quick-flow implementation through change-code.
+- Red: the new gated real-make regression failed on the original code: second targeted run entered instead of waiting for the active owner. Green: 12 disposable process/lease tests pass, covering two targeted runs plus manual after census, separate checkouts, nested wrappers/status propagation, owner death, inherited-child lifetime, waiter cancellation, invalid/independent descriptors, path aliases, real orphan cleanup in both phases, target coverage and recursive dry runs.
+- The first mapped infra/test_harness run exposed Apple's make 3.81 recursive MAKEFLAGS spelling (`--no-print-directory -n`). Checking only its first word missed dry-run mode in recursive make. Interrupted that blocked spec through its own exec session, fixed the flag check, and added a gated recursive dry-run regression. The remaining mapped tests finished without assertion failures, including the Python lease tests, native reaping and isolation checks; that interrupted run is not passing-suite evidence. Fresh mapped run and recorded suite are next.
 
 ## Revisions
 

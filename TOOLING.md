@@ -94,9 +94,11 @@ the root itself — so pointing `TEST_ENV_ROOT` at a directory holding anything
 else is safe. It also removes the pre-#202 in-repo `.test-home`, `.test-xdg`,
 and `.test-tmp` directories if they are still around.
 
-Run only one `make test` per checkout at a time: a second concurrent run deletes
-the first's scratch, loudly. Use a separate worktree for concurrent suites;
-a distinct `TEST_ENV_ROOT` isolates scratch but does not isolate the process census.
+Test commands in the same physical checkout serialize under one kernel lease,
+even with different `TEST_ENV_ROOT` values. A waiting runner prints the lease's
+owner PID and checkout before touching scratch. Use separate worktrees for
+concurrent suites. The lease covers scratch cleanup through the final census,
+including recursive make; `make -n` only prints recipes and takes no lease.
 
 ## Which Neovim the tests run, and JIT stats
 
@@ -120,8 +122,13 @@ suite lock, so use it only for a quick check.
 
 Test targets reap processes left by an interrupted earlier run before starting,
 then report survivors and fail at the end. The census is scoped to this checkout.
-Do not run test targets concurrently in the same checkout: the census cannot
-distinguish another run's processes from leaks and can kill them.
+Test targets and manual live census calls take the same checkout lease, so a
+second invocation waits rather than reaping an active run. Wait or cancel that
+waiting command; do not remove `.test-run.lock`. Its stable inode is the lease
+identity. The kernel releases ownership when the last inherited descriptor
+closes, including after process death; the next run then reaps any leftovers.
+The printed PID identifies the originating command (descendants may retain its
+descriptor). Finish pre-upgrade runs before using the new harness.
 
 To inspect and reap survivors manually, use the physical checkout path. Under a
 symlinked working directory (including macOS `/tmp`), `$PWD` can differ from the

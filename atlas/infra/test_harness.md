@@ -140,12 +140,10 @@ shape.
   `make test TEST_ENV_ROOT=/some/where` into `rm -rf /some/where`. The quoting
   half of the rule is the same defect one step earlier: an unquoted path list
   word-splits, so a checkout under `~/my code/` deleted `~/my`.
-- **One `make test` per checkout at a time.** A second concurrent run in the
-  same checkout wipes the first's live scratch. It fails loudly
-  (`rm: ... Directory not empty`) rather than corrupting silently. Run
-  concurrent suites from separate worktrees. A distinct `TEST_ENV_ROOT` isolates
-  scratch, but the process census still sees all runs in the same checkout and
-  may reap another run's processes. A per-run suffix was rejected: it makes the
+- **One leased test command per checkout at a time.** A second command waits
+  before scratch mutation and census, even with a distinct `TEST_ENV_ROOT`,
+  because the process census sees the entire checkout. Use separate worktrees
+  for concurrent suites. A per-run suffix was rejected: it makes the
   scratch path unpredictable (the perf report's default location derives from
   it) and leaves one directory per run with nothing to reap them.
 
@@ -192,7 +190,7 @@ the chokepoint for each process shape:
 | killed or wedged harness Neovim | `tests/helpers/exit_with_parent.lua`, installed by `tests/minimal_init.vim`, exits when the parent is gone or when the process is reparented to init |
 | fixture server or blocking fixture mode | `LoopbackHTTPServer` installs `tests/fixtures/fixture_watchdog.py` for server fixtures; non-server blocking modes call the same watchdog directly |
 | detached real `cliproxyapi` | the fixture-process registry provides best-effort normal-exit cleanup; it has no parent-death watchdog because the binary is intentionally detached and shared |
-| anything that survives those layers | `scripts/reap-test-orphans.py` reads the checkout's `ps` rows, excludes the invoking ancestry and non-harness editors, then reports and reaps persistent survivors |
+| anything that survives those layers | `scripts/reap-test-orphans.py` takes the checkout lease, reads its `ps` rows, excludes the invoking ancestry and non-harness editors, then reports and reaps persistent survivors |
 
 The census uses `--ps-from` as a signal-free recorded-table seam in tests and
 re-samples live `ps` output within a bounded grace period before accusing a
@@ -216,6 +214,22 @@ symlinks without following them and reports errors to stderr.
 tests finish, including failed specs. Survivors make the target fail. All
 parent Neovim commands use the physical checkout path in their init argument
 so the census can identify them through symlinked working directories too.
+
+`scripts/test-run-lease.py` is the shared IO owner of a checkout-wide `flock`.
+Make takes it before scratch preparation/cleanup and retains it through the
+requested command, recursive make and both census passes. A competing target
+or manual live census waits and prints the original owner PID and checkout.
+Reentry validates an inherited descriptor against the physical checkout's
+`.test-run.lock` inode; an environment flag or PID is not ownership evidence.
+The fixed ignored lock file is never unlinked during use; checkout removal ends
+its bounded lifetime. Kernel closure of the last descriptor releases the lease,
+including on owner death, so there is no stale-lock deletion procedure. An
+inheriting descendant may retain ownership after the printed PID has exited.
+Different checkouts still run concurrently; a different scratch root alone does
+not create a second census domain. Dry runs and recorded-table census tests have
+no destructive effects and do not take a lease. See TOOLING for waiting and
+rollout guidance. Gated real-make/census regressions run from
+`tests/unit/test_run_lease.py` through the normal reaper spec.
 
 ## Comment drift
 

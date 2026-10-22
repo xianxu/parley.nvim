@@ -1,5 +1,14 @@
 # Lessons
 
+## 2026-10-22 (#409 — a census is not run ownership)
+
+- Persistence and a recognizable command prove that a process exists, not that
+  its owner has finished. Hold one checkout lease across scratch mutation,
+  execution and both cleanup phases; reuse its descriptor through recursive make.
+- Test dry-run behavior through recursive make with long options too. Apple's
+  make can put `-n` after `--no-print-directory` in MAKEFLAGS, so its first word
+  alone cannot establish whether a nested command is print-only.
+
 ## 2026-10-16 (#353 — displayed ancestry and native history)
 
 - A displayed trail and Back entries must commit together in the actual landing window, including reused splits. Reconstruct through one pure transition; changing only the label can send Back into an unrelated file.
