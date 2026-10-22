@@ -5,9 +5,9 @@ deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-22
-estimate_hours:
+estimate_hours: 2.68
 collaboration-mode: collaboration
-card_mirror: '6dc1b2badbd7c24225c180237497ec8cc4c539b8' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '90cb5024273127be3c7f9b1da5b25fd50e4d21fa' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T16:14:29-07:00
 claimant:
     operator: Xian Xu
@@ -78,3 +78,20 @@ A disposable native probe on Neovim 0.12.5 spawned the historical exact argv, se
 ### 2026-10-22 — approval, coordination and plan-quality refinement
 
 TL approval delivery 68e17798-f625-46d7-bd8c-956b912807d2 permits the retained registry under this checkout with explicit bounds/pruning. Parley.nvim:1 confirmed #405 owns Child on_exit/joined fixture cleanup, not spec_jobs/spec_runner/identity/census; preserve callbacks exactly once and install recording explicitly in clean embedded children. Neither branch stacks; whichever lands second integrates main. Full-flow plan-quality was explicitly requested because the scripts/native bridge exceed the quick shell. Round 1 raised PQ-1 (spawn-before-publication crash window) and PQ-2 (function-level test strategy); the plan now specifies durable pending tickets before spawn and names each risky function with an adversarial strategy. Both exact Neovim 0.12.5 and installed 0.11.7 runtimes are available. No implementation has started.
+
+
+## Estimate
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only. Calibration is tagged stale by sdlc, so provisional. Two focused Lua components cover retained registry/native observation and runner/census integration; the shell context is a cross-cutting refactor, with docs and one close review. Existing LuaJIT native reader, libuv, JSON, make and flock provide the substrate; no novel external library is required. Thorough approved plan discounts the midpoint Lua design (2h) to 0.4h per component; impl uses the upper 1.5h x 40% = 0.6h per component. Familiarity is 1.0 and thorough-plan design buffer 15%.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.6
+item: lua-neovim design=0.4 impl=0.6
+item: cross-cutting-refactor design=0.1 impl=0.2
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0.02 impl=0.16
+design-buffer: 0.15
+total: 2.68
+```
