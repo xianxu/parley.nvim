@@ -246,19 +246,38 @@ describe("keybinding registry vs. reality (#214 M2)", function()
     -- command". It is not true — 8 registry entries have no command, including
     -- chat_drill_in (<M-q>) — and the test that "verified" it hand-picked four
     -- names that happen to exist, which is an allowlist, not a check (#214 I1).
-    -- The README now names these four specifically, so pin exactly those and
-    -- let the explicit-binding tests below carry the general recovery story.
+    -- Check README names in their actual global/document scopes; the explicit
+    -- binding tests below carry the general keymap recovery story.
     it("the commands the README names by name exist", function()
         setup({ default_keymaps = false })
         local buf, path = prepped_chat()
         local cmds = vim.api.nvim_get_commands({})
+        assert.is_nil(vim.api.nvim_buf_get_commands(buf, {}).ParleySessionRetry,
+            "a session-only recovery command leaked into a chat")
+        cleanup(buf, path)
+        -- README commands can belong to a document scope. Inspect the real
+        -- attached session context, rather than making those commands global
+        -- or hiding their documentation from the guard's name scanner.
+        buf, path = prepped_markdown()
+        local ss = require("parley.session_sync")
+        local fake_root = base_tmp_dir .. "/command-couch"
+        require("tests.helpers.fake_couch").write(fake_root, fake_root .. "/sent", fake_root .. "/argv")
+        local old_path = vim.env.PATH
+        vim.env.PATH = fake_root .. "/bin:" .. old_path
+        local attached, why = pcall(ss.attach, buf, { ID = string.rep("1", 32), File = path, Owner = "ops:0" })
+        vim.env.PATH = old_path
+        assert.is_true(attached, tostring(why))
+        local document_cmds = vim.api.nvim_buf_get_commands(buf, {})
+        assert.is_truthy(document_cmds.ParleySessionRetry)
+        assert.is_nil(cmds.ParleySessionRetry, "session recovery became a global command")
+        ss.detach(buf)
         cleanup(buf, path)
         local readme = table.concat(vim.fn.readfile("README.md"), "\n")
         local named = {}
         for name in readme:gmatch(":(Parley%a+)") do named[name] = true end
         local missing = {}
         for name in pairs(named) do
-            if not cmds[name] then missing[#missing + 1] = name end
+            if not cmds[name] and not document_cmds[name] then missing[#missing + 1] = name end
         end
         table.sort(missing)
         assert.same({}, missing)

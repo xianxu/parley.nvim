@@ -933,3 +933,9 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - A non-modifiable buffer refuses native i before InsertEnter. A recovery action
   attached only to InsertEnter is unreachable after refusal. Test recovery with
   actual input and preserve the native action for every supported retry key.
+
+- #408 recorded suite: README command inventories must inspect real command
+  scopes. A buffer-local recovery command should not become global merely to
+  satisfy a global-only oracle. Assert absence from ordinary contexts and
+  presence on an actual attached buffer, using the existing executable fake
+  for attachment's status/round queries; even a declaration check can spawn IO.

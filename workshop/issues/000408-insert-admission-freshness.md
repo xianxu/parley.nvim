@@ -282,6 +282,30 @@ a bounded subagent owns only that native spec. Main owns the pure model and
 integration sweep. Approval requires repeating the brief isolated profile check
 only after the revised close review approves, then clear before landing.
 
+### 2026-10-22 — recorded-suite command-scope oracle correction
+
+R3 returned SHIP with no findings, evidence 17e531284bf7. Recorded suite
+attempt 8d867a863ed97c8b6d9f205529c5a326 on 4805170d ran after 1075 s queue
+wait, then failed deterministically in keybinding_agreement_spec.lua: its README
+command inventory queried only global commands, so correctly buffer-local
+ParleySessionRetry appeared missing. All session-sync production cases passed;
+this is not a registered or inferred flake and no passing retry is claimed.
+Saved failed log hash prefix ae8bb1fc0a06.
+
+Correct the oracle through a real attached document context, asserting the
+command is absent globally/in a chat and present in its owning buffer. Keep
+the full README-name check, without an allowlist. The attachment uses the
+existing executable fake for its status/round queries (the first fixture
+iteration exposed the round query through the CLI sentinel; corrected).
+Map this agreement test under session_sync too. Preferred focused agreement
+file passes all 36 cases and sentinel/census checks (commands-green2.log).
+No production code or contract changes after R3. Fresh recorded suite and
+post-close delta review still precede the authorized live stage and landing.
+
+The corrected command agreement file also passes all 36 cases on Neovim
+0.11.7, including CLI sentinel/census checks; lint remains 0 warnings/errors
+over 822 files. No production diff was introduced by this correction.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
