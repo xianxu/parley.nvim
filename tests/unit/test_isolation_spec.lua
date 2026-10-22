@@ -124,7 +124,7 @@ describe("every harness nvim starts through the allowlist launcher", function()
             target = lines[i]:match("^([%w-]+):")
             if target then break end
         end
-        assert.equals("check-couch-actors-live", target)
+        assert.equals("parley-test-body-check-couch-actors-live", target)
     end)
 end)
 

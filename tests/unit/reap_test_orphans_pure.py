@@ -111,6 +111,7 @@ class CensusSamplingTests(unittest.TestCase):
             with self.subTest(next_sample=next_sample):
                 output = io.StringIO()
                 with patch.object(census, 'read_process_table', side_effect=[(initial, None), next_sample]), \
+                     patch.object(census, 'acquire_lease'), \
                      patch.object(census.os, 'kill') as kill, \
                      contextlib.redirect_stdout(output):
                     code = census.main(['--root', '/repo', '--phase', 'after',

@@ -1,11 +1,29 @@
 # Parley-specific targets (Lua/Neovim plugin) — include from your project Makefile:
 #   include Makefile.parley
 
+# #409: admission belongs to the target, including alias/default entry.
+ifeq ($(.DEFAULT_GOAL),)
+.DEFAULT_GOAL := help-parley
+endif
+.NOTPARALLEL:
+PARLEY_TEST_TARGETS := test test-unit test-integration test-compat test-spec test-changed perf perf-finder goldens fixtures check-couch-actors-live test-clean-env
+PARLEY_TEST_BODIES := $(addprefix parley-test-body-,$(PARLEY_TEST_TARGETS))
+PARLEY_TEST_DRY_RUN := $(findstring n,$(filter-out --%,$(firstword $(MAKEFLAGS))) $(filter -%,$(filter-out --%,$(MAKEFLAGS))))
+PARLEY_TEST_LEASE_COMMAND = $(if $(PARLEY_TEST_DRY_RUN),,python3 scripts/test-run-lease.py --root "$(CURDIR)" --)
+.PHONY: $(PARLEY_TEST_TARGETS) $(PARLEY_TEST_BODIES) parley-test-require-lease
+$(PARLEY_TEST_TARGETS):
+	+@$(PARLEY_TEST_LEASE_COMMAND) $(MAKE) --no-print-directory -f "$(firstword $(MAKEFILE_LIST))" parley-test-body-$@
+# First prerequisite, before any body or its later dependency checks.
+$(PARLEY_TEST_BODIES): parley-test-require-lease
+parley-test-require-lease:
+	@python3 scripts/test-run-lease.py --root "$(CURDIR)" --require
+
 .PHONY: help-parley test test-unit test-integration test-compat test-spec test-changed perf perf-finder lint fixtures goldens model-check model-checker test-clean-env
 
 help-parley:
 	@printf '%s\n' \
 	"Parley (Lua/Neovim):" \
+	"  Test runs in the same checkout serialize; waiting runners print the lease holder." \
 	"  make test             Run the whole suite" \
 	"  make test-unit        Run unit tests" \
 	"  make test-integration Run integration + arch tests" \
@@ -84,7 +102,7 @@ endef
 # Recursive $(MAKE) rather than prerequisites: prerequisite order is only
 # guaranteed under serial make, and `make -j test` could otherwise schedule the
 # scratch wipe alongside — or into the middle of — a running suite.
-test:
+parley-test-body-test:
 	@$(MAKE) --no-print-directory test-clean-env
 	@$(MAKE) --no-print-directory lint
 	@$(MAKE) --no-print-directory test-unit
@@ -97,7 +115,7 @@ test:
 # the installed editor has fails `make test` (and the recorded suite). An
 # installed editor below version_support.MINIMUM fails with its refusal.
 # Skipped when the versions match or no nvim is on PATH.
-test-compat:
+parley-test-body-test-compat:
 	@installed="$$(scripts/test-nvim.sh --installed)"; preferred="$$(scripts/test-nvim.sh)"; \
 	if [ -z "$$installed" ] || [ -z "$$preferred" ]; then echo "compat: no installed nvim to compare; skipped"; exit 0; fi; \
 	iv="$$("$$installed/nvim" --version | head -1)"; pv="$$("$$preferred/nvim" --version | head -1)"; \
@@ -120,7 +138,7 @@ JOBS ?= 8
 RUN_SPEC = sh -c 'jitstat() { [ -s "$$1" ] && awk "{last[\$$2]=\$$0} END {for (p in last) print \"  \" last[p]}" "$$1"; true; }; out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); t0=$$(date +%s); export PARLEY_TEST_JITSTAT_LOG="$$out.jit"; if env -u PARLEY_LIVE_COUCH "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s (%ss)\n" "$$1" $$(( $$(date +%s) - t0 )); jitstat "$$out.jit"; rm -f "$$out" "$$out.jit"; else { printf "===FAIL: %s (%ss)===\n" "$$1" $$(( $$(date +%s) - t0 )); sed "s/^/  /" "$$out"; jitstat "$$out.jit"; }; rm -f "$$out.jit"; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
 
 # Each spec file runs in its own Neovim process.
-test-unit:
+parley-test-body-test-unit:
 	@$(PREP_TEST_ENV)
 	@export $(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)"; \
 	FAILED_LOG=$$(mktemp "$$TMPDIR/parley-failed.XXXXXX"); export FAILED_LOG; \
@@ -138,7 +156,7 @@ test-unit:
 	exit $$rc
 
 # Integration + arch specs, same per-file process fan-out.
-test-integration:
+parley-test-body-test-integration:
 	@$(PREP_TEST_ENV)
 	@export $(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)"; \
 	FAILED_LOG=$$(mktemp "$$TMPDIR/parley-failed.XXXXXX"); export FAILED_LOG; \
@@ -157,7 +175,7 @@ test-integration:
 
 # Run tests mapped to one spec key/path from atlas/traceability.yaml.
 # Example: make test-spec SPEC=chat/lifecycle
-test-spec:
+parley-test-body-test-spec:
 	@if [ -z "$(SPEC)" ]; then \
 		echo "Usage: make test-spec SPEC=chat/lifecycle"; \
 		exit 1; \
@@ -183,7 +201,7 @@ test-spec:
 # Run tests mapped to changed spec files under atlas/*/*.md.
 # Uses tracked and untracked file changes since feature-branch base
 # (default base ref: remote/main, fallback origin/main, then main).
-test-changed:
+parley-test-body-test-changed:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	scripts/spec_test_map.sh base-info; \
 	changed_specs="$$(scripts/spec_test_map.sh list-changed-specs)"; \
@@ -249,7 +267,7 @@ test-changed:
 # Report-only real-Neovim chat typing benchmark. Elapsed timings never gate CI;
 # scenario validity and structural work accounting still fail loudly.
 PERF_OUTPUT ?= $(TEST_TMP)/perf/parley-chat-typing.json
-perf:
+parley-test-body-perf:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
 	$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" env -u PARLEY_LIVE_COUCH "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
@@ -267,7 +285,7 @@ lint:
 	@luacheck lua tests packaging
 
 # Report-only ChatFinder materializer benchmark, under the isolated TEST_ENV.
-perf-finder:
+parley-test-body-perf-finder:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
 	$(TEST_RUN) nvim --headless -u "$(CURDIR)/tests/minimal_init.vim" -l tests/perf_chat_finder.lua || rc=1; \
@@ -277,7 +295,7 @@ perf-finder:
 
 # Regenerate tests/fixtures/golden_payloads/*.json. Under TEST_ENV like every
 # harness run: tests/minimal_init.vim refuses a non-isolated environment (#342).
-goldens:
+parley-test-body-goldens:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
 	$(TEST_RUN) nvim --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
@@ -289,7 +307,7 @@ goldens:
 
 # Refresh SSE fixture files from real APIs.
 # Requires ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLEAI_API_KEY in environment.
-fixtures:
+parley-test-body-fixtures:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
 	PARLEY_TEST_ENV_PASS="ANTHROPIC_API_KEY OPENAI_API_KEY GOOGLEAI_API_KEY" $(TEST_RUN) nvim --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
@@ -313,7 +331,7 @@ model-checker: model-check
 # `make test TEST_ENV_ROOT=/some/where` would otherwise `rm -rf /some/where`.
 # The rule: delete paths the harness constructs and can name literally, each
 # quoted individually so a path containing a space stays one word.
-test-clean-env:
+parley-test-body-test-clean-env:
 	@rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)" $(LEGACY_TEST_DIRS)
 
 # Public contributors may keep Plenary anywhere; normal tests need no ariadne.
@@ -322,7 +340,7 @@ check-test-deps:
 	@test -r "$(PLENARY)/plugin/plenary.vim" || { \
 	  echo "Missing plenary.nvim. Clone nvim-lua/plenary.nvim, then run make test PLENARY=/absolute/path/to/plenary.nvim" >&2; exit 1; }
 
-test-unit test-integration test-spec test-changed: check-test-deps
+$(addprefix parley-test-body-,test-unit test-integration test-spec test-changed): check-test-deps
 
 check-vocabulary:
 	@scripts/check-vocabulary.sh
@@ -343,7 +361,7 @@ check-sdlc-conformance:
 # #366: the real CLI refuses the isolated XDG_DATA_HOME (it conflicts with the
 # store COUCH_STORE_DIR selects), so its one call gets the operator's data home.
 LIVE_COUCH_DATA_HOME = $(or $(XDG_DATA_HOME),$(REAL_HOME)/.local/share)
-check-couch-actors-live:
+parley-test-body-check-couch-actors-live:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
 	$(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" PARLEY_LIVE_COUCH=1 PARLEY_LIVE_COUCH_DATA_HOME="$(LIVE_COUCH_DATA_HOME)" "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
