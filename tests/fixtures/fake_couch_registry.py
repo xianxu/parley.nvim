@@ -189,7 +189,7 @@ def main():
             elif registration and registration["RegisteredOwner"] != owner:
                 code, error = "owner-conflict", "different fallback owner"
             elif not registration:
-                registration = dict(ID=hashlib.sha256(path.encode()).hexdigest(), File=path,
+                registration = dict(ID=hashlib.sha256(path.encode()).hexdigest()[:32], File=path,
                                     Owner=owner, RegisteredOwner=owner, RegisteredAt="2026-10-15T00:00:00Z")
                 state["paths"][path] = registration
                 # Import existing legacy evidence once. Registration replay is
@@ -220,6 +220,9 @@ def main():
             code, error = "usage", "unsupported fake verb"
         if changed:
             publish(state_path, state)
+        if registration:
+            # Additive namespace projection, not a second persisted authority.
+            registration = dict(registration, Namespace=registration.get("Namespace", str(state_path.parent.resolve())))
         if registration and Path(registration["File"]).is_file():
             registration = dict(registration, Owner=effective_owner(registration["File"], registration["RegisteredOwner"]))
         if mode == "uncertain" and op != "lookup":

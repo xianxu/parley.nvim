@@ -59,6 +59,23 @@ Inspected current admission/move/exit seams and remote-session design. Couch has
 
 The durable plan identifies the pure sole owner, private per-file sockets, exact generation cleanup, notice-before-ack and detach-before-ack races, bounded shutdown, executable fake and real native conformance. No estimate before the full-flow change-code plan-quality gate.
 
+
+### 2026-10-22 — M1 runtime, transport and dispatcher evidence
+
+Runtime ownership completed with21 passing integration cases on0.12.5 and0.11.7, including native SIGKILL residue reclamation, competing allocation at cap-1, killed guard holder, foreign/symlink/live/reused/unknown controls, deadline cancellation, marker/directory replacement and exact listener stop. Logs: parley-405-runtime-final.log and parley-405-runtime-final-0117.log under TestScratch. A native red test proved serverstop can unlink a foreign replacement: immediately revalidate the owned socket identity before calling it, otherwise retain the listener/artifact. This does not claim control over Neovim's eventual exit cleanup. At the256-marker inspection limit, inspect own PID plus255 deterministically selected distinct marker PIDs; any uninspected marker remains unknown and counted. No additional process scan or weaker death proof.
+
+Typed outbound protocol: RED9 new failures, GREEN34 unit cases both versions (including existing owner cases). Endpoint transport: RED7 failures/0errors, GREEN7 both versions, plus12 unchanged registry regressions on preferred; timed-out/canceled child PID is ESRCH before result callback. Same existing4-active/64-queued Couch seam, strict request sizes/shapes and1MiB streaming reply cap. The persisted endpoint fake shares the registry flock and high-water evidence; Namespace is an additive projection, generated fake IDs match real32hex IDs.
+
+Dispatcher: initial7 cases green; ordered lifecycle/count additions exposed one callback loss between native serverstart and durable listen completion (13pass/1fail/0errors). Fix retires that listener and reports attach completion exactly once. Final14 cases pass on both runtimes, including notice-before-ack, detach-before-ack with successor protection, held-startup cancellation and counted8/16 opens with exactlyN register children and one startup process-source batch despite duplicate events. Process censuses clean. Logs: parley-405-dispatch-final.log and parley-405-dispatch-final-0117.log under TestScratch. make lint:0 warnings/0 errors in834 files.
+
+Pair:6 confirmed in delivery18c97b6d that endpoint CLI is a bounded private IPC observer; native nvim subprocesses belong to the daemon and use its bounded/joined lifetime, never CLI stdout pipes/process descendants. Killing the client may leave admitted publication, so the same AttachID intent remains unconfirmed. Producer PR542 is queued for its recorded suite; no landed merge pin yet. Real native producer conformance, canonical focused/architecture checks, recorded suite and M1 close remain outstanding. No automatic session wiring or :0 stage yet.
+
+### 2026-10-22 — M1 focused completion and real-acceptance sequencing
+
+Canonical modes/remote_session mapping passes144 cases on both0.12.5 and0.11.7, including architecture declarations and unchanged registry regressions; clean process censuses (parley-405-m1-focused-final.log and -final-0117.log). Final make lint has0warnings/0errors in834files. Endpoint fake conformance passes both native versions through actual private socket RPC and two editors; deliberately wrong-identity fake is rejected for the expected confirmation failure. Existing registry fake conformance still passes. Logs: parley-405-editor-conformance-preferred.log, -0117.log and parley-405-registry-conformance-compat.log under TestScratch.
+
+TL77d91d23 explicitly approved continuing M1 on fake/native evidence while real acceptance waits: the shared isolated hold-open Couch bridge is a separate pair issue (pair:6 filing), not a new launcher in Parley and not part of pair#758. Readiness/teardown interface will be pinned with pair:6 before consumer integration. No fake result is real-producer evidence. Real acceptance moves to M2 once both prerequisites land; automatic attachment lifecycle remains M2. Next: durable checkpoint, push, recorded suite and M1 boundary review.
+
 ## Revisions
 
 ### 2026-10-22 — producer prerequisite and outside-pane discovery

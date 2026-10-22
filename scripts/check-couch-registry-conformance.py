@@ -9,6 +9,7 @@ The negative control must reject a deliberately wrong-path fake registration.
 import argparse
 import json
 import os
+import signal
 from pathlib import Path
 import shlex
 import shutil
@@ -21,12 +22,31 @@ SCRUB = (
     "COUCH_STORE_DIR", "COUCH_PAIR_DATA_DIR", "COUCH_IDENTITY_DIR", "PAIR_DATA_DIR",
     "XDG_DATA_HOME", "COUCH_TREE", "COUCH_THREAD_SCOPE", "COUCH_THREAD_TAG",
     "PAIR_SESSION_NAME", "PAIR_LAUNCH_NONCE", "COUCH_CAPTURE_DIR",
-    "FAKE_COUCH_REGISTRY_MODE", "FAKE_COUCH_REGISTRY",
+    "FAKE_COUCH_REGISTRY_MODE", "FAKE_COUCH_REGISTRY", "FAKE_COUCH_EDITOR_MODE",
 )
 
 
-def run(argv, env):
-    return subprocess.run(argv, env=env, text=True, capture_output=True, timeout=30)
+def run(argv, env, *, child_tree=False):
+    if not child_tree:
+        return subprocess.run(argv, env=env, text=True, capture_output=True, timeout=30)
+    # Embedded editors inherit this disposable group. Timeout ends the whole
+    # probe tree when Lua cleanup could not run.
+    with subprocess.Popen(argv, env=env, text=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, start_new_session=True) as child:
+        try:
+            stdout, stderr = child.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            os.killpg(child.pid, signal.SIGKILL)
+            child.communicate()
+            raise
+        finally:
+            # Also reap a child editor that survived the probe's normal/error
+            # exit. This group contains only this disposable probe tree.
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        return subprocess.CompletedProcess(argv, child.returncode, stdout, stderr)
 
 
 def isolated_env(root):
@@ -68,13 +88,14 @@ def adopt_store(binary, env):
         raise RuntimeError("isolated adopt-store apply refused: " + applied.stderr + applied.stdout)
 
 
-def probe(nvim, repo, binary, root, *, fake=False, corrupt=False):
+def probe(nvim, repo, binary, root, *, fake=False, corrupt=False, editor_endpoints=False):
     root.mkdir()
     env = isolated_env(root)
     if fake:
         env["FAKE_COUCH_REGISTRY"] = str(root / "registry.json")
         if corrupt:
-            env["FAKE_COUCH_REGISTRY_MODE"] = "wrong-path"
+            env["FAKE_COUCH_EDITOR_MODE" if editor_endpoints else "FAKE_COUCH_REGISTRY_MODE"] = (
+                "wrong-identity" if editor_endpoints else "wrong-path")
     else:
         adopt_store(binary, env)
     # The admission seam intentionally invokes `couch`, just as the editor
@@ -84,8 +105,18 @@ def probe(nvim, repo, binary, root, *, fake=False, corrupt=False):
     (command_dir / "couch").symlink_to(binary)
     env["PATH"] = str(command_dir) + os.pathsep + env.get("PATH", "")
     fixture = root / "probe.json"
-    fixture.write_text(json.dumps({"binary": binary, "root": str(root), "env": env, "fake": fake}))
+    config = {"binary": binary, "root": str(root), "env": env, "fake": fake}
     env.update(PARLEY_CONFORMANCE_ROOT=str(repo), PARLEY_REGISTRY_PROBE=str(fixture))
+    if editor_endpoints:
+        # Explicit owned 0700 test runtime; no operator runtime or public
+        # listener fallback. Short scratch paths satisfy Unix address bounds.
+        scratch_base = "/Volumes/TestScratch" if Path("/Volumes/TestScratch").is_dir() else (os.environ.get("TMPDIR") or "/tmp")
+        with tempfile.TemporaryDirectory(prefix="pe-", dir=scratch_base) as runtime:
+            config["runtime_parent"] = str(Path(runtime).resolve() / "rpc")
+            fixture.write_text(json.dumps(config))
+            return run([nvim, "--headless", "-n", "-u", "NONE", "-l",
+                        str(repo / "scripts/couch-editor-probe.lua")], env, child_tree=True)
+    fixture.write_text(json.dumps(config))
     return run([nvim, "--headless", "-n", "-u", "NONE", "-l",
                 str(repo / "scripts/couch-registry-probe.lua")], env)
 
@@ -95,6 +126,8 @@ def main():
     parser.add_argument("--couch", default=os.environ.get("COUCH_CONFORMANCE_BINARY", "couch"),
                         help="Couch executable supporting COUCH_ISOLATED_ROOT and public adopt-store")
     parser.add_argument("--fake-only", action="store_true", help="exercise probe and negative control without real Couch")
+    parser.add_argument("--editor-endpoints", action="store_true",
+                        help="check endpoint handshake, retry, takeover and retirement in native editors")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
     nvim, binary = shutil.which("nvim"), shutil.which(args.couch)
@@ -107,7 +140,10 @@ def main():
         tempbin = scratch / "bin"
         tempbin.mkdir()
         fake = tempbin / "couch"
-        fake.write_text('#!/bin/sh\ncase "$2" in\noperator-acquire|operator-release) exec '
+        fake.write_text('#!/bin/sh\nif [ "$1" = "--editor-endpoint" ]; then exec '
+                        + shlex.quote(sys.executable) + " "
+                        + shlex.quote(str(repo / "tests/fixtures/fake_couch_editor.py")) + ' "$@"; fi\n'
+                        + 'case "$2" in\noperator-acquire|operator-release) exec '
                         + shlex.quote(sys.executable) + " "
                         + shlex.quote(str(repo / "tests/fixtures/fake_couch_operator.py")) + ' "$@" ;;\n'
                         + '*) exec ' + shlex.quote(sys.executable) + " "
@@ -115,14 +151,17 @@ def main():
         fake.chmod(0o700)
         for label, command, is_fake in ([('fake', str(fake), True)] if args.fake_only else
                                         [('real', binary, False), ('fake', str(fake), True)]):
-            result = probe(nvim, repo, command, scratch / label, fake=is_fake)
+            result = probe(nvim, repo, command, scratch / label, fake=is_fake,
+                           editor_endpoints=args.editor_endpoints)
             if result.returncode:
                 raise RuntimeError(label + " production probe failed:\n" + result.stdout + result.stderr)
             print(label + ": " + (result.stdout + result.stderr).strip())
-        negative = probe(nvim, repo, str(fake), scratch / "corrupt-fake", fake=True, corrupt=True)
+        negative = probe(nvim, repo, str(fake), scratch / "corrupt-fake", fake=True, corrupt=True,
+                         editor_endpoints=args.editor_endpoints)
         if negative.returncode == 0:
             raise RuntimeError("negative control failed: corrupted fake was accepted")
-        if "expected registered, got" not in negative.stderr + negative.stdout:
+        expected = "expected confirmed, got" if args.editor_endpoints else "expected registered, got"
+        if expected not in negative.stderr + negative.stdout:
             raise RuntimeError("negative control failed for an unrelated reason:\n" + negative.stdout + negative.stderr)
         print("PASS: deliberately corrupted fake rejected by production-client probe")
         print("All fixture, singleton and adopted-store paths were temporary and have been removed on exit.")

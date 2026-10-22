@@ -1468,3 +1468,30 @@ atlas:
     tests:
       - tests/unit/frontmatter_enum_spec.lua
       - tests/integration/frontmatter_enum_popup_spec.lua
+
+  modes/remote_session:
+    code:
+      - lua/parley/remote_session.lua
+      - lua/parley/remote_session_model.lua
+      - lua/parley/remote_runtime.lua
+      - lua/parley/remote_runtime_record.lua
+      - lua/parley/remote_process.lua
+      - lua/parley/document_registry.lua
+      - tests/helpers/fake_process_source.lua
+      - tests/helpers/fake_couch.lua
+      - tests/fixtures/fake_ps.py
+      - tests/fixtures/fake_couch_editor.py
+      - tests/fixtures/fake_couch_registry.py
+      - scripts/check-couch-registry-conformance.py
+      - scripts/couch-editor-probe.lua
+    tests:
+      - tests/unit/remote_session_model_spec.lua
+      - tests/unit/remote_runtime_record_spec.lua
+      - tests/integration/remote_process_spec.lua
+      - tests/integration/remote_runtime_spec.lua
+      - tests/integration/editor_endpoint_registry_spec.lua
+      - tests/integration/document_registry_spec.lua
+      - tests/integration/remote_session_spec.lua
+      - tests/arch/spawn_seam_spec.lua
+      - tests/arch/fixture_lifecycle_spec.lua
+      - tests/arch/embedded_rpc_spec.lua

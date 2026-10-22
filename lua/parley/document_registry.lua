@@ -52,9 +52,8 @@ local function classify_round(data)
     return { kind = "round", round = data.Round, cleared = data.Cleared == true }
 end
 
-function M.request(operation, args, witness, callback, options)
+local function enqueue(argv, witness, callback, options, classify, invalid, joined)
     options = options or {}
-    args = vim.deepcopy(args or {})
     witness = vim.deepcopy(witness or {})
     local uv = vim.uv or vim.loop
     local item = { callback = callback, done = false, running = false, queued_at = uv.hrtime() }
@@ -74,56 +73,68 @@ function M.request(operation, args, witness, callback, options)
     end
     function item.cancel()
         if item.done then return end
-        if item.child then pcall(item.child.kill, item.child, 15) end
-        finish(unavailable("request canceled; mutation outcome may be unknown"))
-    end
-    local shapes = { lookup = 1, register = 2, rename = 2, forget = 1, round = 1 }
-    if not shapes[operation] or #args ~= shapes[operation] then
-        finish(unavailable("invalid registry operation")); return item
-    end
-    for _, arg in ipairs(args) do
-        if type(arg) ~= "string" or arg == "" or arg:find("%z") then
-            finish(unavailable("invalid registry argument")); return item
+        local result = unavailable("request canceled; mutation outcome may be unknown")
+        if joined and item.running then
+            item.failure = result
+            if item.child then pcall(item.child.kill, item.child, 9) end
+        else
+            if item.child then pcall(item.child.kill, item.child, 15) end
+            finish(result)
         end
     end
-    if args[1]:sub(1, 1) ~= "/" or (operation == "rename" and args[2]:sub(1, 1) ~= "/") then
-        finish(unavailable("registry path must be absolute")); return item
-    end
-    local argv = { options.binary or "couch", "--session-sync", operation, args[1] }
-    if operation == "register" then vim.list_extend(argv, { "--owner", args[2] }) end
-    if operation == "rename" then argv[#argv + 1] = args[2] end
-    argv[#argv + 1] = "--json"
+    if invalid then finish(unavailable(invalid)); return item end
     -- The deadline bounds the child's lifetime, from spawn (#382), as the
     -- header says: time spent queued behind MAX_ACTIVE others is not Couch
     -- being slow, and a request that never started has no unknown outcome.
     -- The queue itself is bounded by MAX_QUEUE.
-    local deadline_ms = options.timeout_ms or M.default_deadline_ms(operation)
+    local deadline_ms = options.timeout_ms
     function item.start()
         if item.done then return end
         item.running = true
         item.started_at = uv.hrtime()
         active = active + 1
+        local process_options = { env = options.env, timeout = false, stdin = options.stdin }
+        if joined then
+            item.output, item.output_size = {}, 0
+            local function stream(error, chunk)
+                if item.done then return end
+                if error then item.failure = unavailable("editor endpoint reply read failed") end
+                if chunk then
+                    item.output_size = item.output_size + #chunk
+                    if item.output_size <= M.EDITOR_REPLY_BYTES then item.output[#item.output + 1] = chunk
+                    else item.failure = unavailable("editor endpoint reply exceeds 1 MiB") end
+                end
+                if item.failure then
+                    vim.schedule(function()
+                        if not item.done and item.child then pcall(item.child.kill, item.child, 9) end
+                    end)
+                end
+            end
+            process_options.stdout = stream
+            -- stderr is diagnostic only, but must not be collected unboundedly.
+            process_options.stderr = function(error, chunk)
+                if error or (chunk and #chunk + (item.stderr_size or 0) > M.EDITOR_REPLY_BYTES) then
+                    stream(error or "oversized stderr", nil)
+                elseif chunk then item.stderr_size = (item.stderr_size or 0) + #chunk end
+            end
+        end
         item.child = couch.run(argv, function(obj)
             if item.done then return end
-            local ok, data = pcall(vim.json.decode, obj.stdout or "")
-            local result = operation == "round" and classify_round(ok and data or nil)
-                or model.classify_reply(operation, obj.code, ok and data or nil, vim.NIL)
-            if result.kind == "registered" then
-                local expected = operation == "rename" and args[2] or args[1]
-                local canonical = uv.fs_realpath(expected) or vim.fs.normalize(expected)
-                if result.registration.File ~= canonical then result = unavailable("registry path mismatch") end
-            end
-            if result.kind ~= "registered" and result.kind ~= "absent" and result.kind ~= "round" then
-                result.exit, result.stderr = obj.code, (obj.stderr or ""):sub(1, 400)
-            end
+            local result = item.failure or classify(obj, item)
             finish(result)
-        end, { env = options.env, timeout = false })
+        end, process_options)
         if item.done then return end
         item.timer = uv.new_timer()
         require("parley.helper").start_deadline(item.timer, deadline_ms, vim.schedule_wrap(function()
-            if item.child then pcall(item.child.kill, item.child, 15) end
-            finish(unavailable(("Couch registry deadline exceeded after %d ms; mutation outcome may be unknown")
-                :format(deadline_ms)))
+            local result = unavailable(("Couch registry deadline exceeded after %d ms; mutation outcome may be unknown")
+                :format(deadline_ms))
+            if joined then
+                item.failure = result
+                if item.child then pcall(item.child.kill, item.child, 9) end
+            else
+                if item.child then pcall(item.child.kill, item.child, 15) end
+                finish(result)
+            end
         end))
     end
     if #queue >= MAX_QUEUE and active >= MAX_ACTIVE then
@@ -133,6 +144,62 @@ function M.request(operation, args, witness, callback, options)
     queue[#queue + 1] = item
     pump()
     return item
+end
+
+function M.request(operation, args, witness, callback, options)
+    options = vim.tbl_extend("force", {}, options or {})
+    args = vim.deepcopy(args or {})
+    local function refuse(reason) return enqueue(nil, witness, callback, options, nil, reason) end
+    local shapes = { lookup = 1, register = 2, rename = 2, forget = 1, round = 1 }
+    if not shapes[operation] or #args ~= shapes[operation] then return refuse("invalid registry operation") end
+    for _, arg in ipairs(args) do
+        if type(arg) ~= "string" or arg == "" or arg:find("%z") then return refuse("invalid registry argument") end
+    end
+    if args[1]:sub(1, 1) ~= "/" or (operation == "rename" and args[2]:sub(1, 1) ~= "/") then
+        return refuse("registry path must be absolute")
+    end
+    local argv = { options.binary or "couch", "--session-sync", operation, args[1] }
+    if operation == "register" then vim.list_extend(argv, { "--owner", args[2] }) end
+    if operation == "rename" then argv[#argv + 1] = args[2] end
+    argv[#argv + 1] = "--json"
+    options.timeout_ms = options.timeout_ms or M.default_deadline_ms(operation)
+    return enqueue(argv, witness, callback, options, function(obj)
+        local ok, data = pcall(vim.json.decode, obj.stdout or "")
+        local result = operation == "round" and classify_round(ok and data or nil)
+            or model.classify_reply(operation, obj.code, ok and data or nil, vim.NIL)
+        if result.kind == "registered" then
+            local expected = operation == "rename" and args[2] or args[1]
+            local uv = vim.uv or vim.loop
+            local canonical = uv.fs_realpath(expected) or vim.fs.normalize(expected)
+            if result.registration.File ~= canonical then result = unavailable("registry path mismatch") end
+        end
+        if result.kind ~= "registered" and result.kind ~= "absent" and result.kind ~= "round" then
+            result.exit, result.stderr = obj.code, (obj.stderr or ""):sub(1, 400)
+        end
+        return result
+    end)
+end
+
+M.EDITOR_TIMEOUT_MS = 3000
+M.EDITOR_REPLY_BYTES = 1024 * 1024
+
+--- Editor discovery/publication uses the same four-child/64-queued boundary.
+--- Cancellation and expiry deliver only after the owned child has been reaped.
+function M.editor(operation, payload, witness, callback, options)
+    options = vim.tbl_extend("force", {}, options or {})
+    local protocol = require("parley.remote_session_model")
+    local prepared, err = protocol.prepare_request(operation, payload)
+    if not prepared then return enqueue(nil, witness, callback, options, nil, err) end
+    local argv = { options.binary or "couch" }
+    vim.list_extend(argv, prepared.args)
+    options.stdin = prepared.stdin
+    options.timeout_ms = options.timeout_ms or M.EDITOR_TIMEOUT_MS
+    return enqueue(argv, witness, callback, options, function(obj, item)
+        local ok, decoded = pcall(vim.json.decode, table.concat(item.output))
+        local result = protocol.classify_reply(operation, obj.code, ok and decoded or nil, prepared.expected, vim.NIL)
+        if result.kind == "unavailable" and not result.error then result.error = "unconfirmed editor endpoint reply" end
+        return result
+    end, nil, true)
 end
 
 pump = function()

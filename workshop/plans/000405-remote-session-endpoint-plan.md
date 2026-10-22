@@ -126,9 +126,9 @@ The new lifecycle never changes modifiable, admission history, lock ownership, s
 | endpoint CLI request | stateful executable fake covers current/superseded/retired and ordered delayed replies; byte/deadline/cancel bounds through production seam |
 | real conformance | isolated producer main pin plus real Neovim: registration, same-attach retry, second-editor takeover, stale unregister, lost ack and retired attachment cleanup |
 
-- [ ] Record durable producer contract aa24764a and the TL-approved crash-residue correction before change-code; use the eventual landed producer merge pin for real conformance, never stack branches.
-- [ ] Add failing pure sequences, then the minimal sole owner; run unit specs red/green.
-- [ ] Add failing socket/CLI tests through the stateful fake, implement thin shell/transport, then run targeted integration red/green on 0.12.5 and0.11.7.
+- [x] Record durable producer contract aa24764a and the TL-approved crash-residue correction before change-code; use the eventual landed producer merge pin for real conformance, never stack branches.
+- [x] Add failing pure sequences, then the minimal sole owner; run unit specs red/green.
+- [x] Add failing socket/CLI tests through the stateful fake, implement thin shell/transport, then run targeted integration red/green on 0.12.5 and0.11.7.
 - [ ] Extend real conformance with an intentional corrupt-fake negative control; run against producer merge pin in isolated roots.
 - [ ] Update indexed atlas/traceability; commit; recorded suite and milestone-close M1 through SDLC.
 
@@ -163,3 +163,11 @@ Reason: the installed native crash probe disproved automatic Neovim runtime coll
 ### 2026-10-22 — PQ-1/PQ-2 bounded shared-resource refinement
 
 Reason: plan-quality found an unguarded shared-parent cap and an unspecified process-inspection boundary. Delta approved by TL396d2c15: reuse document_lease's kernel flock as the single parent guard; count/create/reclaim under it, retaining unknown unmarked residue. Name remote_process.observe/cancel and its stateful fake/native ps adapter, typed evidence,1000ms inspection and2000ms aggregate async startup budgets with cancellation ownership. Add controlled concurrent cap/interrupted-owner tests and N/2N inspection counters. No new lock protocol, watcher, user recovery or input-path IO.
+
+### 2026-10-22 — native ownership refinements within the approved bounds
+
+Reason: executable conformance exposed Neovim serverstop unlinking a replaced socket pathname and the process inspector's256-PID batch including the editor itself. Delta: revalidate exact owned socket identity immediately before serverstop; retain uncertain/replaced listeners without calling it (no guarantee about Neovim's later exit cleanup). Inspect own PID plus255 distinct marker PIDs in one deterministic batch, retaining uninspected evidence as unknown/counting toward capacity. Runtime ownership record lives in remote_runtime_record.lua, separately from the attachment owner. The frontend serializes per-resource listen/stop/close effects under the existing kernel lease; callbacks and attachment count use indexed bookkeeping. A red detach-after-native-listen regression now proves every attachment completion is reported once even when retirement precedes durable listen completion. Producer IPC observer cancellation leaves admitted work uncertain; native producer child lifetime belongs to Couch, not the CLI.
+
+### 2026-10-22 — TL-approved real acceptance moves after the bridge
+
+Reason: endpoint publication uses a private IPC observer, so the old in-process register/adopt-store conformance setup cannot exercise a running producer. TL77d91d23 approves M1 close on fake plus native evidence; real-producer acceptance waits for a separately filed pair bridge issue owned by pair:6, using the existing shared testcouch harness rather than a Parley launcher. The M1 real-conformance checkbox remains deferred to M2. The supported external readiness/environment and exact teardown contract must be pinned before adapting Parley's driver. Real acceptance requires both landed producer and bridge pins; no waiver of that M2 requirement.

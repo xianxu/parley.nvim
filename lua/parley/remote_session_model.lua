@@ -44,7 +44,7 @@ local function nonempty(value)
     return type(value) == 'string' and #value > 0 and not value:find('%z')
 end
 local function absolute(value)
-    if not nonempty(value) or value:sub(1, 1) ~= '/' then return false end
+    if not nonempty(value) or value:find('[\r\n]') or value:sub(1, 1) ~= '/' then return false end
     -- Physical paths are supplied by the shell; reject lexical aliases here.
     if value:find('//', 1, true) or value:match('/%.%.?(/?)$') then return false end
     for segment in value:gmatch('[^/]+') do
@@ -76,6 +76,75 @@ local function dense_length(value)
     for index = 1, length do if value[index] == nil then return nil end end
     return length
 end
+local request_fields = {
+    register = { 'Version', 'Namespace', 'DocumentID', 'EditorIncarnation', 'AttachID',
+        'PID', 'Socket', 'Buffer', 'Mode' },
+    lookup = { 'Namespace', 'DocumentID' },
+    unregister = { 'Version', 'Namespace', 'EditorIncarnation', 'PID', 'Entries' },
+}
+local entry_fields = { 'DocumentID', 'AttachID', 'BindingGeneration' }
+
+local function request_shape(value, fields, optional)
+    if type(value) ~= 'table' or getmetatable(value) ~= nil then return false end
+    local allowed = {}
+    for _, field in ipairs(fields) do
+        allowed[field] = true
+        if value[field] == nil then return false end
+    end
+    if optional then allowed[optional] = true end
+    for field in pairs(value) do if not allowed[field] then return false end end
+    return true
+end
+
+-- Validate and serialize before either async transport or bounded exit IO.
+-- This checks canonical spelling only; physical namespace/socket authority is
+-- verified by the producer, never inferred through filesystem IO in this model.
+function M.prepare_request(operation, payload)
+    local fields = request_fields[operation]
+    local function invalid(reason) return nil, 'invalid endpoint request: ' .. reason end
+    if not fields then return invalid('unknown operation') end
+    if not request_shape(payload, fields, operation == 'unregister' and 'ProcessIdentity' or nil) then
+        return invalid('unexpected or missing fields')
+    end
+    for _, field in ipairs(fields) do
+        if field == 'Version' then
+            if payload[field] ~= 1 then return invalid('Version must be 1') end
+        elseif field ~= 'Entries' and not validators[field](payload[field]) then
+            return invalid(field)
+        end
+    end
+    if operation == 'unregister' then
+        if payload.ProcessIdentity ~= nil and not nonempty(payload.ProcessIdentity) then
+            return invalid('ProcessIdentity')
+        end
+        local length = dense_length(payload.Entries)
+        if not length or length < 1 or length > 256 then return invalid('batch size or shape') end
+        local seen = {}
+        for _, entry in ipairs(payload.Entries) do
+            if not request_shape(entry, entry_fields) then return invalid('entry fields') end
+            for _, field in ipairs(entry_fields) do
+                if not validators[field](entry[field]) then return invalid('entry ' .. field) end
+            end
+            if seen[entry.DocumentID] then return invalid('duplicate DocumentID') end
+            seen[entry.DocumentID] = true
+        end
+    end
+    local args = { '--editor-endpoint', operation }
+    local encoded
+    if operation == 'lookup' then
+        args[#args + 1], args[#args + 2] = '--namespace', payload.Namespace
+        args[#args + 1], args[#args + 2] = '--document-id', payload.DocumentID
+    else
+        local ok
+        ok, encoded = pcall(vim.json.encode, payload)
+        if not ok then return invalid('JSON encoding') end
+        local limit = operation == 'register' and 8192 or 262144
+        if #encoded > limit then return invalid('encoded byte limit') end
+    end
+    args[#args + 1] = '--json'
+    return { args = args, stdin = encoded, expected = copy(payload) }
+end
+
 local function same_entry(left, right)
     return type(left) == 'table' and type(right) == 'table'
         and hex_id(left.DocumentID) and attach_id(left.AttachID) and hex_id(left.BindingGeneration)
@@ -113,7 +182,8 @@ function M.classify_reply(operation, exit_code, decoded, expected, null_sentinel
     local code = decoded.Code
     if exit_code ~= 0 then
         local kinds = { [2] = { invalid = 'refused' }, [3] = { unavailable = 'unavailable' },
-            [4] = { superseded = 'refused', stale = 'refused', conflict = 'refused' },
+            [4] = { superseded = 'refused', stale = 'refused', conflict = 'refused',
+                ['not-registered'] = 'refused', ['desktop-active'] = 'refused' },
             [5] = { uncertain = 'uncertain' } }
         local kind = kinds[exit_code] and kinds[exit_code][code]
         return kind and { kind = kind, code = code, error = decoded.Error } or unavailable
@@ -181,8 +251,8 @@ function M.new(context)
                 AttachID = binding.AttachID, BindingGeneration = binding.BindingGeneration } },
         } }
     end
-    function object:snapshot() return copy(state) end
-    function object:endpoint(query)
+    function object.snapshot(_) return copy(state) end
+    function object.endpoint(_, query)
         if state.phase ~= 'listening' and state.phase ~= 'publishing'
             and state.phase ~= 'active' and state.phase ~= 'unconfirmed' then return nil end
         if not exact_fields(query, query_fields, tuple) then return nil end
@@ -190,7 +260,7 @@ function M.new(context)
         endpoint.PID, endpoint.Socket, endpoint.File = tuple.PID, tuple.Socket, tuple.File
         return endpoint
     end
-    function object:dispatch(event)
+    function object.dispatch(_, event)
         local effects = {}
         if type(event) ~= 'table' then return effects end
         if event.type == 'publish' or event.type == 'retry' then

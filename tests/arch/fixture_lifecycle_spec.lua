@@ -86,7 +86,7 @@ describe("arch: fixture process lifecycle", function()
         assert.same({}, offenders)
         -- run_without_dns.py and run_packaging_vm.py are mode 644, outside
         -- this executable-fixture corpus.
-        assert.equals(17, #files, "expected 12 finite fixtures and 5 watched fixtures")
+        assert.equals(18, #files, "expected 12 finite fixtures and 6 watched fixtures")
     end)
 
     it("both watchdogs recognize a parent already reparented to init", function()

@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-10-22 (#405 — native listener ownership)
+
+- A native close can also unlink a pathname. Probe replacement behavior, then revalidate the exact owned socket identity immediately before serverstop; uncertain or replaced paths must never be passed to it.
+- Test retirement at each async resource boundary, including after the kernel listener exists but before its durable marker is finished. Ending the resource lifetime and reporting the caller's completion are separate obligations.
+
+
 ## 2026-10-16 (#353 — displayed ancestry and native history)
 
 - A displayed trail and Back entries must commit together in the actual landing window, including reused splits. Reconstruct through one pure transition; changing only the label can send Back into an unrelated file.

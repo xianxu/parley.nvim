@@ -3,6 +3,7 @@ if not loaded then
     Model = {
         next_attach_id = function() return nil end,
         classify_reply = function() return {} end,
+        prepare_request = function() return nil end,
         new = function() assert.is_true(loaded, 'attachment model must be implemented') end,
     }
 end
@@ -59,6 +60,163 @@ describe('remote attachment counter', function()
     end)
 end)
 
+local function register_request()
+    local value = context()
+    value.File, value.Version = nil, 1
+    return value
+end
+local function unregister_request()
+    local value = binding()
+    return { Version = 1, Namespace = value.Namespace, EditorIncarnation = value.EditorIncarnation,
+        PID = value.PID, Entries = { { DocumentID = value.DocumentID, AttachID = value.AttachID,
+            BindingGeneration = value.BindingGeneration } } }
+end
+local function refused_request(operation, payload)
+    local request, err = Model.prepare_request(operation, payload)
+    assert.is_nil(request)
+    assert.is_string(err)
+end
+
+describe('remote producer outbound requests', function()
+    it('encodes the exact register contract and copies its expected tuple', function()
+        local payload = register_request()
+        local request = Model.prepare_request('register', payload)
+        assert.is_table(request)
+        assert.same({ '--editor-endpoint', 'register', '--json' }, request.args)
+        assert.same(payload, vim.json.decode(request.stdin))
+        assert.same(payload, request.expected)
+        payload.Socket = '/changed.sock'
+        assert.equals(context().Socket, request.expected.Socket)
+        assert.equals(context().Socket, vim.json.decode(request.stdin).Socket)
+    end)
+    it('uses only namespace and document ID arguments for lookup with no stdin', function()
+        local payload = { Namespace = context().Namespace, DocumentID = context().DocumentID }
+        local request = Model.prepare_request('lookup', payload)
+        assert.is_table(request)
+        assert.same({ '--editor-endpoint', 'lookup', '--namespace', payload.Namespace,
+            '--document-id', payload.DocumentID, '--json' }, request.args)
+        assert.is_nil(request.stdin)
+        payload.DocumentID = string.rep('d', 32)
+        assert.equals(context().DocumentID, request.expected.DocumentID)
+        payload = { Namespace = context().Namespace, DocumentID = context().DocumentID, Version = 1 }
+        refused_request('lookup', payload)
+    end)
+    it('encodes unregister batches with an optional producer process identity and private entries', function()
+        local payload = unregister_request()
+        payload.ProcessIdentity = 'opaque-native-identity'
+        local request = Model.prepare_request('unregister', payload)
+        assert.is_table(request)
+        assert.same({ '--editor-endpoint', 'unregister', '--json' }, request.args)
+        assert.same(payload, vim.json.decode(request.stdin))
+        assert.same(payload, request.expected)
+        payload.Entries[1].AttachID = '1'
+        assert.equals(context().AttachID, request.expected.Entries[1].AttachID)
+        assert.is_table(Model.prepare_request('unregister', unregister_request()))
+    end)
+    it('requires exactly the known outbound fields before encoding', function()
+        for operation, factory in pairs({ register = register_request, unregister = unregister_request,
+            lookup = function() return { Namespace = context().Namespace, DocumentID = context().DocumentID } end }) do
+            local valid = factory()
+            for key in pairs(valid) do
+                local payload = factory()
+                payload[key] = nil
+                refused_request(operation, payload)
+            end
+            local payload = factory()
+            payload.Future = true
+            refused_request(operation, payload)
+            refused_request(operation, false)
+            refused_request(operation, {})
+            refused_request(operation, { factory() })
+        end
+        refused_request('future', register_request())
+        local payload = register_request()
+        payload.ProcessIdentity = 'not-a-register-field'
+        refused_request('register', payload)
+    end)
+    it('rejects invalid versions, IDs, positive integers, modes and decimal uint64 counters', function()
+        for field, values in pairs({ Version = { 0, 2, '1', true }, DocumentID = { 'A', string.rep('A', 32) },
+            EditorIncarnation = { '', string.rep('g', 32) }, PID = { 0, -1, 1.5, math.huge, '42' },
+            Buffer = { 0, -1, 1.5, math.huge, '7' }, Mode = { 'web', false },
+            AttachID = { '0', '01', '-1', '1.0', '18446744073709551616', 1 } }) do
+            for _, invalid in ipairs(values) do
+                local payload = register_request()
+                payload[field] = invalid
+                refused_request('register', payload)
+            end
+        end
+        for _, id in ipairs({ '1', '9007199254740993', '18446744073709551615' }) do
+            local payload = register_request()
+            payload.AttachID = id
+            assert.is_table(Model.prepare_request('register', payload))
+        end
+        local payload = register_request()
+        payload.Mode = 'headless'
+        assert.is_table(Model.prepare_request('register', payload))
+    end)
+    it('rejects lexical path aliases and control characters without filesystem IO', function()
+        for _, path in ipairs({ 'relative', '/repo/', '/repo//file', '/repo/./file', '/repo/../file',
+            '/repo/.', '/repo/..', '/repo\nfile', '/repo\rfile', '/repo\0file' }) do
+            for _, field in ipairs({ 'Namespace', 'Socket' }) do
+                local payload = register_request()
+                payload[field] = path
+                refused_request('register', payload)
+            end
+            refused_request('lookup', { Namespace = path, DocumentID = context().DocumentID })
+        end
+    end)
+    it('refuses duplicate document IDs, malformed entries and sparse or oversized batches', function()
+        local payload = unregister_request()
+        payload.Entries[2] = vim.deepcopy(payload.Entries[1])
+        payload.Entries[2].AttachID = '2'
+        refused_request('unregister', payload)
+        for _, entries in ipairs({ {}, { [2] = unregister_request().Entries[1] },
+            { unregister_request().Entries[1], extra = true }, { false } }) do
+            payload = unregister_request()
+            payload.Entries = entries
+            refused_request('unregister', payload)
+        end
+        for _, field in ipairs({ 'DocumentID', 'AttachID', 'BindingGeneration' }) do
+            payload = unregister_request()
+            payload.Entries[1][field] = nil
+            refused_request('unregister', payload)
+            payload.Entries[1][field] = false
+            refused_request('unregister', payload)
+        end
+        payload = unregister_request()
+        payload.Entries[1].Future = true
+        refused_request('unregister', payload)
+        payload = unregister_request()
+        for index = 1, 256 do
+            payload.Entries[index] = { DocumentID = string.format('%032x', index), AttachID = '1',
+                BindingGeneration = binding().BindingGeneration }
+        end
+        assert.is_table(Model.prepare_request('unregister', payload))
+        payload.Entries[257] = { DocumentID = string.format('%032x', 257), AttachID = '1',
+            BindingGeneration = binding().BindingGeneration }
+        refused_request('unregister', payload)
+        for _, invalid in ipairs({ false, '', 'bad\0identity' }) do
+            payload = unregister_request()
+            payload.ProcessIdentity = invalid
+            refused_request('unregister', payload)
+        end
+    end)
+    it('bounds actual encoded register and unregister bytes at their inclusive limits', function()
+        for _, case in ipairs({ { 'register', register_request, 8192, 'Socket', '/' },
+            { 'unregister', unregister_request, 262144, 'ProcessIdentity', 'x' } }) do
+            local operation, factory, limit, field, prefix = unpack(case)
+            local payload = factory()
+            payload[field] = prefix
+            payload[field] = prefix .. string.rep('x', limit - #vim.json.encode(payload))
+            local request = Model.prepare_request(operation, payload)
+            assert.is_table(request)
+            assert.equals(limit, #request.stdin)
+            payload[field] = payload[field] .. 'x'
+            refused_request(operation, payload)
+        end
+    end)
+end)
+
 describe('remote producer replies', function()
     it('requires a complete matching binding and copies harmless future fields', function()
         local response = envelope()
@@ -108,6 +266,7 @@ describe('remote producer replies', function()
     it('requires recognized matching exit and response codes', function()
         for _, case in ipairs({ { 2, 'invalid', 'refused' }, { 3, 'unavailable', 'unavailable' },
             { 4, 'superseded', 'refused' }, { 4, 'conflict', 'refused' }, { 4, 'stale', 'refused' },
+            { 4, 'not-registered', 'refused' }, { 4, 'desktop-active', 'refused' },
             { 5, 'uncertain', 'uncertain' }, { 9, 'ok', 'unavailable' }, { 0, 'uncertain', 'unavailable' } }) do
             local response = { Version = 1, Code = case[2], Error = 'reason' }
             assert.equals(case[3], Model.classify_reply('register', case[1], response, context(), vim.NIL).kind)
