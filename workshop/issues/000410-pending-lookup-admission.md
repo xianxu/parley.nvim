@@ -73,6 +73,12 @@ PR #333 exists. TL 828e035c authorized a disposable copied operator-profile live
 
 Recorded suite lease-1901041664, attempt 1f75cea859f261b4e87927ca0d433a4f, is queued normally on pushed 11c41b7b. Initial FIFO position 14 behind two Pair runs. Log: common Git dir `sdlc/test-stats/inflight/1f75cea859f261b4e87927ca0d433a4f/run.log`. Per tl-worker's explicit overlap rule, the close review may run while this check is queued; a passing recorded final-code suite still precedes live acceptance and landing. No duplicate runner, stage or restart.
 
+### 2026-10-22 — R1 REWORK; existing-controller correction proposed
+
+Boundary review returned Critical BR-1 (`admission-handoff-covers-existing-controllers`): production attaches session-sync before S1, while our native helper detached it. Existing-controller adoption returns without acquiring, and its earlier legacy callback can establish tokenless protection; observed saved edits then skip acquisition because that legacy turn reads operator. The review reproduced clean and saved variants on both runtimes, zero producer acquisitions and stale first input. Source inspection confirms this handoff gap. No disposition yet; correction requires native red/green evidence and another boundary review.
+
+Cancelled our obsolete queued suite through `sdlc local-check cancel --run lease-1901041664`; no other runner touched. Proposed plan Revision routes the earlier legacy callback through S1's one input scope, defers tokenless unknown-period writes, and handles adoption into existing controllers with the original baseline/deadline. It explicitly enumerates pre-owned/foreign legacy proof rather than assuming every existing controller is empty. Waiting for TL approval of this mechanism correction before more code. Disposable profile fixture is statically prepared but unrun at `/Volumes/TestScratch/tmp/parley.nvim-slot4/parley-410-profile.H9qNMO/`; no :0 stage or live check held.
+
 ## Revisions
 
 ### 2026-10-22 — distinguish implementation checklist from landing evidence
