@@ -328,3 +328,23 @@ TL b5c63266 approved refused-only local i/a/o/I/A/O retry maps and
 until admission succeeds or the approved unavailable outcome. Plan Revision
 records the recovery delta. Pure state owner and tests delegated; IO integration
 remains in this session. No live stage is held.
+
+### 2026-10-22 — R1 implementation and targeted evidence
+
+The private operator_admission owner now owns baseline/proof/token/outcome
+transitions; session_sync dispatches its IO effects and feeds witnessed outcomes.
+All direct history writes are removed, including observed edits and move
+restore/rebase. Refused-only native entry maps and :ParleySessionRetry share
+that dispatcher, restore displaced mappings, and keep the buffer blocked until
+admitted. A retained journal may restore only its exact validated witness
+before replaying a previously completed release.
+
+Native BR-1/control and retry matrix: 13 pass/0 fail/0 errors. Pure tests initially
+12 pass on both runtimes; expanded to 14 with explicit stale/duplicate outcome
+acceptance, including a reentrant acquire superseding a release. The shell now
+rejects an ignored outcome instead of reporting stale release success. Added
+native stale-release and queued retry freshness cases for the next pass.
+Preferred mapped session-sync pass is green (all-final.log; includes replay
+restoration correction); 0.11 mapped pass is running on current code. Lint was
+0 warnings/0 errors over 822 files before the outcome refinement; rerunning.
+Logs: /Volumes/TestScratch/parley-408-owner-fs58vfkw/. No stage held.

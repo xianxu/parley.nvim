@@ -28,6 +28,7 @@ A decoded result must prove the requested registration identity, canonical file 
 | Name | Lives in | Status | Wraps |
 | --- | --- | --- | --- |
 | `operator_lock` — Couch process seam | `lua/parley/couch.lua` | new | bounded synchronous acquire using the existing process owner/deadline |
+| Admission history and transitions | `lua/parley/operator_admission.lua` | new | pure six-phase owner, copied snapshots and witnessed IO effects |
 | `attach` — insert admission and validated move restoration | `lua/parley/session_sync.lua` | modified | InsertEnter and late attachment, existing owned lock/baseline state |
 | Native freshness | `lua/parley/session_sync.lua` | modified | checktime, FileChangedShell/native reread and window-view restoration |
 | Stateful fake Couch | `tests/helpers/fake_couch.lua` | modified | delayed acquire, ack success/refusal/timeout, external write before ack |
@@ -262,7 +263,7 @@ policy stay unchanged. Await TL approval before production edits.
 | move restore/rebase | proof-restored/rebased live turn | adopt only validated journal witness; translate baseline only when equal to preimage |
 
 Operator mapping remains waiting / protected / editable-not-locked / refused;
-existing leave-insert-and-retry and explicit submit actions remain. Acquire is
+refused-only native retry mappings and the explicit retry/submit actions remain (recovery Revision below). Acquire is
 synchronous and bounded; no child outlives return, so no late process callback
 can apply a reply. Match outcome generation/turn against the active intent;
 detach discards the instance, and observation/refresh cannot retire history.

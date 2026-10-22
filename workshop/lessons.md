@@ -923,3 +923,13 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   that accepts an exact local witness must require that witness to exist before
   comparing bytes. Exercise an unreadable on-disk sidecar with no local witness,
   in addition to ordinary foreign replacement cases.
+
+## 2026-10-22 (#408 — refusal is not history retirement)
+
+- Keep an edit turn's original baseline through unavailable and refused retries,
+  even after auto-save. Status observation cannot prove release; one private
+  transition owner must arbitrate acquisition, freshness, release and move
+  restoration. Test the complete failure/retry sequence, not each flag alone.
+- A non-modifiable buffer refuses native i before InsertEnter. A recovery action
+  attached only to InsertEnter is unreachable after refusal. Test recovery with
+  actual input and preserve the native action for every supported retry key.
