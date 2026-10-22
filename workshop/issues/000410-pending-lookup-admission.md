@@ -42,8 +42,8 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 ## Plan
 
 - [x] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
-- [ ] Complete R1 production-order red/green through the revised one-owner handoff, including the exact owned legacy-proof exception; retain original deadline and history.
-- [ ] Reverify both runtimes, counted effects, conformance/docs and guards on the corrected implementation; recorded suite and post-review live acceptance still precede landing.
+- [x] Complete R1 production-order red/green through the revised one-owner handoff, including the exact owned legacy-proof exception; retain original deadline and history.
+- [x] Complete corrected implementation and local verification preparation on both runtimes, counted effects, conformance/docs and guards; recorded suite and post-review live acceptance remain required before landing (Log).
 
 ## Estimate
 
@@ -108,6 +108,8 @@ TL f0654bf4 approved the owner-acquisition continuation, requested the retire-le
 Production-order native red reproduced unconfirmed first input from a pre-owned legacy turn. Pure-owner sequences red 19/6/0 then green 25/0/0; logs `/Volumes/TestScratch/parley-410-couch-2qky079j/owner-{red,green}.log`. The integrated preferred focus passed 14 native cases plus owner/Couch and affected architecture guards (`/tmp/parley-410-r1-green.log`). Existing controllers now join S1 before tokenless writes, observation anchors unknown-period history in the same owner, and adoption into existing/new controllers uses the exact scope. Internal legacy_release keeps history through exact-byte removal and emits the registered acquire without idle/reset or intermediate gate restoration.
 
 Expanded native verification adds post-removal unavailable/refused retries and standalone typed S1 attachment. The latter red caught using the header-aware is_session_sync predicate where the plan requires an actually attached controller; now checks the existing identity accessor. The timeout fixture writes protection before delaying its reply, so lack of acknowledgment cannot assert absent sidecar; corrected that oracle to exercise same-turn retry. Operator stale-rename diagnosis traced the stall inside nvim_buf_set_name before callback return: typed unknown legacy migration is deliberately refused by the existing #359 preflight. The preflight also refuses unknown prose, so the stale-name test narrowly ignores BufFilePre/Post while changing the name, modeling external name invalidation without exercising migration admission. Migration policy is unchanged. Both-runtime final checks, lint, recorded suite, fresh boundary review and live acceptance remain outstanding. No :0 stage held.
+
+Final-code evidence at 6d34f535: preferred full native 159/0/0; operator focused new native 17/0/0 (including all four pre-owned outcomes and 4/8 counters); owner 25/0/0; prior integrated focus includes Couch 25/0/0 and affected architecture guards. Whole-tree lint 822 files, zero warnings/errors. Disposable real/fake producer conformance and corrupted-fake negative control pass. Full operator native regression is running separately. Recorded suite lease-3241185062, attempt 58772d90cf8ca491fcf530bfd75bc091, is queued normally at position 12 on the pushed code head. Per the permitted overlap, fresh close review may run while it queues; no recorded-suite pass, live acceptance or landing is claimed. Prepared copied-profile fixture now preserves the parent's production legacy-before-S1 order and remains unrun.
 
 ## Revisions
 
