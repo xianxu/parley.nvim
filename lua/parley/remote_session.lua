@@ -129,10 +129,11 @@ local function effects(record, list)
                 record.pending = record.pending - 1
                 if effect.kind == 'register' then
                     dispatch(record, { type = 'reply', witness = effect.witness, result = result })
-                    if not retired(record) and result.kind ~= 'confirmed' then
+                    local accepted = record.owner:snapshot().result
+                    if not retired(record) and accepted.kind ~= 'confirmed' then
                         notify(record, 'Remote view unavailable; reopen the file to retry')
                     end
-                    report(record, result)
+                    report(record, accepted)
                 end
                 prune(record)
             end, record.options.client)

@@ -9,6 +9,7 @@
 - Test retirement at each async resource boundary, including after the kernel listener exists but before its durable marker is finished. Ending the resource lifetime and reporting the caller's completion are separate obligations.
 - A shared acquisition handle cannot cancel a consumer's later transaction. Retain the exact reservation/listen/publication handle until its callback is delivered, and prove slot reuse while another consumer keeps the shared resource alive.
 - Capture created-file and directory identity in the native callback before a canceled coroutine resumes. Freeze the first created inode: an fd number may be reused during later reads. Identical bytes at a replacement inode are foreign, not ownership proof.
+- When a model rejects external evidence, callbacks, cached results and notices must consume its accepted outcome rather than the transport's raw reply. Test their agreement with a transport-valid acknowledgment that fails the model's fuller identity check.
 
 
 ## 2026-10-16 (#353 — displayed ancestry and native history)

@@ -133,6 +133,40 @@ describe('private editor attachment dispatcher', function()
         assert.equals(0, vim.fn.filereadable(root .. '/sent'))
     end)
 
+    it('reports only the model outcome when a confirmed acknowledgment names a different file', function()
+        local buf, registration = identity('mismatched-canonical-file')
+        local registry = require('parley.document_registry')
+        local editor = registry.editor
+        local registrations, unregisters = 0, 0
+        registry.editor = function(operation, payload, witness, callback, client_options)
+            if operation == 'register' then registrations = registrations + 1 end
+            if operation == 'unregister' then unregisters = unregisters + 1 end
+            return editor(operation, payload, witness, function(result)
+                if operation == 'register' and result.kind == 'confirmed' then
+                    result.binding.File = root .. '/another-document.md'
+                end
+                callback(result)
+            end, client_options)
+        end
+        local result = attach(buf, registration)
+        assert.equals('uncertain', result.kind)
+        assert.is_nil(result.binding)
+        local state = frontend.snapshot(buf)
+        assert.equals('unconfirmed', state.phase)
+        assert.same(state.result, result)
+        assert.equals(1, #notices)
+        assert.is_truthy(notices[1]:find('Remote view unavailable', 1, true))
+        assert.is_true(vim.bo[buf].modifiable)
+        assert.is_false(vim.bo[buf].modified)
+        assert.equals('socket', uv.fs_lstat(state.context.Socket).type)
+        assert.same(result, attach(buf, registration))
+        assert.equals(1, registrations)
+        assert.equals(1, #notices)
+        frontend.detach(buf)
+        assert.is_true(vim.wait(arrival.MS, function() return not uv.fs_lstat(state.context.Socket) end, 10))
+        assert.equals(0, unregisters)
+    end)
+
     it('refuses unknown membership before allocating a directory or spawning a command', function()
         local buf, registration = identity('ordinary')
         registration.Namespace = nil

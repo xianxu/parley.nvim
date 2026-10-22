@@ -276,6 +276,12 @@ function M.new(context)
             local result = event.result
             if type(result) ~= 'table' then result = { kind = 'unavailable' } end
             local owned = result.kind == 'confirmed' and valid_binding(result.binding, tuple)
+            -- Transport validation lacks the pending canonical File. Store the
+            -- owner's accepted outcome, never a confirmation it cannot own.
+            if result.kind == 'confirmed' and not owned then
+                result = { kind = 'uncertain', code = 'uncertain',
+                    error = 'confirmed editor binding is malformed or does not match pending attachment' }
+            end
             -- A stale request can prove exact ownership for cleanup, never activation.
             if event.witness ~= state.witness then
                 if owned and state.phase == 'retired' then cleanup(effects, result.binding) end

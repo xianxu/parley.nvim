@@ -400,6 +400,106 @@ describe('remote attachment lifecycle', function()
             assert.same({ { kind = 'stop_listener' } }, model:dispatch({ type = 'detach' }))
         end
     end)
+    it('normalizes a producer confirmation of a different canonical file to uncertain ownership', function()
+        local response = envelope()
+        response.EditorEndpoint.File = '/repo/renamed.md'
+        -- File is resolved by the producer, so it is absent from the outbound
+        -- register request and can pass transport validation without matching
+        -- the buffer's pending canonical file. The owner must decide this.
+        local transport = Model.classify_reply('register', 0, response, register_request(), vim.NIL)
+        assert.equals('confirmed', transport.kind)
+        local model = Model.new(context())
+        assert.same({}, reply(model, publish(model), transport))
+        local state = model:snapshot()
+        assert.equals('unconfirmed', state.phase)
+        assert.equals('uncertain', state.result.kind)
+        assert.equals('uncertain', state.result.code)
+        assert.is_string(state.result.error)
+        assert.matches('binding', state.result.error)
+        assert.is_nil(state.result.binding)
+        assert.is_nil(state.binding)
+        assert.equals('confirmed', transport.kind)
+        assert.same({ { kind = 'stop_listener' } }, model:dispatch({ type = 'detach' }))
+    end)
+
+    for _, mismatch in ipairs({
+        { 'Namespace', '/other' }, { 'DocumentID', string.rep('d', 32) },
+        { 'EditorIncarnation', string.rep('e', 32) }, { 'AttachID', '1' },
+        { 'PID', 43 }, { 'Socket', '/tmp/other.sock' }, { 'Buffer', 8 }, { 'Mode', 'headless' },
+    }) do
+        it('stores uncertain rather than confirmed for a mismatching ' .. mismatch[1], function()
+            local other = binding()
+            other[mismatch[1]] = mismatch[2]
+            local model = Model.new(context())
+            local result = { kind = 'confirmed', code = 'ok', binding = other }
+            assert.same({}, reply(model, publish(model), result))
+            local accepted = model:snapshot()
+            assert.equals('unconfirmed', accepted.phase)
+            assert.equals('uncertain', accepted.result.kind)
+            assert.is_string(accepted.result.error)
+            assert.is_true(#accepted.result.error > 0)
+            assert.is_nil(accepted.result.binding)
+            assert.is_nil(accepted.binding)
+            assert.same({ { kind = 'stop_listener' } }, model:dispatch({ type = 'detach' }))
+        end)
+    end
+
+    it('never exposes malformed confirmed bindings or unregisters them after retirement', function()
+        local malformed = { {}, { BindingGeneration = string.rep('c', 32) } }
+        for _, field in ipairs({ 'Namespace', 'DocumentID', 'EditorIncarnation', 'AttachID', 'PID',
+            'ProcessIdentity', 'Socket', 'Buffer', 'Mode', 'BindingGeneration', 'File' }) do
+            local value = binding(); value[field] = nil
+            malformed[#malformed + 1] = value
+        end
+        for _, bad in ipairs(malformed) do
+            for _, retired in ipairs({ false, true }) do
+                local model = Model.new(context())
+                local effect = publish(model)
+                if retired then model:dispatch({ type = 'detach' }) end
+                assert.same({}, reply(model, effect, { kind = 'confirmed', binding = bad }))
+                local state = model:snapshot()
+                assert.equals(retired and 'retired' or 'unconfirmed', state.phase)
+                assert.equals('uncertain', state.result.kind)
+                assert.is_nil(state.result.binding)
+                assert.is_nil(state.binding)
+                assert.same({}, reply(model, effect, confirmed()))
+            end
+        end
+    end)
+
+    it('keeps rejected late canonical-file proof uncertain and leaves every foreign generation untouched', function()
+        local other = binding(); other.File = '/repo/successor.md'
+        local model = Model.new(context())
+        local effect = publish(model)
+        model:dispatch({ type = 'detach' })
+        assert.same({}, reply(model, effect, { kind = 'confirmed', binding = other }))
+        local state = model:snapshot()
+        assert.equals('retired', state.phase)
+        assert.equals('uncertain', state.result.kind)
+        assert.is_nil(state.result.binding)
+        assert.same({}, model:dispatch({ type = 'close' }))
+    end)
+
+    it('accepts an exact retry after rejected proof and preserves copied exact cleanup evidence', function()
+        local model = Model.new(context())
+        local other = binding(); other.File = '/repo/other.md'
+        reply(model, publish(model), { kind = 'confirmed', binding = other })
+        assert.equals('uncertain', model:snapshot().result.kind)
+        local retry = model:dispatch({ type = 'retry' })[1]
+        assert.equals(context().AttachID, retry.request.AttachID)
+        local proof = confirmed()
+        reply(model, retry, proof)
+        local state = model:snapshot()
+        assert.equals('active', state.phase)
+        assert.equals('confirmed', state.result.kind)
+        assert.same(binding(), state.result.binding)
+        state.result.binding.File = '/mutated-snapshot'
+        proof.binding.BindingGeneration = string.rep('f', 32)
+        local effects = model:dispatch({ type = 'detach' })
+        assert.equals('unregister', effects[2].kind)
+        assert.equals(binding().BindingGeneration, effects[2].request.Entries[1].BindingGeneration)
+    end)
+
     it('ignores unissued witnesses even after retirement', function()
         local model = Model.new(context())
         publish(model)

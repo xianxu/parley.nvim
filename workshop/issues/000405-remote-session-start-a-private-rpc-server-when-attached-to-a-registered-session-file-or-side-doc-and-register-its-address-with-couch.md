@@ -106,6 +106,12 @@ R3 on1b91aadf returned FIX-THEN-SHIP, disposing BR-1..BR-5 with executable count
 
 M2 preparation only: scratch native traces on both supported versions show checktime/autoread produces BufReadPre/Post, on_reload and FileChangedShellPost without on_detach/BufUnload; explicit edit/edit! or bunload/reopen produces on_detach, BufUnload, BufReadPre/Post. Managed session_sync.with_buffer_read(edit!) keeps the guard true through those events, so it preserves authority but must reinstall the observer. Traces are retained in parley-read-events.5Hsu87 under TestScratch. No M2 code or reload-policy change.
 
+### 2026-10-22 — BR-6 accepted-outcome correction
+
+Pure RED34pass/12fail; model now normalizes every confirmed-but-unowned binding before its sole result assignment to uncertain, useful error, no binding evidence. All46 pure cases pass both versions, covering the transport-valid canonical-File gap, eight other pending-identity mismatches, malformed binding fields before/after retirement, no false unregister, exact retry and copied cleanup evidence (parley-405-br6-model.m8PrKc logs). Dispatcher RED25pass/1fail returned confirmed instead of uncertain; it now uses only the owner snapshot result for callback and notice. New regression also asserts duplicate attach returns that same accepted result without another register, local editing remains unchanged and rejection never unregisters an unowned binding. The reply/report sweep found duplicate attach already uses the model snapshot; unregister replies are cleanup completion only, and startup reports are locally constructed outcomes. Final canonical focused mapping184pass/0fail/0errors on both0.12.5 and0.11.7 with clean censuses (parley-405-br6-focused-final.log and -final-0117.log). Atlas and lesson now describe the sole accepted-outcome boundary.
+
+Final make lint0warnings/0errors in834files (parley-405-br6-lint.log). Endpoint native fake conformance and deliberate corrupt-identity negative control pass both versions after BR-6 (parley-405-editor-conformance-{preferred,0117}-br6.log). Real acceptance still waits for producer and shared bridge; no stage, real-producer claim or M2 wiring. Checkpoint before the fixed-head recorded suite and TL-authorized milestone-close round.
+
 ## Revisions
 
 ### 2026-10-22 — producer prerequisite and outside-pane discovery
