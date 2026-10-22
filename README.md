@@ -164,6 +164,7 @@ In Couch, the list defaults to submits from this pane’s slot. **Ctrl+A** toggl
 (`attention_finder_mappings.toggle_scope`); the title shows the scope. Legacy entries without a slot appear everywhere,
 and outside Couch the finder shows all slots. A file belongs to its latest submitting slot; new side docs inherit their parent’s slot.
 Side docs appear beneath their parents, indented two spaces per level. Searching a child keeps its parent chain visible; children whose parents are absent appear at the top level.
+**Ctrl+R** clears every shown row immediately, including parent context, respecting the scope and typed filter. Hidden entries stay; a later submit brings a cleared file back. The finder reports the count without a confirmation prompt. Configure `attention_finder_mappings.clear_shown`; inside this finder, Ctrl+R replaces native register paste.
 
 ## Learn by chatting
 

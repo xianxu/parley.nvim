@@ -656,6 +656,7 @@ local config = {
 	},
 	attention_finder_mappings = {
 		toggle_scope = { shortcut = "<C-a>" },
+		clear_shown = { shortcut = "<C-r>" },
 	},
 
 	-- memory preferences: per-tag user preference profiles from chat history
