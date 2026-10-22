@@ -5,6 +5,7 @@ local Deadline = require("tests.helpers.spec_deadline")
 local Progress = require("tests.helpers.spec_progress")
 local Jobs = require("tests.helpers.spec_jobs")
 local Identity = require("tests.helpers.process_identity")
+local Processes = require("tests.helpers.test_processes")
 local function absolute(path)
     return vim.fn.resolve(vim.fn.fnamemodify(path,':p'))
 end
@@ -55,8 +56,16 @@ function M.execute(path, options)
     -- End everything the spec child started (#402). It leads its own process
     -- group, which its vim.system and uv.spawn children inherit; each jobstart
     -- child leads a group of its own and is recorded in `jobs` (spec_jobs).
-    local jobs = vim.fn.tempname() .. "-spec-jobs"
-    vim.fn.mkdir(jobs, "p")
+    local context = vim.env.PARLEY_TEST_PROCESS_DIR
+    local jobs, scope_err
+    if context then jobs, scope_err = Processes.scope(context)
+    else
+        jobs = vim.fn.tempname() .. "-spec-jobs"
+        vim.fn.mkdir(jobs, "p", 448)
+    end
+    if not jobs then timer:close(); return { code = 125, reason = scope_err, completed = 0, reaped = false } end
+    local ticket, ticket_err = Processes.prepare(jobs)
+    if not ticket then timer:close(); return { code = 125, reason = ticket_err, completed = 0, reaped = false } end
     local function log(message) output("stderr", message) end
     -- The spec child's group, under the same identity guard as its jobs.
     local function signal_group(signal)
@@ -87,12 +96,18 @@ function M.execute(path, options)
             result = exited
         end)
         child_start = Identity.start_time(child.pid)
+        local recorded, why = Processes.complete(ticket, child.pid)
+        if not recorded then error("spec child birth unconfirmed: " .. tostring(why)) end
     end)
     if not ok then
         timer:close()
-        vim.fn.delete(jobs, "rf")
+        if child then
+            child:kill("sigkill")
+            local ended = child:wait(3000)
+            if ended and ended.code then Processes.abort(ticket) end
+        else Processes.abort(ticket) end
         output("stderr", "cannot start spec child: " .. tostring(err) .. "\n")
-        return { code = 125, reason = tostring(err), completed = 0, reaped = true }
+        return { code = 125, reason = tostring(err), completed = 0, reaped = false }
     end
     -- A runner told to stop takes its spec's group with it; nvim's own
     -- deadly-signal handling then ends the runner.
@@ -121,7 +136,12 @@ function M.execute(path, options)
     end
     for _, watcher in ipairs(watchers) do watcher:stop(); watcher:close() end
     timer:stop(); timer:close()
-    vim.fn.delete(jobs, "rf")
+    local cleanup = Processes.reconcile(jobs)
+    for _, message in ipairs(cleanup.messages) do log(message .. "\n") end
+    if cleanup.ok then
+        local pruned, why = Processes.prune(jobs)
+        if not pruned then cleanup.ok = false; log("cannot retire spec scope: " .. tostring(why) .. "\n") end
+    end
     reader.finish()
     local snapshot = Deadline.snapshot(state)
     local expired = snapshot.status == "stalled" or snapshot.status == "absolute-expired"
@@ -130,16 +150,17 @@ function M.execute(path, options)
             :format(path, snapshot.status, snapshot.sequence, snapshot.idle_ms, snapshot.absolute_ms))
     end
     local code = result and result.code or 125
+    if (not cleanup.ok or cleanup.leaked) and code == 0 then code = 125 end
     if result and (result.signal or 0) > 0 then code = 128 + result.signal end
     return { code = expired and 124 or code,
         signal = result and result.signal, reason = expired and snapshot.status or nil,
-        completed = snapshot.sequence, reaped = result ~= nil, pid = child.pid }
+        completed = snapshot.sequence, reaped = result ~= nil and cleanup.ok, pid = child.pid }
 end
 
 function M.run(path)
     if vim.env.PARLEY_TEST_JITSTAT=='1' then require('tests.helpers.jit_watch').silence() end
     local result = M.execute(path)
-    if not result.reaped then io.stderr:write("spec child exit was not observed: " .. tostring(result.pid) .. "\n") end
+    if not result.reaped then io.stderr:write("spec process cleanup was not confirmed: " .. tostring(result.pid) .. "\n") end
     return vim.cmd(result.code == 0 and "0cq" or "1cq")
 end
 return M

@@ -53,6 +53,12 @@ function Child:input(keys)
     return self:request("nvim_input", keys)
 end
 
+--- Send an RPC notification: there is no reply to wait for. Retained ownership
+--- still requires the caller/runner to join the child, including detached probes.
+function Child:notify(method, ...)
+    return vim.rpcnotify(self.channel, method, ...)
+end
+
 --- End the child and reap it.
 function Child:stop()
     pcall(vim.fn.jobstop, self.channel)
@@ -64,7 +70,8 @@ end
 --- puts the repository first (default: appended).
 function M.start(options)
     options = options or {}
-    local channel = vim.fn.jobstart({ vim.v.progpath, "--clean", "--embed", "--headless", "-i", "NONE" }, { rpc = true })
+    local channel = vim.fn.jobstart({ vim.v.progpath, "--clean", "--embed", "--headless", "-i", "NONE" },
+        { rpc = true, detach = options.detach })
     assert(channel > 0, "could not start an embedded nvim")
     local child = setmetatable({ channel = channel, pid = vim.fn.jobpid(channel) }, Child)
     -- A failed setup still ends the child: the caller never got it to stop.
@@ -73,6 +80,8 @@ function M.start(options)
             child:request("nvim_ui_attach", options.ui[1], options.ui[2], { rgb = true })
         end
         child:exec(options.rtp == "prepend" and "vim.opt.rtp:prepend(...)" or "vim.opt.rtp:append(...)", vim.fn.getcwd())
+        child:exec([[local root = ...; package.path = root .. '/?.lua;' .. package.path
+            require('tests.helpers.spec_jobs').install()]], vim.fn.getcwd())
     end)
     if not ok then
         child:stop()

@@ -45,4 +45,17 @@ function M.start_time(pid)
     return fields[20] -- field 22 overall; the name and pid precede `rest`
 end
 
+--- Absence requires an explicit ESRCH; a failed identity read alone is unknown.
+--- The second existence probe closes the ordinary exit-during-read race.
+function M.observe(pid)
+    if type(pid) ~= "number" or pid <= 0 or pid > 2147483647 or pid % 1 ~= 0 then
+        return { kind = "unknown", reason = "invalid pid" }
+    end
+    local start = M.start_time(pid)
+    if start then return { kind = "live", start = start } end
+    local _, _, err = (vim.uv or vim.loop).kill(pid, 0)
+    if err == "ESRCH" then return { kind = "absent" } end
+    return { kind = "unknown", reason = "native identity unreadable" }
+end
+
 return M

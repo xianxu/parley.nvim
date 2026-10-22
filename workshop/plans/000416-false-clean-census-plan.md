@@ -145,3 +145,10 @@ Proposed to the TL. No implementation authorized by this document alone. The ret
 ### 2026-10-22 — TL approval and plan-quality PQ-1/PQ-2
 
 TL approved the retained registry with checkout-local placement, explicit bounds/pruning and #405 coordination. The proposed `.test-processes/` already meets placement. PQ-1 adds a **durable pending ticket before every spawn**, making death before PID publication recover as unknown, never clean. PQ-2 replaces prose case inventories with named functions and adversarial/mechanical strategies. Native spawn interruption is a controlled seam, not a sleep race. Parley.nvim:1 confirmed callback and clean-child bootstrap constraints, now included explicitly.
+
+
+### 2026-10-22 — implementation bounds and compatibility details
+
+The shared registry publishes immutable per-child JSON records, up to 4096 slots of 256 bytes per outstanding spec scope (1 MiB), with at most 64 outstanding scopes per run and 256 retained runs. Publication can temporarily use one additional bounded file per slot. Root admission/pruning and Lua observation reject symlinks, foreign owners and group/other-writable directories. Existing pid/start jobs ledgers remain readable with a 1 MiB bound. Empty scopes prune after observed reconciliation; prior empty run roots prune at the next lease admission. Retained unknown/corrupt records are never wiped with scratch.
+
+The native RPC architecture guard requires even adversarial census spinners to use the central Embedded helper. Its optional detach and no-reply notify method support these probes; clean children install the existing jobstart wrapper explicitly. The wrapper chains the original callback exactly once, including already-delivered exit callbacks; joined native death may retire a pending ticket for a child that exited too quickly to publish identity. This preserves #405's Child-only fixture authority. Publication preserves unknown nested members including JSON null, and retirement re-reads the original bytes before unlinking so it cannot erase a newer birth.

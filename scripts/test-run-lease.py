@@ -5,8 +5,63 @@ import fcntl
 import os
 import pathlib
 import sys
+import stat
+import tempfile
+from itertools import islice
 
 FD_ENV = 'PARLEY_TEST_LEASE_FD'
+CONTEXT_ENV = 'PARLEY_TEST_PROCESS_DIR'
+MAX_RUNS = 256
+MAX_SCOPES = 64
+
+
+def owned_directory(path):
+    info = path.lstat()
+    return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+
+
+def run_context(root, reuse=False):
+    """Retain bounded birth evidence outside the scratch cleaned by make."""
+    base = pathlib.Path(root).resolve() / '.test-processes'
+    if not reuse:
+        base.mkdir(mode=0o700, exist_ok=True)
+    if not owned_directory(base):
+        raise ValueError('unowned test process registry')
+    if reuse:
+        value = os.environ.get(CONTEXT_ENV)
+        context = pathlib.Path(value) if value else None
+        if context is None or context.parent != base or context.name == '..':
+            raise ValueError('missing or foreign inherited test process context')
+        if not owned_directory(context):
+            raise ValueError('invalid inherited test process context')
+        return str(context)
+    # Only empty owned directories can retire here. Pending/corrupt evidence
+    # belongs to the independent census, never to scratch preparation.
+    runs = list(islice(base.iterdir(), MAX_RUNS + 1))
+    if len(runs) > MAX_RUNS:
+        raise ValueError('retained test run limit reached; inspect unresolved census evidence')
+    for run in runs:
+        if not owned_directory(run):
+            continue
+        scopes = list(islice(run.iterdir(), MAX_SCOPES + 1))
+        if len(scopes) > MAX_SCOPES:
+            continue
+        for scope in scopes:
+            if not owned_directory(scope):
+                continue
+            try:
+                scope.rmdir()
+            except OSError:
+                pass
+        try:
+            run.rmdir()
+        except OSError:
+            pass
+    if sum(1 for _ in base.iterdir()) >= MAX_RUNS:
+        raise ValueError('retained test run limit reached; inspect unresolved census evidence')
+    context = tempfile.mkdtemp(prefix='run-', dir=base)
+    os.environ[CONTEXT_ENV] = context
+    return context
 
 
 def inherited(root):
@@ -56,11 +111,14 @@ def main():
     if args.require:
         if inherited(args.root) is None:
             parser.error('test lease required; enter through a public test target')
+        run_context(args.root, reuse=True)
         return
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     if not command:
         parser.error('a command is required after --')
+    reuse = inherited(args.root) is not None
     enter(args.root)
+    run_context(args.root, reuse)
     os.execvp(command[0], command)
 
 

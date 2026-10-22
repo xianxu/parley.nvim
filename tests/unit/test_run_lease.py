@@ -2,6 +2,7 @@
 """#409: real make/flock/census ordering in disposable contributor checkouts."""
 import os
 import fcntl
+import importlib.util
 import pathlib
 import re
 import shutil
@@ -12,9 +13,13 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WRAPPER = ROOT / 'scripts/test-run-lease.py'
+SPEC = importlib.util.spec_from_file_location('test_run_lease', WRAPPER)
+Lease = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(Lease)
 
 
 class RunLeaseTests(unittest.TestCase):
@@ -64,6 +69,11 @@ class RunLeaseTests(unittest.TestCase):
         if WRAPPER.exists():
             shutil.copyfile(WRAPPER, root / 'scripts/test-run-lease.py')
         shutil.copyfile(ROOT / 'scripts/reap-test-orphans.py', root / 'scripts/reap-test-orphans.py')
+        shutil.copyfile(ROOT / 'scripts/test-process-census.lua', root / 'scripts/test-process-census.lua')
+        helpers = root / 'tests/helpers'
+        helpers.mkdir()
+        for module in ('test_processes', 'test_process_model', 'process_identity'):
+            shutil.copyfile(ROOT / ('tests/helpers/' + module + '.lua'), helpers / (module + '.lua'))
         mapping = root / 'scripts/spec_test_map.sh'
         mapping.write_text('#!/bin/sh\necho tests/unit/gated_spec.lua\n')
         mapping.chmod(0o755)
@@ -151,6 +161,158 @@ qa!
                 'p.with_suffix(".ready").touch()\n'
                 'while not p.with_suffix(".release").exists(): time.sleep(0.01)\n',
                 str(self.base / name)]
+
+    def test_context_is_checkout_local_and_reused_by_recursive_make(self):
+        root = self.checkout('context recursive make')
+        init = root / 'tests/minimal_init.vim'
+        init.write_text('lua vim.fn.writefile({vim.env.PARLEY_TEST_PROCESS_DIR}, vim.env.GATE .. ".context")\nqa!\n')
+        process, _, err = self.make(root, 'context')
+        self.assertEqual(process.wait(timeout=15), 0, err.read_text())
+        context = pathlib.Path((self.base / 'context.context').read_text().strip())
+        self.assertEqual(context.parent, root / '.test-processes')
+        self.assertTrue(context.is_dir())
+        self.assertEqual(list(context.parent.iterdir()), [context], 'recursive make allocated a second run')
+
+    def test_nested_independent_roots_allocate_independent_contexts(self):
+        root, other = self.checkout('context one'), self.checkout('context two')
+        code = ('import os,subprocess,sys; print(os.environ["PARLEY_TEST_PROCESS_DIR"],flush=True); '
+                'raise SystemExit(subprocess.call(sys.argv[1:], '
+                'pass_fds=(int(os.environ["PARLEY_TEST_LEASE_FD"]),)))')
+        nested = [sys.executable, str(WRAPPER), '--root', str(other), '--', sys.executable,
+                  '-c', 'import os; print(os.environ["PARLEY_TEST_PROCESS_DIR"])']
+        process, out, err = self.wrapped(root, [sys.executable, '-c', code] + nested, 'contexts')
+        self.assertEqual(process.wait(timeout=10), 0, err.read_text())
+        contexts = [pathlib.Path(line) for line in out.read_text().splitlines()]
+        self.assertEqual([path.parent for path in contexts],
+                         [root / '.test-processes', other / '.test-processes'])
+        self.assertTrue(all(path.is_dir() for path in contexts))
+
+    def test_reentry_and_require_refuse_missing_or_foreign_context(self):
+        root = self.checkout('invalid context')
+        base = root / '.test-processes'
+        base.mkdir(mode=0o700)
+        valid = base / 'valid'
+        valid.mkdir(mode=0o700)
+        foreign = self.base / 'foreign'
+        foreign.mkdir()
+        alias = base / 'alias'
+        alias.symlink_to(foreign, target_is_directory=True)
+        insecure = base / 'insecure'
+        insecure.mkdir(mode=0o700)
+        insecure.chmod(0o777)
+        file = base / 'file'
+        file.touch()
+        with (root / '.test-run.lock').open('w') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            for index, context in enumerate([None, '', str(foreign), str(alias), str(insecure),
+                                             str(file), str(base / 'missing'), str(base / '..'), 'relative']):
+                for require in (False, True):
+                    with self.subTest(context=context, require=require):
+                        env = dict(os.environ, PARLEY_TEST_LEASE_FD=str(lock.fileno()))
+                        env.pop('PARLEY_TEST_PROCESS_DIR', None)
+                        if context is not None:
+                            env['PARLEY_TEST_PROCESS_DIR'] = context
+                        argv = [sys.executable, str(WRAPPER), '--root', str(root)]
+                        if require:
+                            argv += ['--require']
+                        else:
+                            argv += ['--', sys.executable, '-c',
+                                     'import pathlib,sys; pathlib.Path(sys.argv[1]).touch()',
+                                     str(self.base / 'must-not-enter.ready')]
+                        process, _, err = self.start(argv, 'context-' + str(index) + str(require),
+                                                     env=env, pass_fds=(lock.fileno(),))
+                        self.assertNotEqual(process.wait(timeout=5), 0, err.read_text())
+                        self.assertIn('context', err.read_text())
+            env = dict(os.environ, PARLEY_TEST_LEASE_FD=str(lock.fileno()),
+                       PARLEY_TEST_PROCESS_DIR=str(valid))
+            process, _, err = self.start([sys.executable, str(WRAPPER), '--root', str(root), '--require'],
+                                         'valid-context', env=env, pass_fds=(lock.fileno(),))
+            self.assertEqual(process.wait(timeout=5), 0, err.read_text())
+        self.assertFalse((self.base / 'must-not-enter.ready').exists())
+
+    def test_context_prunes_only_empty_owned_directories(self):
+        root = self.checkout('prune')
+        base = root / '.test-processes'
+        base.mkdir(mode=0o700)
+        empty = base / 'empty'
+        (empty / 'empty-scope').mkdir(parents=True, mode=0o700)
+        unresolved = base / 'unresolved'
+        (unresolved / 'scope').mkdir(parents=True, mode=0o700)
+        evidence = unresolved / 'scope' / 'pending'
+        evidence.write_text('unresolved birth\n')
+        foreign = base / 'foreign'
+        (foreign / 'scope').mkdir(parents=True, mode=0o700)
+        foreign.chmod(0o777)
+        owned = base / 'owned'
+        foreign_scope = owned / 'foreign-scope'
+        foreign_scope.mkdir(parents=True, mode=0o700)
+        foreign_scope.chmod(0o777)
+        external = self.base / 'external'
+        external.mkdir()
+        symlink = base / 'symlink'
+        symlink.symlink_to(external, target_is_directory=True)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            context = pathlib.Path(Lease.run_context(root))
+        self.assertFalse(empty.exists())
+        self.assertTrue(context.is_dir())
+        self.assertEqual(evidence.read_text(), 'unresolved birth\n')
+        self.assertTrue(foreign.is_dir(), 'foreign run was pruned')
+        self.assertTrue(foreign_scope.is_dir(), 'foreign scope was pruned')
+        self.assertTrue(symlink.is_symlink())
+        self.assertTrue(external.is_dir())
+
+    def test_context_run_limit_refuses_writer_without_losing_evidence(self):
+        root = self.checkout('bounded contexts')
+        base = root / '.test-processes'
+        base.mkdir(mode=0o700)
+        for index in range(Lease.MAX_RUNS):
+            run = base / ('retained-' + str(index))
+            run.mkdir(mode=0o700)
+            (run / 'pending').write_text('unknown\n')
+        process, _, err = self.wrapped(root, self.gate_command('overflow'), 'overflow')
+        self.assertNotEqual(process.wait(timeout=10), 0, err.read_text())
+        self.assertIn('retained test run limit', err.read_text())
+        self.assertFalse((self.base / 'overflow.ready').exists())
+        self.assertEqual(len(list(base.iterdir())), Lease.MAX_RUNS)
+        self.assertTrue(all((run / 'pending').read_text() == 'unknown\n' for run in base.iterdir()))
+        # Only actual census removal of evidence makes another admission possible.
+        released = base / 'retained-0'
+        (released / 'pending').unlink()
+        with mock.patch.dict(os.environ, {}, clear=False):
+            context = pathlib.Path(Lease.run_context(root))
+        self.assertTrue(context.is_dir())
+        self.assertFalse(released.exists())
+        self.assertEqual(len(list(base.iterdir())), Lease.MAX_RUNS)
+
+    def test_pruning_preserves_foreign_owners_and_oversized_scope_sets(self):
+        root = self.checkout('pruning ownership')
+        base = root / '.test-processes'
+        base.mkdir(mode=0o700)
+        alien = base / 'alien'
+        alien.mkdir(mode=0o700)
+        owned = base / 'owned'
+        alien_scope = owned / 'alien-scope'
+        alien_scope.mkdir(parents=True, mode=0o700)
+        oversized = base / 'oversized'
+        oversized.mkdir(mode=0o700)
+        for index in range(65):
+            (oversized / str(index)).mkdir(mode=0o700)
+        lstat = pathlib.Path.lstat
+
+        def metadata(path):
+            info = lstat(path)
+            if path in (alien, alien_scope):
+                fields = list(info)
+                fields[4] = os.getuid() + 1
+                return os.stat_result(fields)
+            return info
+
+        with mock.patch.object(pathlib.Path, 'lstat', metadata), mock.patch.dict(os.environ, {}, clear=False):
+            context = pathlib.Path(Lease.run_context(root))
+        self.assertTrue(context.is_dir())
+        self.assertTrue(alien.is_dir())
+        self.assertTrue(alien_scope.is_dir())
+        self.assertEqual(len(list(oversized.iterdir())), 65)
 
     def test_different_checkouts_run_concurrently(self):
         first_root, second_root = self.checkout('one'), self.checkout('two')

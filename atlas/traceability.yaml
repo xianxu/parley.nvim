@@ -711,6 +711,9 @@ atlas:
       - tests/helpers/jit_oracle.lua
       - tests/helpers/spec_jobs.lua
       - tests/helpers/process_identity.lua
+      - tests/helpers/test_process_model.lua
+      - tests/helpers/test_processes.lua
+      - scripts/test-process-census.lua
       - tests/helpers/embedded_nvim.lua
       - tests/helpers/spec_runner.lua
       - tests/helpers/spec_deadline.lua
@@ -760,6 +763,9 @@ atlas:
       - tests/integration/embedded_nvim_spec.lua
       - tests/arch/embedded_rpc_spec.lua
       - tests/unit/spec_jobs_spec.lua
+      - tests/unit/test_process_model_spec.lua
+      - tests/unit/test_processes_spec.lua
+      - tests/integration/test_process_census_spec.lua
 
   infra/vault:
     code:

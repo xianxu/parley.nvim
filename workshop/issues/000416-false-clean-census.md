@@ -95,3 +95,16 @@ item: milestone-review design=0.02 impl=0.16
 design-buffer: 0.15
 total: 2.68
 ```
+
+
+### 2026-10-22 — retained ownership implemented; focused verification
+
+Full change-code passed: plan-quality has no open findings (PQ-1/PQ-2 addressed); estimate-quality INFO accepted the model but noted optimistic integration/verification coverage. Those checks are included in the two Lua integration components and the existing close-review allocation; measured actual will resolve the calibration.
+
+Implemented checkout-local `.test-processes/run-*` context reuse under the validated descriptor; strict context checks and owned empty-directory pruning are covered by 25 direct lease tests (all pass, 14.659s). The delegated policy's seven tests pass. Shared native reconciliation now consumes durable pre-spawn pending tickets, atomically published PID/start records, and old jobs ledgers. Unknown/corrupt evidence stays; exact PID effects require an immediately matching native identity and records retire only after observed original-incarnation death plus unchanged evidence bytes. The terminal Python census requires positive completion from the same native Lua verifier before printing clean.
+
+Five native regressions pass: ordinary-success detached leak, independent terminal orphan/TERM resistance with a same-argv foreign control and signal-free snapshot, launcher death inside birth publication, clean embedded grandchild recording, and callback/fast-child ownership. The callback test first failed because an already-reaped native job was treated as an unconfirmed birth; the wrapper now chains on_exit once, recognizes joined death, and installs once. Storage regressions first caught dropped future JSON nulls, retirement of replaced birth bytes, and writable-directory admission; all fifteen registry tests now pass after correcting those classes. Native/policy/registry run log `/tmp/parley416-storage-green.log`; original native RED `/tmp/parley416-native-red.log`; callback RED/GREEN `/tmp/parley416-callback-{red,green}.log`. Python predicate/observation tests: 14 pass, including a silent exit-zero observer that must remain unknown. Focused Lua lint and diff checks pass.
+
+The first broad mapped harness run correctly failed the new JSON-null check and the existing embedded-RPC architecture guard. Native probes now use the central Embedded helper's optional detach and notification support, keeping the guard intact; no guard exception was added. Parley.nvim:1 was informed of these small helper additions so its #405 native on_exit/joined fixture cleanup remains authoritative when either branch integrates main.
+
+Next: finish broad mapped tests on preferred 0.12.5 and affected regressions on installed 0.11.7, check retained-tree allocation/pruning bounds and late-publication controls, then push and queue one recorded suite before close. No full-suite result for #416 exists yet; no close/PR/landing claimed.

@@ -6,6 +6,8 @@ import pathlib
 import unittest
 import contextlib
 import io
+import tempfile
+import os
 from unittest.mock import patch
 
 
@@ -104,6 +106,19 @@ class CensusPureTests(unittest.TestCase):
 
 
 class CensusSamplingTests(unittest.TestCase):
+    def test_an_observer_exit_zero_without_a_positive_verdict_is_unknown(self):
+        with tempfile.TemporaryDirectory(prefix='census-observer-') as scratch:
+            root = pathlib.Path(scratch)
+            (root / '.test-processes').mkdir()
+            fake = root / 'silent-nvim'
+            fake.write_text('#!/bin/sh\nexit 0\n')
+            fake.chmod(0o700)
+            output = io.StringIO()
+            with patch.dict(os.environ, {'PARLEY_TEST_NVIM': str(fake)}), contextlib.redirect_stdout(output):
+                result = census.recorded_children(str(root), 'after', 0, False)
+            self.assertNotEqual(result, 0)
+            self.assertIn('unknown', output.getvalue())
+
     def test_invalid_later_observation_never_reports_clean_or_signals_stale_pids(self):
         initial = '999 1 python3 census\n3 1 /repo/tests/fixtures/fake\n'
         for next_sample in [('malformed table', None), (None, 'unreadable'),
