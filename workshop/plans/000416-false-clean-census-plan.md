@@ -100,27 +100,27 @@ The regression owns all its created children and uses exact-handle finally clean
 
 **Files:** `tests/unit/reap_test_orphans_pure.py`, new `tests/unit/test_process_model_spec.lua`, new `tests/integration/test_process_census_spec.lua`, `tests/helpers/process_identity.lua`.
 
-- [ ] Turn the disposable historical-argv probe into the named census regression and observe RED before changing cleanup.
-- [ ] Implement `classify` and `observe` through their function-level contract above; keep the legacy command classifier narrow.
-- [ ] Commit the regression and model.
+- [x] Turn the disposable historical-argv probe into the named census regression and observe RED before changing cleanup.
+- [x] Implement `classify` and `observe` through their function-level contract above; keep the legacy command classifier narrow.
+- [x] Commit the regression and model.
 
 ### Task 2: Retain birth evidence and reconcile every exit
 
 **Files:** new `tests/helpers/test_processes.lua`, `tests/helpers/spec_jobs.lua`, `tests/helpers/spec_runner.lua`, `tests/helpers/embedded_nvim.lua`, `scripts/test-run-lease.py`, `scripts/test-env.sh`, `Makefile.parley`, `.gitignore`, corresponding unit/native specs.
 
-- [ ] Implement pending→born→retired registration and checked persistence through the interruption seam; no spawn precedes its durable pending ticket.
-- [ ] Allocate/reuse run context under validated checkout lease; move private ledgers there and pass context through the existing environment allowlist.
-- [ ] Wire registry recording to the existing jobstart wrapper, install it explicitly in clean embedded children, and reconcile every runner return. Follow the function-level test contracts and commit tested wiring.
-- [ ] Preserve #405's on_exit callback exactly once and its Child-only fixture cleanup authority. The peer confirmed no intended edits to spec_jobs/spec_runner/process_identity/reaper; whichever lands second integrates main, never the other's unlanded branch.
+- [x] Implement pending→born→retired registration and checked persistence through the interruption seam; no spawn precedes its durable pending ticket.
+- [x] Allocate/reuse run context under validated checkout lease; move private ledgers there and pass context through the existing environment allowlist.
+- [x] Wire registry recording to the existing jobstart wrapper, install it explicitly in clean embedded children, and reconcile every runner return. Follow the function-level test contracts and commit tested wiring.
+- [x] Preserve #405's on_exit callback exactly once and its Child-only fixture cleanup authority. The peer confirmed no intended edits to spec_jobs/spec_runner/process_identity/reaper; whichever lands second integrates main, never the other's unlanded branch.
 
 ### Task 3: Independent census and landing
 
 **Files:** new `scripts/test-process-census.lua`, `scripts/reap-test-orphans.py`, `tests/integration/fixture_reaping_spec.lua`, Python/Lua census tests, `atlas/infra/test_harness.md`, `atlas/traceability.yaml`, `TOOLING.md`, `workshop/lessons.md`.
 
-- [ ] Combine the legacy census and shared retained-child verifier verdicts; any leak/unknown fails and suppresses clean, including in interrupted-registration recovery.
-- [ ] Finish native RED→GREEN and refusal/concurrency coverage through the function contracts; verify pruning and explicit writer bounds.
-- [ ] Run `python3 tests/unit/reap_test_orphans_pure.py`, `python3 tests/unit/test_run_lease.py`, then `make test-spec SPEC=infra/test_harness`; expected all pass. Run the mapped affected regressions under each exact `PARLEY_TEST_NVIM` runtime above.
-- [ ] Update atlas/traceability, tooling and lessons; log exact evidence and the #405 integration boundary.
+- [x] Combine the legacy census and shared retained-child verifier verdicts; any leak/unknown fails and suppresses clean, including in interrupted-registration recovery.
+- [x] Finish native RED→GREEN and refusal/concurrency coverage through the function contracts; verify pruning and explicit writer bounds.
+- [x] Run `python3 tests/unit/reap_test_orphans_pure.py`, `python3 tests/unit/test_run_lease.py`, then `make test-spec SPEC=infra/test_harness`; expected all pass. Run the mapped affected regressions under each exact `PARLEY_TEST_NVIM` runtime above.
+- [x] Update atlas/traceability, tooling and lessons; log exact evidence and the #405 integration boundary.
 - [ ] Push and run one recorded full suite via `sdlc local-check run --name suite`, close with measured verification, resolve the binary-owned fresh review, publish PR and enter `sdlc merge --yes` for authoritative integrated verification and landing.
 
 ## Architecture checklist

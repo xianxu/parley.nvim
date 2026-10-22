@@ -70,7 +70,9 @@ function M.read(dir)
     if file then
       for line in file:lines() do
         local pid, start = line:match("^(%d+) (%d+%.?%d*)$")
-        if pid then records[#records + 1] = { pid = tonumber(pid), start = start } end
+        if pid and tonumber(pid) > 0 and tonumber(pid) <= identity.MAX_PID then
+            records[#records + 1] = { pid = tonumber(pid), start = start }
+        end
       end
       file:close()
     end

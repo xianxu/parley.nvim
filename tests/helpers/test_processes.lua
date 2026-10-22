@@ -68,7 +68,8 @@ local function decode(body)
     if value.version ~= 1 or (value.state ~= "born" and value.state ~= "pending") then
         return nil, "unsupported registry record"
     end
-    if value.state == "born" and Model.classify(value, { kind = "absent" }) ~= "gone" then
+    if value.state == "born" and (Model.classify(value, { kind = "absent" }) ~= "gone"
+        or value.pid > Identity.MAX_PID) then
         return nil, "invalid birth record"
     end
     return value
@@ -139,7 +140,9 @@ function M.read(dir)
             for line in body:gmatch("([^\n]*)\n") do
                 local pid, start = line:match("^(%d+) (%d+%.?%d*)$")
                 local record = { version = 1, state = "born", pid = tonumber(pid), start = start }
-                if Model.classify(record, { kind = "absent" }) ~= "gone" then return nil, "malformed legacy registry" end
+                if Model.classify(record, { kind = "absent" }) ~= "gone" or record.pid > Identity.MAX_PID then
+                    return nil, "malformed legacy registry"
+                end
                 records[#records + 1] = { path = file.path, record = record, body = body }
             end
         else

@@ -108,3 +108,12 @@ Five native regressions pass: ordinary-success detached leak, independent termin
 The first broad mapped harness run correctly failed the new JSON-null check and the existing embedded-RPC architecture guard. Native probes now use the central Embedded helper's optional detach and notification support, keeping the guard intact; no guard exception was added. Parley.nvim:1 was informed of these small helper additions so its #405 native on_exit/joined fixture cleanup remains authoritative when either branch integrates main.
 
 Next: finish broad mapped tests on preferred 0.12.5 and affected regressions on installed 0.11.7, check retained-tree allocation/pruning bounds and late-publication controls, then push and queue one recorded suite before close. No full-suite result for #416 exists yet; no close/PR/landing claimed.
+
+
+### 2026-10-22 — two-runtime verification checkpoint
+
+`make test-spec SPEC=infra/test_harness` passed after the storage fixes and central-helper probe wiring; final census verified/clean. Log `/tmp/parley416-harness-fixed.log`. The affected lifecycle mapping (architecture guard, embedded helper, native spec runner, fixture reaper, registry and Python/lease controls) also passed with `PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim` (Neovim 0.11.7), log `/tmp/parley416-compat.log`. `make lint`: zero warnings/errors across 828 files; standalone Lua verifier lint also clean.
+
+A final native-width regression first showed that persisted out-of-pid_t identifiers could reach observation/retirement. Native identity and record decoding now share a signed-32-bit `MAX_PID` boundary, including legacy job reads, preventing C argument wrap. The complete focused map then passed on both exact runtimes: 6 native lifecycle cases, 7 pure policy cases, 18 registry cases; logs `/tmp/parley416-final-focused.log` (0.12.5) and `/tmp/parley416-final-compat.log` (0.11.7). Registry coverage includes generated future structures/null/empty-container preservation, changed evidence before unlink, late scopes during cleanup, explicit absence, refusal and counted linear probes. The running public spec asserts its retained context is under this checkout and its own native birth is published, so a silently stripped context cannot pass vacuously.
+
+All targeted checks and diff/lint checks passed. Next: push this checkpoint and queue one recorded full suite on that exact pushed head, then the binary-owned close review. No #416 recorded full-suite pass or close verdict exists yet.

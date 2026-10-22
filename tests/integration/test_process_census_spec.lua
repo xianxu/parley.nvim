@@ -38,6 +38,23 @@ describe("retained embedded child census", function()
         }
     end
 
+    it("receives its retained checkout context and a recorded native spec birth", function()
+        local context, scope = vim.env.PARLEY_TEST_PROCESS_DIR, vim.env.PARLEY_SPEC_JOBS_DIR
+        assert.is_string(context)
+        assert.is_string(scope)
+        assert.equals(vim.fn.resolve(ROOT) .. "/.test-processes", vim.fs.dirname(context))
+        assert.equals(context, vim.fs.dirname(scope))
+        assert.is_true(vim.wait(arrival.MS, function()
+            local records = require("tests.helpers.test_processes").read(scope)
+            for _, entry in ipairs(records or {}) do
+                if entry.record.pid == vim.fn.getpid() and entry.record.start == Identity.start_time(vim.fn.getpid()) then
+                    return true
+                end
+            end
+            return false
+        end, 10), "the running spec's native birth never published")
+    end)
+
     it("retains unknown when the launcher dies inside birth publication", function()
         local ledger = root .. "/.test-processes/interrupted/spec"
         vim.fn.mkdir(ledger, "p")

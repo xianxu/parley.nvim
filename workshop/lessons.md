@@ -966,3 +966,10 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
 
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
+
+
+## 2026-10-22 (#416 — birth evidence through terminal census)
+
+- Generic embedded argv cannot prove checkout ownership. Retain native PID/start at the spawn seam; persist a pending ticket before the effect so launcher death before publication stays unknown rather than becoming an empty clean ledger. A signal or leader exit cannot establish joined descendant death.
+- Preserve unknown persisted JSON members as values, including null and empty-container kinds. Converting null to Lua nil before a rewrite silently loses future fields. Validate known fields, escaped duplicate keys and native integer widths before any native effect.
+- Revalidate birth-record bytes before unlinking, and rescan the whole retained tree after cleanup: a terminating child can publish another scope. Keep newer/pending evidence and fail unknown; an empty read followed by failed directory retirement is not successful cleanup.
