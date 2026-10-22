@@ -41,6 +41,41 @@ rounds:
           family: external-process-boundary-contract
           round: 1
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: 8b7f5949-def0-478a-9c5f-c5b9d0e196ec
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000405"
+            recipe: plan-quality
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+            reviewed_head: d2df07eafa8fa660538c3fd71ae2263f97e5ba74
+            slot: parley.nvim:1
+            requested_at: "2026-10-22T12:16:26.604024Z"
+          phase: finished
+          pid: 53186
+          started_at: "2026-10-22T12:16:26.692585Z"
+          finished_at: "2026-10-22T12:16:55.857917Z"
+          session_id: 01a1638a-8d3e-73c2-8e2a-0aed5bf28af9
+          outcome: returned
+      "n": 2
+      timestamp: "2026-10-22T05:16:56-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: One kernel guard serializes count/create/reclaim; interrupted residue remains counted, with controlled concurrent-admission and owner-death tests.
+          round: 2
+        - id: PQ-2
+          disposition: addressed
+          note: The named asynchronous process seam includes stateful doubles, typed uncertainty, numeric inspection/startup deadlines, cancellation ownership and controlled sequence verification.
+          round: 2
+      blocked: false
+content_hash: df35f99de91494925313095bd32ec53c838384183294338cd810baa988b18c5f
 ---
 
 # Gate ledger — parley.nvim#405 (plan-quality)
@@ -57,7 +92,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **PQ-2** [Important] `external-process-boundary-contract` Specify the process-inspection seam and startup budget
   The startup sweep adds ps-based death evidence without a named production seam, stateful fake, numeric inspection deadline, or aggregate startup deadline. Under ARCH-MOCK and ARCH-CONSTRAINTS, define asynchronous bounded inspection, its typed uncertain outcomes and cancellation ownership, and controlled sequence tests through the same seam; pure cleanup predicates and a successful kill probe alone do not verify that boundary.
 
+## Round 2 — 2026-10-22T05:16:56-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — One kernel guard serializes count/create/reclaim; interrupted residue remains counted, with controlled concurrent-admission and owner-death tests.
+- PQ-2 — addressed — The named asynchronous process seam includes stateful doubles, typed uncertainty, numeric inspection/startup deadlines, cancellation ownership and controlled sequence verification.
+
 ## Open findings
 
-- **PQ-1** [Important] `shared-resource-admission-serialization` Define atomic admission to the shared runtime parent
-- **PQ-2** [Important] `external-process-boundary-contract` Specify the process-inspection seam and startup budget
+(none — every finding has been disposed)

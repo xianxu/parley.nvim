@@ -5,9 +5,9 @@ deps: []
 github_issue:
 created: 2026-10-20
 updated: 2026-10-22
-estimate_hours:
+estimate_hours: 5.41
 collaboration-mode: collaboration
-card_mirror: 'cbb34347f1a9a6077b08104739914f9e687593cf' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '315a57b4c66add1f567d61997625aae88ea856d1' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T04:55:52-07:00
 claimant:
     operator: Xian Xu
@@ -73,3 +73,31 @@ Pair:6's durable producer M1 contract is aa24764a339d7f001dba02c0ec1db5072788036
 ### 2026-10-22 — plan-quality refinement approved
 
 Plan-quality R1 raised PQ-1 shared-resource-admission-serialization and PQ-2 external-process-boundary-contract (Important). TL396d2c15 approved reusing document_lease's kernel guard for runtime count/create/reclaim and the named remote_process seam/stateful fake,1s inspection/2s async startup budget. Plan revised with controlled concurrency, interruption and canceled-completion tests. No implementation yet; rerun plan-quality to dispose the two findings before estimating.
+
+## Estimate
+
+Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; source is marked stale by sdlc estimate-source, so calibration is provisional. Derived after plan-quality R2 CLEAN, before implementation.
+
+Decomposition follows the accepted two milestones: one issue/spec primitive, three focused Lua features (pure attachment owner; runtime/process/listener lifecycle; real attachment/move/exit wiring), one Couch API integration with fake/conformance, three API discovery surfaces (native Neovim socket, native ps/liveness, producer command), two milestone reviews and atlas/docs. These are distinct responsibilities, not one feature counted twice.
+
+Base design picks: issue1.0h, Lua2.0/3.0/2.0h, API2.0h and atlas0.15h; apply thorough-spec x0.2. Base implementation picks: issue0.2h, Lua1.2/1.5/1.0h, API1.5h, discovery0.45h each, reviews0.4h each and atlas0.15h; write all impl values at v3.1's40%. Library check: builtin Neovim serverstart/serverstop, existing document_lease flock, existing bounded Couch queue and embedded-native test helper cover the mechanisms; no custom RPC codec or native process library is being built. Familiarity1.0: warm admission/move code and existing IO patterns; no exploratory new runtime stack. Thorough-plan design buffer15%; no vendor-mode cross-repo propagation multiplier (producer owned independently by pair:6).
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.20 impl=0.08
+item: lua-neovim design=0.40 impl=0.48
+item: lua-neovim design=0.60 impl=0.60
+item: api-integration design=0.40 impl=0.60
+item: lua-neovim design=0.40 impl=0.40
+item: real-api-discovery design=0.00 impl=0.18
+item: real-api-discovery design=0.00 impl=0.18
+item: real-api-discovery design=0.00 impl=0.18
+item: milestone-review design=0.00 impl=0.16
+item: milestone-review design=0.00 impl=0.16
+item: atlas-docs design=0.03 impl=0.06
+design-buffer: 0.15
+total: 5.41
+```
+
+Design2.03 x1.15 + implementation3.08 =5.4145h, rounded5.41h. A reasonable execution range is roughly4–7h; queue/outage/producer wait is not a code-effort allowance. Native conformance and both milestone review boundaries are included.
