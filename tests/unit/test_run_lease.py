@@ -4,6 +4,7 @@ import os
 import fcntl
 import pathlib
 import shutil
+import shlex
 import signal
 import subprocess
 import sys
@@ -69,12 +70,13 @@ class RunLeaseTests(unittest.TestCase):
         (root / 'tests/minimal_init.vim').write_text('''lua << LUA
 vim.fn.writefile({tostring(vim.fn.getpid())}, vim.env.GATE .. '.ready')
 vim.wait(30000, function() return vim.fn.filereadable(vim.env.GATE .. '.release') == 1 end, 10)
+vim.fn.writefile({}, vim.env.GATE .. '.done')
 LUA
 qa!
 ''')
         return root
 
-    def make(self, root, name):
+    def make(self, root, name, extra=()):
         gate = self.base / name
         env = dict(os.environ, GATE=str(gate))
         # A spec's ambient inherited lease must not bless a new disposable root.
@@ -82,7 +84,7 @@ qa!
                 'PLENARY=' + str(root / 'plenary'), 'TEST_NVIM_DIR=', 'TEST_RUN=env',
                 'TEST_ENV_ROOT=' + str(self.base / (name + '-env')),
                 'ORPHANS=python3 scripts/reap-test-orphans.py --root "' + str(root) + '" --grace 0']
-        return self.start(argv, name, cwd=root, env=env)
+        return self.start(argv + list(extra), name, cwd=root, env=env)
 
     def test_two_targeted_runs_wait_before_census_and_scratch(self):
         root = self.checkout('checkout with spaces')
@@ -270,6 +272,24 @@ qa!
         self.assertFalse((self.base / 'second.ready').exists())
         (self.base / 'first.release').touch()
         self.assertEqual(first.wait(timeout=5), 0)
+
+    def test_parallel_make_goals_do_not_overlap_inside_one_lease(self):
+        root = self.checkout('multiple goals')
+        with (root / 'Makefile').open('a') as makefile:
+            makefile.write('\nsecond:\n\t@test -f ' + shlex.quote(str(self.base / 'first.done')) + '\n')
+        first, _, err = self.make(root, 'first', extra=['-j2', 'second'])
+        self.until((self.base / 'first.ready').exists, 'targeted harness never entered')
+        (self.base / 'first.release').touch()
+        self.assertEqual(first.wait(timeout=15), 0, err.read_text())
+
+    def test_mixed_help_goal_keeps_product_help_prerequisite(self):
+        root = self.checkout('mixed help')
+        with (root / 'Makefile').open('a') as makefile:
+            makefile.write('\nhelp: help-parley\n')
+        (self.base / 'first.release').touch()
+        first, out, err = self.make(root, 'first', extra=['help'])
+        self.assertEqual(first.wait(timeout=15), 0, err.read_text())
+        self.assertIn('same checkout serialize', out.read_text())
 
 
 if __name__ == '__main__':

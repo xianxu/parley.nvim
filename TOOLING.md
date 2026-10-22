@@ -99,6 +99,8 @@ even with different `TEST_ENV_ROOT` values. A waiting runner prints the lease's
 owner PID and checkout before touching scratch. Use separate worktrees for
 concurrent suites. The lease covers scratch cleanup through the final census,
 including recursive make; `make -n` only prints recipes and takes no lease.
+Multiple requested targets serialize even with `make -j`; `JOBS` controls the
+suite's per-spec fan-out.
 
 ## Which Neovim the tests run, and JIT stats
 

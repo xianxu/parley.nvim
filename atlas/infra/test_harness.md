@@ -219,6 +219,8 @@ so the census can identify them through symlinked working directories too.
 Make takes it before scratch preparation/cleanup and retains it through the
 requested command, recursive make and both census passes. A competing target
 or manual live census waits and prints the original owner PID and checkout.
+Make's `.NOTPARALLEL` also serializes multiple goals within a lease-owning make;
+the per-spec fan-out continues to use `JOBS`.
 Reentry validates an inherited descriptor against the physical checkout's
 `.test-run.lock` inode; an environment flag or PID is not ownership evidence.
 The fixed ignored lock file is never unlinked during use; checkout removal ends
