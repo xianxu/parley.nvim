@@ -83,7 +83,7 @@ Files: `TOOLING.md`, `atlas/infra/test_harness.md`, issue details, `workshop/les
 - [x] Document target-execution admission, internal refusal, aliases/default goals, serial Make goals and dry-run behavior; retire old request-dispatch claims with this Revision.
 - [x] Run `make test-spec SPEC=infra/test_harness` and `make lint`; inspect actual mapped output and final census. Run required authoring/architecture checks through the mapped harness and recorded suite. (Mapped/lint passed; the retained recorded suite remains a separate pending landing requirement below.)
 - [x] Push with `sdlc pr`; run `sdlc local-check run --name suite` on final code. The old queued run lease-3134723290 was cancelled via its supported command after BR-1; it provides no passing evidence.
-- [ ] Run `sdlc close --issue 409 --verified '<fresh evidence>'` for full boundary review. It may overlap the new retained suite per tl-worker; fix/dispute findings by their class.
+- [x] Run `sdlc close --issue 409 --verified '<fresh evidence>'` for full boundary review. It may overlap the new retained suite per tl-worker; fix/dispute findings by their class. (Round 2 SHIP; BR-1 addressed; no findings.)
 - [ ] Require a recorded suite pass on final code plus green CI before landing. Follow TL landing direction and `sdlc merge --yes`, report the PR outcome, then stop.
 
 ## Revisions
