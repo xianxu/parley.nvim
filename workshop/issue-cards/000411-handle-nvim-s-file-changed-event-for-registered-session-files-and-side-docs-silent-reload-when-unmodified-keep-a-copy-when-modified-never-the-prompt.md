@@ -1,6 +1,6 @@
 ---
 id: 000411
-status: codecomplete
+status: done
 created: 2026-10-21
 updated: 2026-10-22
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: cfe4c2049db2f720ac7e9b34242208ac8a37fec4
         evidence_commit: c1d26e080d49c26bc07d9f5f5a660c799c063e25
+        landed_commit: 52b38427dc49b61d86b1d5385529258df8927afe
 ---
 
 # Handle nvim's file-changed event for registered session files and side docs: silent reload when unmodified, keep-a-copy when modified, never the prompt
