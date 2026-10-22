@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "b79f7aed", done: "c3f2cd0b"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # session-sync: fence insert admission and reload after lock acquisition
@@ -208,6 +208,8 @@ conformance on the merge pin, the authorized disposable live check/cleanup,
 and close/landing. Hub outcome report a8d34338-7bf2-433b-a4d8-73147ed5e902.
 
 ### 2026-10-22 — producer conformance and staged real-profile acceptance
+- 2026-10-22: closed — R1 BR-1/BR-2 resolved by private six-phase operator_admission owner and witnessed IO dispatcher; BR-3 operator_lock marked new. Preferred mapping 772 and operator 0.11 mapping 774 pass; final native retry/BR-1 15, pure owner 14, ownership guards 2 and legacy IO/pure 15 on both versions pass; lint 0 warnings/0 errors in 822 files; producer conformance at pair#777 d16d027bd passed. Recorded final-code suite a209c5b5 lease-728916138 is queued; current tl-worker permits review overlap, green required before landing. TL 767f4323 orders repeated isolated real-profile stage/clear after approval, before landing. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+- 2026-10-22: flow upgraded quick → full — 524 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 Producer #777 landed as pair PR #533, landing pin
 d16d027bd5d85b392fceedbf3025503d296707e7. Built Couch from a Git archive at that
