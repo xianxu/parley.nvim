@@ -1,8 +1,8 @@
 ---
 id: 000408
-status: working
+status: codecomplete
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-22
 estimate_hours:
 github_issue:
 started: 2026-10-21T12:06:42-07:00
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 5.48
+tracker:
+    version: 1
+    completion:
+        token: close-407d3a32f468
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 3a8c455256e0ff2b7629d578adee08ba30ee6264
+        evidence_commit: 309f83ad1da606db02378c1065d625f926b2b226
 ---
 
 # session-sync: fence insert admission and reload after lock acquisition
