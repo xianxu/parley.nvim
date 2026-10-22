@@ -49,7 +49,7 @@ The existing native identity implementation is reused, not translated into a sec
 - Only a validated outer checkout lease allocates a unique run directory under an ignored checkout-local `.test-processes/`; recursive make reuses its run context. Different checkouts retain independent directories and locks. Validate inherited context against its physical checkout before reuse, as with the existing FD.
 - Pass the registry context through `Makefile.parley`/`scripts/test-env.sh` explicitly. A recorded child does not need to retain the lease FD: doing so could prevent the next census from acquiring the lease and cleaning a survivor.
 - The spec runner allocates its private child-ledger directory inside that run. Each successful jobstart records PID plus native start identity before returning to the test. Keep the existing narrow spawn seam; enumerate existing embedded/jobstart consumers and enforce the wrapper rather than adding a parallel embedded-only registry.
-- Record creation is checked, never best effort. If native birth observation or durable recording fails, stop/join the just-created child via the still-owned job channel, fail the spec, and retain an unresolved registration marker if death cannot be established. Missing/malformed/truncated records and permission failures mean unknown, not an empty successful registry.
+- Before **any** child creation, persist a pending-registration ticket in the private spec ledger. Only after successful native birth observation does an atomic replacement publish PID/start. Launcher death between ticket, spawn and completion leaves pending evidence, which always fails unknown and never authorizes a signal. A failed spawn removes its ticket only when the launcher still owns the no-child result. An unconfirmed post-spawn failure retains the ticket. Record creation is checked, never best effort. If native birth observation or durable recording fails, stop/join the just-created child via the still-owned job channel, fail the spec, and retain an unresolved registration marker if death cannot be established. Missing/malformed/truncated records and permission failures mean unknown, not an empty successful registry.
 - Reconcile recorded jobs on ordinary success, failed assertions, bootstrap error, deadline, signal interruption and unobserved spec exit. TERM then bounded grace then exact PID KILL is permitted only with a fresh matching identity. Poll until original identity is absent or replaced; replacement proves the old incarnation ended but never permits signaling the new process. Recheck identity immediately before every effect.
 - Keep existing deadline process-group behavior separate; do not introduce a new group sweep or infer group ownership from missing identity. New census cleanup signals exact recorded PIDs only. If inspection finds a required change to existing group authority, stop and take that scope change to the TL.
 - Terminal census under the same checkout lease reconciles all retained run ledgers, including a prior interrupted run. A found surviving child makes the after phase fail even if cleanup eventually succeeds. Failure to inspect/join returns nonzero with surviving/unknown evidence; no clean line. Before phase may proceed only after its proven old children are gone and there is no unresolved ownership state.
@@ -78,41 +78,50 @@ Start with explicit caps: 4096 child records per spec, 256 retained run director
 
 For N birth records and P process-table rows, one census round costs O(N + P): one registry traversal, one ps parse, one native observation per record, and a fixed bounded number of poll rounds. No per-child full ps/lsof or registry rescan. Native verifier startup occurs once per census phase; no new per-request subprocess. Counted N/2N tests reject quadratic scans. Use existing grace bounds (default census grace 8s; runner grace 1s), with a separate bounded post-KILL join and no sleeping after proven absence. Tests control time for policy sequences.
 
+## Function-level verification contract
+
+| Functions under test | Adversarial strategy and mechanical guard |
+|---|---|
+| `test_process_model.classify(record, observation)` | Generate birth/observation combinations including malformed identity; only a matching live identity permits an effect, absent/replaced retire only the old incarnation, unknown/pending never pass. |
+| `process_identity.observe(pid)` | Native self/dead-child conformance plus unavailable-result decoding; distinguish verified absence from an unreadable native result. |
+| `test_processes.prepare(dir)`, `complete(ticket, pid)`, `abort(ticket)` | Stateful interruption seam after pending publication, after spawn and before completion; each prefix either has joined death or retained unknown evidence. Run one native launcher killed at the seam. |
+| `test_processes.read(dir)` | Generate bounded malformed/duplicate/truncated records and future unknown members; refuse malformed known data, preserve original evidence, never decode invalid storage as empty. |
+| `test_processes.reconcile(dir, deps)` | Stateful native-observation/effect sequences with controlled time; signals require an immediately matching identity, success requires later absence/replacement, failure retains evidence. Count probes/visits at N and 2N for linear fixed-round work. |
+| `spec_jobs.install()` | Actual jobstart with callback counting and clean embedded descendants; preserve each supplied on_exit exactly once and persist tickets before each spawn. |
+| `spec_runner.execute(path, options)` | Native subprocess termination through controlled lifecycle boundaries; assert owned incarnations gone or explicit failing unknown result at return. Keep existing deadline suite as the conformance guard. |
+| `test-run-lease.run_context(root)` | Extend existing real-make lease fixture with nested/foreign/malformed context generation; admission and bounds precede effects, retained unresolved data survives scratch cleanup. |
+| `reap-test-orphans.main(argv)` / `test-process-census` | Real captured historical argv plus native orphan RPC spinner; after verdict cannot be clean while the recorded incarnation lives. A same-argv foreign child is the negative control, and snapshot mode sends no signals. |
+
+The regression owns all its created children and uses exact-handle finally cleanup on both red and green. Native lifecycle checks run on both available runtimes: preferred 0.12.5 and installed `/opt/homebrew/bin/nvim` 0.11.7. No timing-only assertion or signal-send result establishes death.
+
 ## Implementation tasks (one atomic close; no milestones)
 
-### Task 1: Capture the blind spot and observation policy
+### Task 1: Reproduce and define observation policy
 
-**Files:** `tests/unit/reap_test_orphans_pure.py`, new `tests/unit/test_process_model_spec.lua`, new native census regression fixture/spec, `tests/helpers/process_identity.lua`.
+**Files:** `tests/unit/reap_test_orphans_pure.py`, new `tests/unit/test_process_model_spec.lua`, new `tests/integration/test_process_census_spec.lua`, `tests/helpers/process_identity.lua`.
 
-- [ ] Preserve a sanitized recorded historical command row and the current selector's intentional refusal; a bare embedded argv must not become ownership evidence.
-- [ ] Add the native launcher/RPC spinner regression from the disposable probe. Register the birth through the actual seam, let its caller exit normally, assert PPID/liveness and TERM resistance before census. Own every fixture handle and exact cleanup in finally/after_each, including red assertions.
-- [ ] Run the native case through the public make harness and capture RED: current census exits 0/prints clean while the exact created process is alive.
-- [ ] Add table tests distinguishing same/absent/reused/unknown observations, including malformed identities. Extend the native observer result so absence and unreadability cannot both be nil authority. Test Darwin and Linux result decoding at the boundary.
-- [ ] Commit the regression and model before wiring cleanup.
+- [ ] Turn the disposable historical-argv probe into the named census regression and observe RED before changing cleanup.
+- [ ] Implement `classify` and `observe` through their function-level contract above; keep the legacy command classifier narrow.
+- [ ] Commit the regression and model.
 
-### Task 2: Retain ownership and reconcile every exit
+### Task 2: Retain birth evidence and reconcile every exit
 
-**Files:** new `tests/helpers/test_processes.lua`, `tests/helpers/spec_jobs.lua`, `tests/helpers/spec_runner.lua`, `scripts/test-run-lease.py`, `scripts/test-env.sh`, `Makefile.parley`, `.gitignore`, relevant existing unit/native tests.
+**Files:** new `tests/helpers/test_processes.lua`, `tests/helpers/spec_jobs.lua`, `tests/helpers/spec_runner.lua`, `tests/helpers/embedded_nvim.lua`, `scripts/test-run-lease.py`, `scripts/test-env.sh`, `Makefile.parley`, `.gitignore`, corresponding unit/native specs.
 
-- [ ] Add one shared registry behind the pure policy; test stateful observation/effect sequences, strict persistence and unknown-field preservation.
-- [ ] Allocate/reuse run context only under validated checkout lease; pass it through the existing allowlist. Add recursive/different-checkout/invalid-context cases to `tests/unit/test_run_lease.py`.
-- [ ] Move spec ledgers to retained run storage and check birth recording. Add failure cases for inaccessible storage and unavailable birth identity; ensure an unrecorded surviving spawn leaves a failing unresolved marker.
-- [ ] Run reconciliation before every runner return and preserve nonzero assertion/deadline/signal results. Mark `reaped` only from observed required exits, not a sent signal or only the spec leader's callback.
-- [ ] Add ordinary-pass/failed-assertion/parent-exit/native TERM-resistant child cases, plus permission denial, reused PID and unknown identity controls. Keep the existing deadline and cancellation regressions green.
-- [ ] Reconcile #405's Child stop/join overlap with its owner before changing `tests/helpers/embedded_nvim.lua`; reuse its joined-death proof if it has landed, otherwise keep #416 centered on runner/census ownership.
-- [ ] Commit tested ownership wiring.
+- [ ] Implement pending→born→retired registration and checked persistence through the interruption seam; no spawn precedes its durable pending ticket.
+- [ ] Allocate/reuse run context under validated checkout lease; move private ledgers there and pass context through the existing environment allowlist.
+- [ ] Wire registry recording to the existing jobstart wrapper, install it explicitly in clean embedded children, and reconcile every runner return. Follow the function-level test contracts and commit tested wiring.
+- [ ] Preserve #405's on_exit callback exactly once and its Child-only fixture cleanup authority. The peer confirmed no intended edits to spec_jobs/spec_runner/process_identity/reaper; whichever lands second integrates main, never the other's unlanded branch.
 
-### Task 3: Independent terminal verdict and complete verification
+### Task 3: Independent census and landing
 
 **Files:** new `scripts/test-process-census.lua`, `scripts/reap-test-orphans.py`, `tests/integration/fixture_reaping_spec.lua`, Python/Lua census tests, `atlas/infra/test_harness.md`, `atlas/traceability.yaml`, `TOOLING.md`, `workshop/lessons.md`.
 
-- [ ] Invoke the shared native verifier once from the census and combine both verdicts: any leak or unknown fails and suppresses clean; preserve --ps-from's signal-free contract and existing legacy candidate exclusions.
-- [ ] Native RED→GREEN: the registered orphan is found despite generic argv, exact KILL is followed by observed original-child death, after exits nonzero with leak evidence; a second census is clean. Negative controls leave a same-argv foreign child and another checkout's active run alive.
-- [ ] Exercise runner death followed by next lease owner's before census, nested make context, cancelled waiter, corrupt records, missing identity, PID reuse, and failed cleanup without erasing evidence. Run the entire existing #409 lease suite.
-- [ ] Run `python3 tests/unit/reap_test_orphans_pure.py` and `python3 tests/unit/test_run_lease.py`; both must pass. Run `make test-spec SPEC=infra/test_harness` with the new mapped specs, then the same affected native cases with `PARLEY_TEST_NVIM` set to each exact supported runtime (0.12.5 and 0.11.7); report missing runtime to hub rather than installing silently.
-- [ ] Count registry visits/native probes for N and 2N (e.g. 16 and 32) through a stateful fake; assert no more than doubled operations per fixed poll round. Verify retained records are bounded and drained records/directories retire on the documented boundary.
-- [ ] Update harness atlas and lessons with the root cause and ownership/death contract. Log exact evidence and the #405 integration boundary.
-- [ ] Push, run one recorded full suite via `sdlc local-check run --name suite`, then `sdlc close --issue 416 --verified '<measured evidence>'`. The binary owns the fresh-context review. Fix its blockers, publish PR, and enter `sdlc merge --yes` for authoritative integration and landing.
+- [ ] Combine the legacy census and shared retained-child verifier verdicts; any leak/unknown fails and suppresses clean, including in interrupted-registration recovery.
+- [ ] Finish native RED→GREEN and refusal/concurrency coverage through the function contracts; verify pruning and explicit writer bounds.
+- [ ] Run `python3 tests/unit/reap_test_orphans_pure.py`, `python3 tests/unit/test_run_lease.py`, then `make test-spec SPEC=infra/test_harness`; expected all pass. Run the mapped affected regressions under each exact `PARLEY_TEST_NVIM` runtime above.
+- [ ] Update atlas/traceability, tooling and lessons; log exact evidence and the #405 integration boundary.
+- [ ] Push and run one recorded full suite via `sdlc local-check run --name suite`, close with measured verification, resolve the binary-owned fresh review, publish PR and enter `sdlc merge --yes` for authoritative integrated verification and landing.
 
 ## Architecture checklist
 
@@ -129,3 +138,10 @@ For N birth records and P process-table rows, one census round costs O(N + P): o
 ## Approval
 
 Proposed to the TL. No implementation authorized by this document alone. The retained registry is a new mechanism, so wait for the hub's design approval before `sdlc change-code`.
+
+
+## Revisions
+
+### 2026-10-22 — TL approval and plan-quality PQ-1/PQ-2
+
+TL approved the retained registry with checkout-local placement, explicit bounds/pruning and #405 coordination. The proposed `.test-processes/` already meets placement. PQ-1 adds a **durable pending ticket before every spawn**, making death before PID publication recover as unknown, never clean. PQ-2 replaces prose case inventories with named functions and adversarial/mechanical strategies. Native spawn interruption is a controlled seam, not a sleep race. Parley.nvim:1 confirmed callback and clean-child bootstrap constraints, now included explicitly.
