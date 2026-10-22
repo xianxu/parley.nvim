@@ -59,7 +59,29 @@ source alone; edited/deleted sources, a different active buffer/window, or a
 newer invocation invalidate retained choices and delayed resolver results.
 With no occurrences, navigation falls back to [smart gf](artifact_refs.md).
 A recognized but missing target reports its own error and does not fall through.
-URL and fragment destination handling follows the existing opening policy.
+Unordered bullet items, including tight siblings and nested continuations,
+form their own navigation range. This does not change editing textobjects.
+Local `.md#anchor` links resolve the file first, then match an ATX heading
+(levels 1–6). Bundled treesitter `markdown_inline` supplies visible text spans
+through emphasis/code/link-label structure, omitting markup, destinations and
+titles. The adapter parses strings only; it creates no buffers or persistent
+parser cache. If the grammar is unavailable, use raw heading content and the
+same key rather than a second inline parser.
+Keys lowercase/keep ASCII letters and digits, drop other ASCII and U+2000–206F/U+3000–303F, and preserve all other non-ASCII codepoints unchanged, on both sides.
+This preserves CJK/accented text; non-ASCII case is unchanged. A fragment that
+GitHub stripped of other non-ASCII symbols can miss with the existing notice.
+The first heading takes the bare key, subsequent equal keys use `-1`, `-2`, etc.
+A complete fragment key has priority over a trailing duplicate suffix, retaining
+natural numeric headings. Empty keys never match. Raw HTML headings/inline HTML
+and character-reference decoding remain outside scope; unsupported or unmatched
+anchors open at the top with a notice. Fenced examples define no anchors. Shared
+fence containment requires matching delimiter characters and a sufficiently
+long, whitespace-only closer. The occurrence scanner owns shared block-opener
+metadata: headings, thematic/Setext walls, quotes, lists and fences outside an
+item’s content indentation end its navigation range. Indented blocks stay inside
+the item; plain lazy continuations remain valid until a blank or outside block. Missing
+anchors open at the top with a short notice. Plain file links retain their
+existing cursor behavior; URL destinations keep their existing fallback policy.
 
 Relative Markdown `.md` links resolve from the source buffer's directory,
 independent of shell cwd. For `@@` links, relative or bare names are resolved
@@ -90,6 +112,7 @@ literals. Operator-configured paths have a separate audited allowlist.
 - `lua/parley/init.lua` — editor opening chain, picker origin guard and remote-context cache.
 - `lua/parley/reference_candidates.lua` — shared occurrence scanners and pure picker completion.
 - `lua/parley/entity_range.lua` — navigation ranges sharing existing structural boundaries.
+- `lua/parley/markdown_heading.lua` — PURE outline/editing level detection; INTEGRATION anchor lookup using bundled treesitter and codepoint decoding.
 - `lua/parley/artifact_ref.lua` — selected artifact resolution with optional final-effect validation.
 - `lua/parley/chat_respond.lua` — request inclusion.
 - `tests/unit/build_messages_spec.lua`, `tests/unit/remote_references_spec.lua` — context assembly and caching.
