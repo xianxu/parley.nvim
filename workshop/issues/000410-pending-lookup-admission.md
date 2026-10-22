@@ -126,6 +126,10 @@ Cancelled obsolete queued suite lease-3241185062 through the supported exact-run
 
 ## Revisions
 
+### 2026-10-22 — name crashed-owner recovery before fresh plan-quality
+
+TL aa353a9d agreed RETIRE with the condition that a dead old owner has an existing way out. The existing standalone typed-legacy Alt+Return path supplies it: open without Couch thread scope/tag, then explicitly submit to release exact observed tokenless bytes with a fresh controller. Staleness is only a reminder, not unlock. The plan names this workflow and a permanent restart/native-input regression to add after gate admission, alongside continued inside-S1 refusal and validated v1/v2 recovery. A temporary preferred-runtime probe passes 1/0/0; no product or tracked test code changed. Non-typed orphans with neither live proof nor valid journal have no existing plugin recovery command; this limit is reported to the hub rather than adding a generic unlock.
+
 ### 2026-10-22 — operator selects retirement inside S1
 
 TL delivery 8f18c995 reports the operator's RETIRE choice. Extended Spec/Done-when and replaced the active checklist around that chosen policy; prior attempt/results remain in the Log. The durable plan appends an authoritative RETIRE revision, preserving the earlier design as historical text and marking its concept tables historical. No product/test code changed. Proposed compatibility: exact live old proof can finish via explicit Alt+Return; unproven old sidecars require owner-assisted explicit release and remain refused; validated v1/v2 journals use their existing reopen/save/Alt+Return continuation and retire last. New acquisition never deletes/converts old protection, and new moves cannot treat it as fresh admission. Waiting for TL agreement on that rule before fresh change-code/implementation. PR #333 remains unlanded; no suite, review, stage or profile probe is running.
