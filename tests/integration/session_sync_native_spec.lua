@@ -158,8 +158,10 @@ describe("session-sync native edits", function()
             couch.run = function(argv, callback, options)
                 if argv[2]=="--session-sync" and argv[3]=="lookup" then
                     lookup_launches = lookup_launches + 1
+                    local held = lookup_launches == 1
                     return run(argv, function(result)
-                        _G.release_lookup = function() callback(result) end
+                        if held then _G.release_lookup = function() callback(result) end
+                        else callback(result) end
                     end, options)
                 end
                 return run(argv, callback, options)
@@ -185,62 +187,125 @@ describe("session-sync native edits", function()
                     if _G.lookup_action then lookup_action() else release_lookup() end
                 end,delay) end
             end})
-            -- Production installs the header-driven controller before S1.
-            -- Keep its earlier InsertEnter and on_lines consumers alive.
-            require("parley.session_sync").attach(vim.api.nvim_get_current_buf())
-            if standalone then require("parley.session_sync").detach(0) end
             if preowned then
+                -- A retained old turn predates this S1 controller; normal
+                -- opening below must not create this legacy attachment.
+                require("parley.session_sync").attach(vim.api.nvim_get_current_buf())
                 vim.api.nvim_buf_set_lines(0,7,8,false,{"owned legacy edit"})
                 vim.cmd("silent write")
                 _G.legacy_proof=table.concat(vim.fn.readfile(path..".lock","b"),"\n")
             end
-            require("parley.agentic_document").attach(vim.api.nvim_get_current_buf())
+            vim.env.FAKE_COUCH_ACTORS=vim.json.encode({Code="ok",Actors={{Known=true,
+                Binding={Slot="ops:0",Scope="scope-410",Tag="tag-410"}}}})
+            if standalone then require("parley.agentic_document").attach(vim.api.nvim_get_current_buf())
+            else require("parley").setup_markdown_keymaps(vim.api.nvim_get_current_buf()) end
         ]], root, delay, absent, preowned, standalone)
         wait_for("return type(release_lookup)=='function'")
     end
 
-    for _, outcome in ipairs({"confirmed","foreign","unavailable","refused"}) do
-        it("pending lookup retains pre-owned history through "..outcome.." (#410)",function()
+    for _, foreign in ipairs({false,true}) do
+        it("old tokenless turn refuses conversion, foreign="..tostring(foreign).." (#410 retire)",function()
             pending_lookup(50,false,true)
-            if outcome=="foreign" then vim.fn.writefile({"holder: operator","operator: foreign"},file..".lock") end
-            exec([[
-                if ...=="unavailable" then vim.env.FAKE_COUCH_OPERATOR_DELAY="2"
-                elseif ...=="refused" then
-                    vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock";vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
-                end
-            ]],outcome)
-            local before=vim.fn.readfile(file..".lock","b")
+            if foreign then vim.fn.writefile({"holder: operator","operator: foreign"},file..".lock") end
+            local old=vim.fn.readfile(file..".lock","b")
             keys("iX")
-            if outcome=="foreign" or outcome=="refused" then
-                wait_for("return not vim.bo.modifiable")
-                assert.equals(outcome=="foreign" and 0 or 1,exec("return acquire_calls"))
-                if outcome=="foreign" then assert.same(before,vim.fn.readfile(file..".lock","b")) end
-                assert.equals("owned legacy edit",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            wait_for("return not vim.bo.modifiable")
+            assert.equals(0,exec("return acquire_calls"),"old tokenless turn reached producer acquisition")
+            assert.same(old,vim.fn.readfile(file..".lock","b"))
+            assert.equals("owned legacy edit",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            assert.is_true(exec([[return table.concat(notifications,"\n"):find(
+                "open it in nvim outside Couch and press Alt+Return to release",1,true)~=nil]]))
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+            exec("vim.schedule(function() _G.old_turn_settled=true end)")
+            wait_for("return old_turn_settled==true")
+            assert.same(old,vim.fn.readfile(file..".lock","b"),"ordinary input released an old turn")
+            keys("<M-CR>")
+            if foreign then
+                wait_for([[return table.concat(notifications,"\n"):find("cannot release",1,true)~=nil]])
+                assert.same(old,vim.fn.readfile(file..".lock","b"))
+                assert.is_nil(vim.uv.fs_stat(sent_file))
             else
-                wait_for("return _G.before_first_char ~= nil")
-                assert.equals(outcome=="confirmed",exec("return first_char_confirmed"))
-                assert.equals(1,exec("return acquire_calls"))
-                keys("<C-h>")
-            end
-            keys("<Esc>")
-            wait_for("return vim.fn.mode()=='n'")
-            if outcome=="unavailable" or outcome=="refused" then
-                if outcome=="refused" then assert.is_false(exists()) end
-                -- A timeout after producer effects can leave registered bytes
-                -- without acknowledgment; retry must use the same turn token.
-                if exists() then
-                    assert.is_true(exec("return require('parley.couch').operator_proof(table.concat(vim.fn.readfile(path..'.lock','b'),'\\n'))~=nil"))
-                end
-                exec("vim.env.FAKE_COUCH_OPERATOR_DELAY=nil;vim.env.FAKE_COUCH_OPERATOR_CODE=nil;vim.env.FAKE_COUCH_OPERATOR_EXIT=nil")
+                notified("submitted")
+                assert.is_false(exists(),"explicit exact-owned completion did not release old turn")
+                assert.equals(0,exec("return acquire_calls"))
                 keys("i")
-                wait_for("return vim.fn.mode()=='i' and vim.bo.modifiable")
-                locked()
+                wait_for("return vim.fn.mode()=='i' and acquire_calls==1")
+                assert.is_true(exec([[return require('parley.couch').operator_proof(
+                    table.concat(vim.fn.readfile(path..'.lock','b'),'\n'))~=nil]]))
                 keys("<Esc>")
-                wait_for("return vim.fn.mode()=='n'")
             end
-            assert.is_true(exists(),"handoff retired the original autosaved edit history")
         end)
     end
+
+    for _, outcome in ipairs({"pending","absent","unavailable"}) do
+        it("S1 typed edits stay visibly unprotected on "..outcome.." (#410 retire)",function()
+            if outcome=="unavailable" then exec("vim.env.FAKE_COUCH_REGISTRY_MODE='unsupported'") end
+            pending_lookup(nil,outcome=="absent")
+            assert.is_true(exec("return require('parley.session_sync').identity(vim.api.nvim_get_current_buf())==nil"),
+                "opening attached a legacy controller before S1")
+            assert.is_true(exec([[return vim.wo.winbar:find("not protected",1,true)~=nil]]))
+            exec([[
+                local buf=vim.api.nvim_get_current_buf()
+                require('parley.session_sync').attach(buf)
+                vim.api.nvim_buf_set_lines(buf,7,8,false,{'saved unprotected edit'})
+                vim.cmd('silent write')
+            ]])
+            assert.is_false(exists(),"S1 edit/direct attachment created a tokenless lock")
+            if outcome~="pending" then
+                exec("release_lookup()")
+                wait_for("return require('parley.agentic_document').status(vim.api.nvim_get_current_buf()).operation==nil")
+            end
+            assert.is_true(exec("return vim.bo.modifiable"))
+            assert.is_false(exists(),"lookup completion restored a retired legacy writer")
+            assert.is_true(exec([[return vim.wo.winbar:find("not protected",1,true)~=nil]]))
+            assert.equals("saved unprotected edit",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        end)
+    end
+
+    it("first submit registers an unprotected typed file (#410 retire)",function()
+        pending_lookup(20,true)
+        keys("iX<Esc>")
+        wait_for("return _G.before_first_char~=nil and vim.fn.mode()=='n'")
+        assert.is_false(exists())
+        assert.is_true(exec([[return vim.wo.winbar:find("not protected",1,true)~=nil]]))
+        keys("<M-CR>")
+        notified("submitted")
+        wait_for("return require('parley.agentic_document').identity(vim.api.nvim_get_current_buf())~=nil")
+        assert.equals("Xfirst bullet",vim.fn.readfile(file)[8])
+        assert.is_false(exists())
+        keys("i")
+        wait_for("return vim.fn.mode()=='i'")
+        locked()
+        assert.is_true(exec([[return require('parley.couch').operator_proof(
+            table.concat(vim.fn.readfile(path..'.lock','b'),'\n'))~=nil]]))
+        keys("<Esc>")
+    end)
+
+    it("crashed standalone old turn releases through fresh nvim Alt+Return (#410 retire)",function()
+        open(true)
+        keys("iX<Esc>")
+        wait_for("return vim.fn.mode()=='n' and not vim.bo.modified")
+        locked()
+        local old=vim.fn.readfile(file..".lock","b")
+        child:stop() -- all owner memory is gone; the outstanding sidecar remains
+        child=Embedded.start({ui={100,30}})
+        exec([[
+            local root=...
+            _G.notifications={}
+            vim.notify=function(message) notifications[#notifications+1]=message end
+            vim.env.PATH=root..'/bin:'..vim.env.PATH
+            vim.env.COUCH_THREAD_SCOPE,vim.env.COUCH_THREAD_TAG=nil,nil
+            vim.env.FAKE_COUCH_ACTORS='{"Code":"ok","Actors":[]}'
+        ]],root)
+        open(true)
+        assert.is_true(exec("return require('parley.agentic_document').status(vim.api.nvim_get_current_buf())==nil"))
+        assert.is_true(exec("return require('parley.session_sync').identity(vim.api.nvim_get_current_buf()).ID==nil"))
+        assert.same(old,vim.fn.readfile(file..".lock","b"),"fresh opening swept the old lock")
+        keys("<M-CR>")
+        notified("submitted")
+        assert.is_false(exists())
+        assert.equals("Xfirst bullet",vim.fn.readfile(file)[8])
+    end)
 
     for _, kind in ipairs({"parent", "side", "standalone parent"}) do
         it("pending lookup protects queued first input in " .. kind .. " (#410)", function()

@@ -262,7 +262,20 @@ local function lock_bytes(path)
     return bytes
 end
 
+-- This is recovery guidance, never authority to adopt or remove protection.
+local function old_lock_message(buf, message)
+    local bytes = lock_bytes(M.lock_path(buf))
+    local fields = bytes and ("\n" .. bytes) or ""
+    if header(buf) and bytes and M.turn(bytes) == "operator"
+        and not fields:match("\n%s*document%s*:") and not fields:match("\n%s*turn%s*:") then
+        return message .. "; " .. file_of(buf)
+            .. ": open it in nvim outside Couch and press Alt+Return to release"
+    end
+    return message
+end
+
 local function write_lock(buf, holder, baseline)
+	if require("parley.agentic_document").owns_admission(buffer_id(buf)) then return false end
 	local s = state[buffer_id(buf)]
     if s and admission(s).acquire_token then return false end
 	local path = M.lock_path(buf)
@@ -331,7 +344,7 @@ local function release_owned(buf, path, expected)
     elseif expected and (expected:find("\ndocument:", 1, true) or expected:find("\nturn:", 1, true)) then
         return false, "operator ownership evidence is invalid"
     elseif s.identity.ID and (not expected or expected ~= owned.owned_lock) then
-        return false, "registered operator protection has no confirmed ownership"
+        return false, old_lock_message(buf, "registered operator protection has no confirmed ownership")
     end
     if not owned.owned_lock and not s.identity.ID then
         local adopted, reason = dispatch_admission(buf, { type = "legacy_adopt", proof = expected, content = s.content })
@@ -450,7 +463,7 @@ dispatch_admission = function(buf, event, release_path, input_scope)
             else
                 outcome.type = result.kind
                 outcome.message = result.kind == "unavailable"
-                    and "not locked: Couch unreachable; edits may conflict" or refusal_message(result.error)
+                    and "not locked: Couch unreachable; edits may conflict" or old_lock_message(buf, refusal_message(result.error))
             end
         elseif effect.kind == "freshen" then
             restore_edit_gate(buf, s)
@@ -464,15 +477,12 @@ dispatch_admission = function(buf, event, release_path, input_scope)
             else
                 outcome.type, outcome.message = "refused", refusal_message("freshness check failed: " .. tostring(reason or "buffer changed"))
             end
-        elseif effect.kind == "release" or effect.kind == "legacy_release" then
+        elseif effect.kind == "release" then
             local parsed = couch.operator_proof(effect.proof)
             local token = effect.token or parsed and parsed.Turn
             local path = release_path or file_of(buf)
             local ok, reason
-            if effect.kind == "legacy_release" and (token or not effect.proof
-                or effect.proof:find("\ndocument:", 1, true) or effect.proof:find("\nturn:", 1, true)) then
-                reason = "operator ownership evidence is not exact legacy protection"
-            elseif token then
+            if token then
                 local result = couch.operator_lock("release", { ID = s.identity.ID, File = path }, token)
                 ok, reason = result.kind == "confirmed", result.error
             else
@@ -727,6 +737,11 @@ end
 --- Install the turn autocmds on a session-sync buffer and render its turn. Idempotent.
 M.attach = function(buf, identity, observed, restoring_move, input_scope)
     buf = buffer_id(buf)
+    if not identity and require("parley.agentic_document").owns_admission(buf) then
+        local old = state[buf]
+        if old and not old.identity.ID and not admission(old).history then M.detach(buf) end
+        return
+    end
     if state[buf] then
         local s = state[buf]
         local current = s.identity
@@ -779,7 +794,8 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
         end
         if scope then scope.attempted = true end
         local admitted = dispatch_admission(buf, { type = "acquire", baseline = baseline,
-            content = content_hash(buf), token = token, clean = entering and not vim.bo[buf].modified }, nil, scope)
+            content = content_hash(buf), token = token, clean = entering and not vim.bo[buf].modified,
+            message = old_lock_message(buf, "existing legacy turn requires explicit completion") }, nil, scope)
         if scope then scope.admitted = admitted end
         return admitted
     end
@@ -794,10 +810,7 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
         if s.identity.ID then
             if not acquire_registered(baseline, false) then return end
         else
-            if require("parley.agentic_document").pending_lookup(buf) then
-                dispatch_admission(buf, { type = "observed", baseline = baseline, content = s.content })
-                return
-            end
+            if require("parley.agentic_document").owns_admission(buf) then return end
             if not write_lock(buf, "operator", baseline) then return end
             refresh(buf)
         end
@@ -812,16 +825,6 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
         if state[buf] ~= s then return end
         s.inserting = true
         if s.moving then return end
-        if not s.identity.ID and require("parley.agentic_document").admit_insert(buf) then
-            -- Adoption already used this scope; a still-pending lookup remains
-            -- editable without tokenless writes. Absence resumes legacy policy.
-            if not s.identity.ID and not require("parley.agentic_document").pending_lookup(buf) then
-                local baseline = not vim.bo[buf].modified and content_hash(buf) or admission(s).baseline
-                take_turn(baseline)
-            end
-            restart_idle(buf)
-            return
-        end
         local baseline = not vim.bo[buf].modified and content_hash(buf) or admission(s).baseline
         local retried = s.retry_entry
         s.retry_entry = nil
@@ -1107,6 +1110,8 @@ end
 M.release_if_baseline = function(buf)
     buf = buffer_id(buf)
     local s = state[buf]
+    if s and require("parley.agentic_document").owns_admission(buf)
+        and admission(s).owned_lock and not admission(s).acquire_token then return false end
     if not s or s.moving or not automatic_release_eligible(buf, s) or content_hash(buf) ~= admission(s).baseline then return false end
     if not admission(s).owned_lock or lock_bytes(M.lock_path(buf)) ~= admission(s).owned_lock then return false end
     if disk_changed(buf) then
@@ -1203,6 +1208,11 @@ M.begin_move = function(buf)
     buf = buffer_id(buf)
     local s = state[buf]
     if not s or s.moving then return nil, "document already moving or detached" end
+    local protection = lock_bytes(M.lock_path(buf))
+    if protection and require("parley.agentic_document").owns_admission(buf)
+        and (protection ~= admission(s).owned_lock or not couch.operator_proof(protection)) then
+        return nil, old_lock_message(buf, "operator protection must be acquired before starting a move")
+    end
     if disk_changed(buf) then
         if read_turn(buf) ~= "operator" or not violation(buf) then return nil, "foreign change requires reconciliation" end
     end

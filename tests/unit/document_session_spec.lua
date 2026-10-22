@@ -67,6 +67,54 @@ describe("document_session.classify_reply", function()
     end)
 end)
 
+describe("document_session unprotected view", function()
+    before_each(load_model)
+    local warning={label="not protected · Alt+Return registers",hl="WarningMsg"}
+    it("warns typed unregistered documents through actual pending, plain and unavailable lookup snapshots", function()
+        for _,result in ipairs({{kind="absent"},{kind="unavailable",error="offline"}}) do
+            local s=session()
+            local initial=s.snapshot()
+            assert.same(warning,model.unprotected_view(initial,true))
+            local pending=s.dispatch({type="open"})[1]
+            assert.equals("probing",s.snapshot().phase)
+            assert.same(warning,model.unprotected_view(s.snapshot(),true))
+            reply(s,pending,result)
+            assert.equals(result.kind=="absent" and "plain" or "unknown",s.snapshot().phase)
+            assert.same(warning,model.unprotected_view(s.snapshot(),true))
+        end
+    end)
+    it("keeps the typed warning while a first registration mutation is uncertain", function()
+        local s=session()
+        plain(s)
+        local save=s.dispatch({type="submit",owner="ops:1"})[1]
+        local register=s.dispatch({type="saved",witness=save.witness,ok=true})[1]
+        reply(s,register,{kind="uncertain",error="lost registration acknowledgment"})
+        assert.equals("pending",s.snapshot().phase)
+        assert.same(warning,model.unprotected_view(s.snapshot(),true))
+    end)
+    it("ends the typed warning only when lifecycle confirms registration", function()
+        local s=session()
+        local lookup=s.dispatch({type="open"})[1]
+        assert.same(warning,model.unprotected_view(s.snapshot(),true))
+        reply(s,lookup,outcome("registered"))
+        assert.equals("registered",s.snapshot().phase)
+        assert.is_nil(model.unprotected_view(s.snapshot(),true))
+    end)
+    it("does not warn non-typed documents or mutate a lifecycle snapshot", function()
+        local s=session()
+        local lookup=s.dispatch({type="open"})[1]
+        local captured=s.snapshot()
+        assert.is_nil(model.unprotected_view(captured,false))
+        assert.is_nil(model.unprotected_view(captured,nil))
+        local view=model.unprotected_view(captured,true)
+        view.label="changed"
+        assert.same(warning,model.unprotected_view(captured,true))
+        assert.same(s.snapshot(),captured)
+        reply(s,lookup,outcome("registered"))
+        assert.is_nil(model.unprotected_view(s.snapshot(),false))
+    end)
+end)
+
 describe("document_session lifecycle", function()
     before_each(load_model)
     it("seeds only a valid canonical cached identity", function()

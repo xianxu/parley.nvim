@@ -159,6 +159,12 @@ end
 local config_ms = registry.config_ms
 
 local function band(s, message, highlight)
+    local typed = require("parley.session_sync").parse_header(vim.api.nvim_buf_get_lines(s.buf, 0, 40, false)) ~= nil
+    local unprotected = lifecycle.unprotected_view(s.model.snapshot(), typed)
+    if unprotected then
+        message = unprotected.label .. (message ~= "" and " · " .. message or "")
+        highlight = highlight or unprotected.hl
+    end
     if message == "" then s.renderer.clear()
     else
         local plain = s.model.snapshot().phase == "plain"
@@ -181,7 +187,6 @@ local function show_feedback(s, message, is_error)
 end
 
 local function clear_feedback(s)
-    if not s.feedback then return end
     s.feedback = nil
     band(s, s.model.snapshot().phase == "unknown" and "Couch unavailable: agentic state unknown" or "")
 end
@@ -360,7 +365,7 @@ local function execute(s, effects)
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
-            if ss.is_session_sync(s.buf) then ok, err = ss.prepare_submit(s.buf)
+            if ss.identity(s.buf) then ok, err = ss.prepare_submit(s.buf)
             else ok, err = pcall(vim.api.nvim_buf_call, s.buf, function() vim.cmd("stopinsert"); vim.cmd("silent write") end) end
             if ok then s.saved_hash = hash(s.buf) end
             dispatch(s, { type = "saved", witness = effect.witness, ok = not not ok, error = err, hash = s.saved_hash })
@@ -411,7 +416,7 @@ local function execute(s, effects)
         elseif kind == "band" then
             if effect.message == "" then end_submit(s) end -- the document turned out plain
             if s.feedback then band(s, s.feedback.label, s.feedback.hl) else band(s, effect.message) end
-            if effect.message ~= "" then ensure_retry() else s.baseline, s.outstanding = nil, false end
+            if effect.message ~= "" then ensure_retry() end
         elseif kind == "reconcile" and effect.operation == "rename" and s.move and s.move.new_path then
             -- Moved on disk; Couch refused or lost the metadata rename (rows 6, 7).
             s.move.answered = true
@@ -459,9 +464,10 @@ local function pending_input(buf)
     return s, operation
 end
 
--- Query only the exact controller's already-running lookup; never discover here.
-function M.pending_lookup(buf)
-    return pending_input(buf) ~= nil
+-- Ownership begins at opening, independently of what discovery has proved.
+function M.owns_admission(buf)
+    local s = states[buf]
+    return s ~= nil and valid(s) or false
 end
 
 function M.admit_insert(buf)
@@ -499,7 +505,10 @@ function M.attach(buf)
     local known = cache(s)
     s.model = lifecycle.new({ path = path, namespace = ns, incarnation = serial, registration = known })
     states[buf] = s
-    if known then adopt(s, known) end
+    -- Retire an idle legacy attachment; an old owned turn remains available
+    -- only for explicit completion. The S1 writer guard is already active.
+    require("parley.session_sync").attach(buf)
+    band(s, "")
     local function attach_edits()
         if s.edits_attached then return end
         s.content = hash(buf)
@@ -533,7 +542,7 @@ function M.attach(buf)
     attach_edits()
     s.group = vim.api.nvim_create_augroup("ParleyAgenticDocument" .. buf, { clear = true })
     vim.api.nvim_create_autocmd("InsertEnter", { group = s.group, buffer = buf, nested = true, callback = function()
-        if not require("parley.session_sync").identity(buf) then M.admit_insert(buf) end
+        M.admit_insert(buf)
     end })
     vim.api.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, { group = s.group, buffer = buf, callback = function()
         -- A guarded mechanical move read checks its editor preimage and the IO
@@ -570,7 +579,10 @@ function M.attach(buf)
     vim.api.nvim_create_autocmd("BufWipeout", { group = s.group, buffer = buf, callback = function() M.detach(buf) end })
     vim.api.nvim_create_autocmd("BufWinEnter", { group = s.group, buffer = buf, callback = function() M.recheck(buf) end })
     install_migration_hooks(s)
-    if not recover_migration(s) then dispatch(s, { type = "open" }) end
+    if not recover_migration(s) then
+        if known then adopt(s, known) end
+        dispatch(s, { type = "open" })
+    end
     return true
 end
 

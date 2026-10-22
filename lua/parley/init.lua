@@ -3187,8 +3187,7 @@ M.setup_markdown_keymaps = function(buf)
 	require("parley.comment").attach(buf, "markdown")
 	-- #384: typeahead for frontmatter enum values (collaboration-mode, …).
 	require("parley.frontmatter_enum").attach(buf)
-	session_sync.attach(buf)
-	require("parley.agentic_document").attach(buf)
+	if not require("parley.agentic_document").attach(buf) then session_sync.attach(buf) end
 	if review_cbs.review_next then
 		require("parley.review_send").attach(buf)
 	end
