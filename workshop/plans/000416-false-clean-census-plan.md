@@ -121,8 +121,8 @@ For N birth records and P process-table rows, one census round costs O(N + P): o
 - **ARCH-PURPOSE:** Independent final census catches a child after caller death; improving only stop is insufficient.
 - **ARCH-MOCK:** Stateful observation sequences plus native spinner/foreign-process conformance, no call-count mocks as lifecycle proof.
 - **ARCH-CONSTRAINTS:** Fixed deadlines, explicit writer caps, linear counted work, one verifier process per census phase.
-- **ARCH-TEST:** Native regression proves readiness, TERM resistance, before/after liveness and safe cleanup on red; both supported runtimes.
-- **ARCH-LIFETIME:** Every return reconciles owned children; cannot turn a signal or leader exit into joined child death.
+- **ARCH-SECURE:** Only lease-bound private birth records and freshly matching native identity authorize exact PID effects; command text, cwd and socket names do not. Native regression covers foreign/uncertain ownership and both runtimes.
+- **ARCH-ORDER:** Birth recording precedes returning a child to its caller; every return reconciles owned children before deleting evidence. A signal or leader exit cannot imply joined child death.
 - **ARCH-FUNERAL:** Records retire on proven death; drained directories collect at explicit phase/admission boundaries, unresolved residue is bounded and visible.
 - **ARCH-EVOLVE:** New strict JSON schema preserves unknown members on rewrite; old job record semantics retained during transition.
 
