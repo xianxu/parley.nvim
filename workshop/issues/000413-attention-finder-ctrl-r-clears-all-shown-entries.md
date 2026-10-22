@@ -58,6 +58,7 @@ Actions: clear shown rows; submit again. The existing store lease serializes cle
 ## Log
 
 ### 2026-10-22
+- 2026-10-22: closed — 333 focused checks pass on nvim 0.12.5 and 0.11.7; lint823 clean; real nvim0.11.7 profile with native Ctrl+R passes scoped/filtered tree, mixed states, empty count and persistence on staged 8de8db19 using isolated state/fixtures; stage cleared, :0 verified at fresh origin/main, scratch removed. Recorded suite lease-1240027359 is queued; passing suite remains required before landing. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 Claimed and started from main while #405 waits for its independent bridge acceptance; #405 remains on its own branch. The automatic weave refresh rewrote merge-check.yml; restored that unrelated generated workflow delta before start-plan, so this issue changes no local gates. Design note sent to hub before code: finder-local Ctrl+R overrides native Insert register paste, all other prompts unchanged.
 
