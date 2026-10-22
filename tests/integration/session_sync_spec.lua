@@ -415,7 +415,12 @@ describe("session-sync buffer", function()
             keymap_cb("<M-CR>")()
             vim.wait(200)
             assert.same({}, sent())
-            assert.equals("holder: operator", holder())
+            -- S1 has not registered this file: failed pane resolution cannot
+            -- restore a retired tokenless turn, even after absent discovery.
+            assert.is_false(exists(file .. ".lock"))
+            assert.is_true(vim.bo[buf].modifiable)
+            assert.truthy(vim.wo.winbar:find("not protected",1,true))
+            assert.equals("- edited",vim.api.nvim_buf_get_lines(buf,7,8,false)[1])
         end)
     end)
 

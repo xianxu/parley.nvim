@@ -73,6 +73,13 @@ If an uncached lookup is already pending, insert entry gives that request and
 any resulting acquisition the same total 500 ms budget. It starts no new
 discovery request. A lookup still pending after that bound keeps editing
 available; attachment reconciles edits made during the unknown interval.
+In a Couch pane, unregistered `type: session-sync` files follow this same
+registration route. Opening or editing them creates no tokenless turn. While
+lookup is pending, absent or unavailable, they stay editable and show
+`not protected · Alt+Return registers`; the first submit registers them.
+Native rename and saveas operations keep an unregistered file plain; its first
+submit registers the current path.
+Outside Couch, typed legacy files retain their existing edit/submit behavior.
 A namespace/store failure or timeout allows editing with `not locked: Couch
 unreachable; edits may conflict`; conflicting versions are kept through the
 existing clobber-copy path. A held-lock refusal or invalid acknowledgment blocks
@@ -80,9 +87,18 @@ edits with a notice that keys were not applied. Leave insert, then press `i`
 to retry when protection is available (`a`, `o`, `I`, `A`, and `O` also retry),
 or use `:ParleySessionRetry`. These local mappings exist only during refusal. A stopped Couch supervisor does not prevent these
 local acquire/release commands. Leaving unchanged (Escape or Ctrl-C) releases
-an owned turn. Normal-mode edits also take the turn before auto-save.
+an owned registered turn. Normal-mode edits also take the registered turn before
+auto-save.
 Undo back to the acquisition baseline releases it outside insert mode, and redo
 takes it again. Saves never move that baseline.
+Existing old locks are preserved rather than converted during acquisition.
+Alt+Return can explicitly finish a live turn whose exact proof this editor owns.
+For a stale typed tokenless lock, follow this recovery instruction:
+
+open it in nvim outside Couch and press Alt+Return to release
+
+Other unproven protection requires its owner to release it; retry never guesses
+ownership or removes a lock.
 Leaving a document with an unsubmitted turn gives three short red winbar pulses
 and a file-named `unsubmitted: Alt+Return to submit` reminder. Navigation stays
 free; after a same-window file switch the destination bar names the file left
@@ -98,8 +114,10 @@ name has an orphan `.side/` folder and no document, the orphan is retained at th
 first free `_N.side/` name; a notice gives its path. The loaded parent receives
 the rewritten references before Couch confirms the move. A move is moving,
 done, or interrupted: an interrupted move names the reason and asks you to
-reopen to finish. Changed or unknown bytes are preserved; reopening never
-forces an overwrite. Outside a Couch pane, the existing
+reopen to finish. Existing v1/v2 move journals resume only after validation,
+before cached identity can start ordinary admission. Changed or unknown bytes
+and old protection are preserved; no lock or journal is swept or converted.
+Reopening never forces an overwrite. Outside a Couch pane, the existing
 [document review](atlas/modes/review.md) flow remains.
 
 A long-running editor watches its own open files. The first time it holds more

@@ -148,7 +148,7 @@ describe("session-sync native edits", function()
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "scope-410", "tag-410"
             vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
             local identity = {ID="doc-1", File=path, Owner="ops:0", RegisteredOwner="ops:0", RegisteredAt="now"}
-            vim.fn.writefile({vim.json.encode({paths=absent and {} or {[path]=identity},moves={}})},vim.env.FAKE_COUCH_REGISTRY)
+            vim.fn.writefile({vim.json.encode({paths=absent and vim.empty_dict() or {[path]=identity},moves=vim.empty_dict()})},vim.env.FAKE_COUCH_REGISTRY)
             local couch = require("parley.couch")
             _G.pending_original_run = _G.pending_original_run or couch.run
             _G.pending_original_acquire = _G.pending_original_acquire or couch.operator_lock
@@ -215,6 +215,7 @@ describe("session-sync native edits", function()
             assert.equals("owned legacy edit",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
             assert.is_true(exec([[return table.concat(notifications,"\n"):find(
                 "open it in nvim outside Couch and press Alt+Return to release",1,true)~=nil]]))
+            assert.is_true(exec([[return table.concat(notifications,"\n"):find(path,1,true)~=nil]]))
             keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
             exec("vim.schedule(function() _G.old_turn_settled=true end)")
             wait_for("return old_turn_settled==true")
@@ -237,6 +238,23 @@ describe("session-sync native edits", function()
         end)
     end
 
+    it("unproven old typed lock stays refused inside S1 (#410 retire)",function()
+        pending_lookup(20,false)
+        vim.fn.writefile({"holder: operator","operator: crashed editor"},file..".lock")
+        local old=vim.fn.readfile(file..".lock","b")
+        keys("iX")
+        wait_for("return not vim.bo.modifiable")
+        assert.same(old,vim.fn.readfile(file..".lock","b"))
+        assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        assert.is_true(exec([[local notices=table.concat(notifications,"\n");return notices:find(path,1,true)~=nil
+            and notices:find("open it in nvim outside Couch and press Alt+Return to release",1,true)~=nil]]))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        keys("<M-CR>")
+        wait_for([[return table.concat(notifications,"\n"):find("no confirmed ownership",1,true)~=nil]])
+        assert.same(old,vim.fn.readfile(file..".lock","b"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
     for _, outcome in ipairs({"pending","absent","unavailable"}) do
         it("S1 typed edits stay visibly unprotected on "..outcome.." (#410 retire)",function()
             if outcome=="unavailable" then exec("vim.env.FAKE_COUCH_REGISTRY_MODE='unsupported'") end
@@ -254,11 +272,31 @@ describe("session-sync native edits", function()
             if outcome~="pending" then
                 exec("release_lookup()")
                 wait_for("return require('parley.agentic_document').status(vim.api.nvim_get_current_buf()).operation==nil")
+                assert.equals(outcome=="absent" and "plain" or "unknown",exec(
+                    "return require('parley.agentic_document').status(vim.api.nvim_get_current_buf()).phase"))
             end
             assert.is_true(exec("return vim.bo.modifiable"))
             assert.is_false(exists(),"lookup completion restored a retired legacy writer")
             assert.is_true(exec([[return vim.wo.winbar:find("not protected",1,true)~=nil]]))
             assert.equals("saved unprotected edit",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        end)
+    end
+
+    for _, protection in ipairs({"old", "unknown"}) do
+        it("new move refuses "..protection.." protection inside S1 (#410 retire)", function()
+            pending_lookup(nil, false, true)
+            if protection == "unknown" then
+                assert(vim.uv.fs_unlink(file..".lock"))
+                assert(vim.uv.fs_mkdir(file..".lock",448))
+            end
+            local result=exec([[
+                local token,reason=require('parley.session_sync').begin_move(vim.api.nvim_get_current_buf())
+                return {refused=token==nil,reason=reason}
+            ]])
+            assert.is_true(result.refused, "new move copied old or unknown protection")
+            assert.truthy(result.reason)
+            assert.is_true(exists())
+            assert.equals(0,exec("return acquire_calls"))
         end)
     end
 

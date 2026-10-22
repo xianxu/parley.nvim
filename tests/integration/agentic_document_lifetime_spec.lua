@@ -108,6 +108,18 @@ describe("agentic document buffer lifetime", function()
         vim.fn.delete(root, "rf")
     end)
 
+    it("clears the unprotected typed band when its S1 attachment retires (#410)", function()
+        plain()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "---", "type: session-sync", "owner: ops:0", "operator: test", "---", "body",
+        })
+        vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+        assert.truthy(vim.wo.winbar:find("not protected", 1, true))
+        document.detach(buf)
+        assert.is_nil(document.status(buf))
+        assert.is_nil(vim.wo.winbar:find("not protected", 1, true))
+    end)
+
     it("retires an unloaded lookup and freshly queries on reopen without a stuck operation", function()
         plain()
         local held = hold_registry("lookup")

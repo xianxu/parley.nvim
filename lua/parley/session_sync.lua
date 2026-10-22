@@ -1202,30 +1202,6 @@ submit_now = function(buf, h)
 end
 
 
--- Suspend the existing engine after preserving any foreign write. The token
--- is also the ownership proof for every later migration operation.
-M.begin_move = function(buf)
-    buf = buffer_id(buf)
-    local s = state[buf]
-    if not s or s.moving then return nil, "document already moving or detached" end
-    local protection = lock_bytes(M.lock_path(buf))
-    if protection and require("parley.agentic_document").owns_admission(buf)
-        and (protection ~= admission(s).owned_lock or not couch.operator_proof(protection)) then
-        return nil, old_lock_message(buf, "operator protection must be acquired before starting a move")
-    end
-    if disk_changed(buf) then
-        if read_turn(buf) ~= "operator" or not violation(buf) then return nil, "foreign change requires reconciliation" end
-    end
-    if mtime_moved(buf) then return nil, "disk change could not be reconciled" end
-    local token = { old_path = file_of(buf), path = file_of(buf), lock = lock_bytes(M.lock_path(buf)), baseline = admission(s).baseline }
-    s.moving = { token = token, old_path = token.old_path, lock = token.lock, baseline = admission(s).baseline }
-    s.epoch, s.edit, s.probing = s.epoch + 1, nil, false
-    close_timer(s.watch)
-    close_timer(s.idle)
-    s.watch, s.idle = nil, nil
-    return token
-end
-
 -- Finalization can authorize an absent lock as an after-state. Only ENOENT
 -- proves absence: unreadable files, directories and symlinks remain unknown.
 local function finalization_lock(path)
@@ -1241,6 +1217,32 @@ local function finalization_lock(path)
     local closed, close_error = stream:close()
     if not bytes or not closed then return false, read_error or close_error or "lock could not be read" end
     return true, bytes
+end
+
+-- Suspend the existing engine after preserving any foreign write. The token
+-- is also the ownership proof for every later migration operation.
+M.begin_move = function(buf)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s or s.moving then return nil, "document already moving or detached" end
+    if require("parley.agentic_document").owns_admission(buf) then
+        local known, protection = finalization_lock(M.lock_path(buf))
+        if not known then return nil, "operator protection is unknown: " .. tostring(protection) end
+        if protection and (protection ~= admission(s).owned_lock or not couch.operator_proof(protection)) then
+            return nil, old_lock_message(buf, "operator protection must be acquired before starting a move")
+        end
+    end
+    if disk_changed(buf) then
+        if read_turn(buf) ~= "operator" or not violation(buf) then return nil, "foreign change requires reconciliation" end
+    end
+    if mtime_moved(buf) then return nil, "disk change could not be reconciled" end
+    local token = { old_path = file_of(buf), path = file_of(buf), lock = lock_bytes(M.lock_path(buf)), baseline = admission(s).baseline }
+    s.moving = { token = token, old_path = token.old_path, lock = token.lock, baseline = admission(s).baseline }
+    s.epoch, s.edit, s.probing = s.epoch + 1, nil, false
+    close_timer(s.watch)
+    close_timer(s.idle)
+    s.watch, s.idle = nil, nil
+    return token
 end
 
 -- Recovery runs only under the caller's validated journal and ID lease.

@@ -159,6 +159,7 @@ end
 local config_ms = registry.config_ms
 
 local function band(s, message, highlight)
+    if not valid(s) then s.renderer.clear(); return end
     local typed = require("parley.session_sync").parse_header(vim.api.nvim_buf_get_lines(s.buf, 0, 40, false)) ~= nil
     local unprotected = lifecycle.unprotected_view(s.model.snapshot(), typed)
     if unprotected then

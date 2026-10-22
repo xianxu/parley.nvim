@@ -669,7 +669,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
     end)
 
 
-    it("registers the actual legacy buffer path after Neovim canonicalizes an alias", function()
+    it("keeps an unregistered typed alias saveas plain until first submit (#410 retire)", function()
         document.detach(buf)
         vim.api.nvim_buf_delete(buf,{force=true})
         local alias_dir = root .. "/caller-alias"
@@ -702,15 +702,20 @@ describe("registered ordinary Markdown through Parley move doors", function()
         await(function() return document.status(buf).phase == "plain" end)
         assert.equals("absent",lookup(canonical_old).kind)
         local new_path = destination .. "/alias-legacy.md"
-        -- #359: the rename refuses at once while the legacy file registers in
-        -- the background (row 4); the rerun renames the registered document.
-        local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(new_path))
-        assert.is_false(ok)
-        assert.truthy(tostring(err):find("registering this document first; nothing moved", 1, true), tostring(err))
-        await(function() return document.identity(buf) ~= nil end)
-        assert.same({actual_caller},vim.fn.readfile(registration_argv), "legacy state adoption must receive the actual pre-move buffer path")
+        -- RETIRE: no legacy attachment supplies a typed-owner signal to
+        -- migration. A clean unregistered saveas is an ordinary file operation.
         vim.cmd("saveas " .. vim.fn.fnameescape(new_path))
-        await(function() local identity = document.identity(buf); return identity and identity.File == new_path end)
+        assert.is_nil(document.identity(buf))
+        assert.equals(0,vim.fn.filereadable(registration_argv),"file operation registered the document")
+        assert.equals("absent",lookup(new_path).kind)
+        assert.equals("absent",lookup(canonical_old).kind)
+        assert.equals(0,vim.fn.filereadable(new_path..".lock"))
+        assert.equals("",vim.fn.glob(root.."/state/document-moves/*/*.json"))
+        assert.truthy(vim.wo.winbar:find("not protected",1,true))
+        assert.is_true(document.submit(buf))
+        await(function() return document.identity(buf)~=nil and not document.status(buf).operation end)
+        assert.same({vim.api.nvim_buf_get_name(buf)},vim.fn.readfile(registration_argv),
+            "first submit must register the actual post-saveas caller path")
         local confirmed = lookup(new_path)
         assert.equals("registered",confirmed.kind)
         assert.equals(uv.fs_realpath(new_path),confirmed.registration.File)
