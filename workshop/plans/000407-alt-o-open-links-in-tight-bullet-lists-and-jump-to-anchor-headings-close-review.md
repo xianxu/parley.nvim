@@ -190,3 +190,111 @@ findings:
    Add explicit PURE/INTEGRATION classifications to the Core concepts table.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"95a3ee9a-b4ed-4cc6-87d5-8bc8479c1233","repository":"github.com/xianxu/parley.nvim","issue_id":"000407","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/32b04cd88f21d5d0","reviewed_head":"2222dd74e8451675e1252eda02b9b433a93ade62","slot":"parley.nvim:2","requested_at":"2026-10-21T23:31:16.075406Z"},"phase":"finished","pid":81888,"started_at":"2026-10-21T23:31:16.246311Z","finished_at":"2026-10-21T23:34:57.235616Z","session_id":"01a160ce-040d-7750-89ca-cb7ffaa18c74","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-21T20:03:27-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 407 — Alt+O: open links in tight bullet lists, and jump to #anchor headings |
+| repo | parley.nvim |
+| issue file | workshop/issues/000407-alt-o-open-links-in-tight-bullet-lists-and-jump-to-anchor-headings.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 220b67af621c39fce796dc9a901b81d4d33c8d50..fd85af66acd406f68f6f7dc65cb59bc85a6357df |
+| command | sdlc close --issue 407 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-21T20:03:27-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The shared navigation boundary rule resolves BR-4, and the narrowed HTML/entity scope is consistently documented and regression-tested. BR-1 remains blocking: supported Markdown emphasis, code spans, and inline links still produce incorrect anchors and duplicate suffixes.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      The HTML/entity dispute is supported: the revised Spec excludes those forms, and the current heading tests pass 15/15; loading the pre-correction module makes the unsupported-HTML regression fail. However, supported Markdown normalization remains incorrect at lua/parley/markdown_heading.lua:49-137. Headings "# _one _two_ three_", "# _Target __more___", "# ` a ` b", and "# [Target](file.md \"(title\")" fail their rendered-text anchors and duplicate suffixes: all eight checks fail. Retain BR-1 for these in-scope cases; ARCH-PURPOSE.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Shared markdown_blocks metadata now supplies block classes and content indentation to navigation_range. The 72-case heading boundary sweep passes at HEAD; loading the pre-fix range module in memory reproduces 63/72 failures. Current range tests pass 256/256 and native mapping tests pass 48/48, including outside-block negatives.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Previously accepted correction remains intact: shared fence state retains opener character and width and requires a matching whitespace-only closer. Current lexical tests pass 10/10, with heading-consumer false-closer regressions also passing.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Previously accepted correction remains intact through the shared fence-opener metadata. Range and native mapping regressions retain dedented-fence exclusion and indented-fence ownership.
+```
+
+Done-when: current — the acceptance criteria still cover the revised feature; the Spec explicitly limits which heading forms participate.
+
+### 1. Strengths
+
+- Shared block classification avoids duplicating navigation grammar and preserves editing textobjects.
+- The containment tests cover all three bullet markers, six heading levels, indentation, nested ownership, and mapped negative cases.
+- README and atlas describe the new navigation behavior and narrowed anchor scope consistently.
+- Heading lookup remains directly testable without editor IO; all 15 existing heading tests also pass under standalone LuaJIT.
+
+### 2. Critical findings
+
+**BR-1 — Supported Markdown normalization remains incomplete.**  
+[markdown_heading.lua:49](/Volumes/TestScratch/review-checkouts/1f88525da1432c80/lua/parley/markdown_heading.lua:49), especially lines 91–96 and 113–130.
+
+| Heading content | Expected anchor |
+|---|---|
+| `_one _two_ three_` | `one-two-three` |
+| `_Target __more___` | `target-more` |
+| `` ` a ` b `` | `a-b` |
+| `[Target](file.md "(title")` | `target` |
+
+These are supported emphasis, code-span, and inline-link forms under the [GFM rules](https://github.github.com/gfm/#inlines). Standalone probes fail all four anchors. Appending equivalent plain headings makes lookup select the later heading, while all four expected `-1` anchors remain missing: **8/8 failures**.
+
+The underscore pass loses nested delimiter ownership, code spans retain padding that rendering removes, and destination matching counts parentheses inside quoted titles. Repair the normalization rule across these supported constructs, then test both normalized anchors and duplicate numbering. This continues **BR-1**, family `heading-anchor-normalization`, rather than introducing another finding. **ARCH-PURPOSE.**
+
+### 3. Important findings
+
+None newly raised.
+
+### 4. Minor findings
+
+None.
+
+### 5. Test coverage notes
+
+- Passed: native navigation **48/48**, ranges **256/256**, lexical **10/10**, heading **15/15**, candidates **22/22**.
+- BR-4 counterfactual: **0/72** failures at HEAD versus **63/72** with the pre-fix range module loaded in memory.
+- Narrowed-scope counterfactual: the existing unsupported-HTML regression fails without the correction.
+- `make -k test-spec SPEC=context/file_references` exited **2**, twice, with two existing `src:` opening tests failing. Their scratch fixtures are beneath this checkout’s Git root, causing the existing resolver to choose Git-root resolution instead of configured `src_root`. No complete green mapped run is claimed.
+- Range whitespace checks passed.
+
+### 6. Architectural notes
+
+- **ARCH-DRY — pass:** block vocabulary and fence ownership are shared.
+- **ARCH-PURE — pass:** range, block, destination, and heading decisions remain pure; editor effects stay at the boundary.
+- **ARCH-PURPOSE — flag:** BR-1 still violates the supported Markdown anchor contract.
+- **ARCH-MOCK — pass:** no new external dependency; native tests exercise real editor mappings.
+- **ARCH-CONSTRAINTS — pass:** command-time scans; no new background work or fan-out.
+- **ARCH-SECURE — pass:** no new command interpolation or credential handling.
+- **ARCH-ORDER — pass:** destination identity is checked before jumping; same-file jumps retain their cursor.
+- **ARCH-FUNERAL — pass:** new working values expire with the invocation.
+- **ARCH-EVOLVE — pass:** no persisted format changes.
+
+Core-concept entities exist at their documented paths, and their classifications match the implementation.
+
+### 7. Plan revision recommendations
+
+Add a `## Revisions` entry reopening BR-1 verification for nested emphasis, code-span normalization, and quoted inline-link destinations. Enumerate those supported grammar classes and require regressions for first occurrences and normalized duplicates before marking normalization complete.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"7bc92e0c-3066-43e2-adb7-8575fe9c3115","repository":"github.com/xianxu/parley.nvim","issue_id":"000407","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/1f88525da1432c80","reviewed_head":"fd85af66acd406f68f6f7dc65cb59bc85a6357df","slot":"parley.nvim:2","requested_at":"2026-10-22T02:58:11.470274Z"},"phase":"finished","pid":27169,"started_at":"2026-10-22T02:58:11.666531Z","finished_at":"2026-10-22T03:03:26.70307Z","session_id":"01a1618b-75f6-7e32-998c-780f11583d59","outcome":"returned"}] -->
