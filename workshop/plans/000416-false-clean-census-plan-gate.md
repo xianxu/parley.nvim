@@ -1,4 +1,24 @@
 ---
+reviewer_runs:
+    - version: 1
+      intent:
+        id: 5576c307-5ce5-4fb3-92ee-417f6a5606da
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000416"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        reviewed_head: f9dae7142ebb23b82253c95ccbf06e8e82760802
+        slot: parley.nvim:3
+        requested_at: "2026-10-22T23:23:06.479827Z"
+      phase: finished
+      pid: 43722
+      started_at: "2026-10-22T23:23:06.674612Z"
+      finished_at: "2026-10-22T23:23:34.606347Z"
+      session_id: 01a165ec-e7d1-7b71-a305-93fb695efdaf
+      outcome: returned
 gate: plan-quality
 issue: 416
 id_prefix: PQ
@@ -75,7 +95,41 @@ rounds:
           note: Plan lines 83–93 name the functions under test and give concise adversarial strategies with mechanical guards.
           round: 2
       blocked: false
-content_hash: c0d4dc576302917a7578b1576c47169b34a9f0c7548ad296d1125654d2221d23
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: c984d0c2-fdfb-4bcd-a28d-24773d9350fc
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000416"
+            recipe: plan-quality
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+            reviewed_head: f9dae7142ebb23b82253c95ccbf06e8e82760802
+            slot: parley.nvim:3
+            requested_at: "2026-10-22T23:22:41.043577Z"
+          phase: finished
+          pid: 33086
+          started_at: "2026-10-22T23:22:41.173658Z"
+          finished_at: "2026-10-22T23:23:04.631327Z"
+          session_id: 01a165ec-83eb-71f1-ba11-6c087e76b404
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-22T16:23:04-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: Durable pending tickets precede child creation; interrupted publication retains unknown evidence and prevents a clean verdict.
+          round: 3
+        - id: PQ-2
+          disposition: addressed
+          note: The verification contract names risky functions and pairs each with an adversarial strategy and mechanical guard.
+          round: 3
+      blocked: false
+content_hash: 07e1d24dce1643bcb69900b3ef8e87fcb4dee3e157557cf16627fe6a499c54f0
 ---
 
 # Gate ledger — parley.nvim#416 (plan-quality)
@@ -98,6 +152,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - PQ-1 — addressed — Plan lines 52 and 87 require durable pre-spawn tickets, retained unknown outcomes without signaling, and controlled native interruption testing.
 - PQ-2 — addressed — Plan lines 83–93 name the functions under test and give concise adversarial strategies with mechanical guards.
+
+## Round 3 — 2026-10-22T16:23:04-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — Durable pending tickets precede child creation; interrupted publication retains unknown evidence and prevents a clean verdict.
+- PQ-2 — addressed — The verification contract names risky functions and pairs each with an adversarial strategy and mechanical guard.
 
 ## Open findings
 
