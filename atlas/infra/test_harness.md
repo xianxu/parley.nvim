@@ -216,8 +216,12 @@ parent Neovim commands use the physical checkout path in their init argument
 so the census can identify them through symlinked working directories too.
 
 `scripts/test-run-lease.py` is the shared IO owner of a checkout-wide `flock`.
-Make takes it before scratch preparation/cleanup and retains it through the
-requested command, recursive make and both census passes. A competing target
+Every protected public Make target wraps execution with the shared lease helper
+and forwards to its `parley-test-body-*` recipe. This covers direct, prerequisite
+and default-goal entry without inspecting requested goal names. Internal bodies
+require a validated inherited descriptor as their first prerequisite; directly
+invoking them unowned fails before scratch mutation. Make retains the lease
+through the public target, recursive make and both census passes. A competing target
 or manual live census waits and prints the original owner PID and checkout.
 Make's `.NOTPARALLEL` also serializes multiple goals within a lease-owning make;
 the per-spec fan-out continues to use `JOBS`.
@@ -232,6 +236,9 @@ not create a second census domain. Dry runs and recorded-table census tests have
 no destructive effects and do not take a lease. See TOOLING for waiting and
 rollout guidance. Gated real-make/census regressions run from
 `tests/unit/test_run_lease.py` through the normal reaper spec.
+The source guard checks repository-owned Makefiles for new unwrapped test or
+harness recipes, with planted negative controls; the alias/default regressions
+exercise the actual Make graph through real Neovim and census processes.
 
 ## Comment drift
 

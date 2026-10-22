@@ -6,6 +6,10 @@
   its owner has finished. Hold one checkout lease across scratch mutation,
   execution and both cleanup phases; reuse its descriptor through recursive make.
   Reentry alone does not order sibling goals: serialize them within the owner too.
+- #409 close BR-1: MAKECMDGOALS describes requested roots, not Make's transitive
+  recipe graph. Put admission at the protected target's execution boundary and
+  reject unowned internal bodies. Test direct, alias-chain and default entry;
+  source enumeration alone did not catch the bypass.
 - Test dry-run behavior through recursive make with long options too. Apple's
   make can put `-n` after `--no-print-directory` in MAKEFLAGS, so its first word
   alone cannot establish whether a nested command is print-only.

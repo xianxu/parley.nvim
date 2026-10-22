@@ -3,6 +3,7 @@
 import os
 import fcntl
 import pathlib
+import re
 import shutil
 import shlex
 import signal
@@ -76,11 +77,11 @@ qa!
 ''')
         return root
 
-    def make(self, root, name, extra=()):
+    def make(self, root, name, extra=(), goals=('test-spec',)):
         gate = self.base / name
         env = dict(os.environ, GATE=str(gate))
         # A spec's ambient inherited lease must not bless a new disposable root.
-        argv = ['make', '--no-print-directory', 'test-spec', 'SPEC=infra/test_harness',
+        argv = ['make', '--no-print-directory', *goals, 'SPEC=infra/test_harness',
                 'PLENARY=' + str(root / 'plenary'), 'TEST_NVIM_DIR=', 'TEST_RUN=env',
                 'TEST_ENV_ROOT=' + str(self.base / (name + '-env')),
                 'ORPHANS=python3 scripts/reap-test-orphans.py --root "' + str(root) + '" --grace 0']
@@ -88,7 +89,10 @@ qa!
 
     def test_two_targeted_runs_wait_before_census_and_scratch(self):
         root = self.checkout('checkout with spaces')
-        first, _, first_err = self.make(root, 'first')
+        self.assert_two_runs_serialize(root)
+
+    def assert_two_runs_serialize(self, root, goals=('test-spec',)):
+        first, _, first_err = self.make(root, 'first', goals=goals)
         ready = self.base / 'first.ready'
         self.until(ready.exists, 'first targeted harness did not start: ' + first_err.read_text())
         harness_pid = int(ready.read_text())
@@ -116,6 +120,26 @@ qa!
         (self.base / 'second.release').touch()
         self.assertEqual(second.wait(timeout=15), 0, err.read_text())
         self.assertEqual(manual.wait(timeout=15), 0, manual_err.read_text())
+
+    def test_prerequisite_chain_enters_the_same_lifetime_lease(self):
+        root = self.checkout('alias chain')
+        with (root / 'Makefile').open('a') as makefile:
+            makefile.write('\nfirst-alias: test-spec\nouter-alias: first-alias\n')
+        self.assert_two_runs_serialize(root, goals=('outer-alias',))
+
+    def test_default_goal_enters_the_same_lifetime_lease(self):
+        root = self.checkout('default goal')
+        with (root / 'Makefile').open('a') as makefile:
+            makefile.write('\n.DEFAULT_GOAL := outer-alias\nouter-alias: test-spec\n')
+        self.assert_two_runs_serialize(root, goals=())
+
+    def test_internal_body_refuses_unowned_execution_before_scratch(self):
+        root = self.checkout('unowned body')
+        process, _, err = self.make(root, 'unowned', goals=('parley-test-body-test-spec',))
+        self.assertNotEqual(process.wait(timeout=10), 0)
+        self.assertIn('test lease required', err.read_text())
+        self.assertFalse((self.base / 'unowned-env').exists())
+        self.assertFalse((self.base / 'unowned.ready').exists())
 
     def wrapped(self, root, command, name, env=None, pass_fds=()):
         return self.start([sys.executable, str(WRAPPER), '--root', str(root), '--'] + command,
@@ -196,18 +220,50 @@ qa!
                 self.assertIn('pid=' + str(child.pid), out.read_text())
                 self.assertEqual(child.wait(timeout=5), -signal.SIGKILL)
 
-    def test_make_entries_cover_every_census_and_scratch_recipe(self):
-        lines = (ROOT / 'Makefile.parley').read_text().splitlines()
+    @staticmethod
+    def unwrapped_recipes(text):
+        lines = text.splitlines()
         targets = next(line.split(':=', 1)[1].split() for line in lines
                        if line.startswith('PARLEY_TEST_TARGETS :='))
-        required = {'test', 'test-clean-env', 'test-compat'}
-        current = None
+        current, found = None, set()
         for line in lines:
-            if line and not line[0].isspace() and ':' in line and '=' not in line:
-                current = line.split(':', 1)[0]
-            if line.startswith('\t') and ('$(PREP_TEST_ENV)' in line or '$(ORPHANS)' in line):
-                required.add(current)
-        self.assertTrue(required <= set(targets), str(required - set(targets)))
+            target = re.match(r'^([A-Za-z][\w-]*):', line)
+            if target:
+                current = target.group(1)
+            if not current or not line.startswith('\t'):
+                continue
+            public = current.removeprefix('parley-test-body-')
+            harness = any(token in line for token in ('$(PREP_TEST_ENV)', '$(ORPHANS)',
+                          '$(TEST_RUN)', '$(TEST_ENV)', 'tests/minimal_init.vim'))
+            if current.startswith('test') or public in targets or harness:
+                if current == public or public not in targets:
+                    found.add(current)
+        return found
+
+    def test_make_entries_cover_every_census_and_scratch_recipe(self):
+        text = '\n'.join((ROOT / name).read_text() for name in
+                         ['Makefile.parley', 'Makefile', 'Makefile.local'])
+        self.assertEqual(self.unwrapped_recipes(text), set())
+
+    def test_entry_guard_rejects_a_new_unwrapped_public_test_target(self):
+        text = (ROOT / 'Makefile.parley').read_text()
+        self.assertEqual(self.unwrapped_recipes(text + '\ntest-new:\n\t@true\n'), {'test-new'})
+        self.assertEqual(self.unwrapped_recipes(text + '\nnew-check:\n\t@$(PREP_TEST_ENV)\n'), {'new-check'})
+
+    def test_alias_and_default_dry_runs_never_wait_for_lease(self):
+        root = self.checkout('dry aliases')
+        with (root / 'Makefile').open('a') as makefile:
+            makefile.write('\n.DEFAULT_GOAL := outer-alias\nouter-alias: test-spec\n')
+        first, _, _ = self.wrapped(root, self.gate_command('first'), 'first')
+        self.until((self.base / 'first.ready').exists, 'owner never entered')
+        for index, goals in enumerate([['outer-alias'], []]):
+            dry, out, err = self.make(root, 'dry' + str(index), goals=goals, extra=['-n'])
+            self.assertEqual(dry.wait(timeout=10), 0, err.read_text())
+            self.assertIn('nvim', out.read_text())
+            self.assertNotIn('waiting', err.read_text())
+            self.assertFalse((self.base / ('dry' + str(index) + '-env')).exists())
+        (self.base / 'first.release').touch()
+        self.assertEqual(first.wait(timeout=5), 0)
 
     def test_recursive_dry_run_does_not_wait_or_touch_scratch(self):
         root = self.checkout('dry run')

@@ -50,11 +50,12 @@ def enter(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True)
-    parser.add_argument('--check', action='store_true')
+    parser.add_argument('--require', action='store_true')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    if args.check:
-        print('held' if inherited(args.root) is not None else 'missing')
+    if args.require:
+        if inherited(args.root) is None:
+            parser.error('test lease required; enter through a public test target')
         return
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     if not command:
