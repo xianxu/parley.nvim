@@ -43,7 +43,7 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 
 - [x] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
 - [x] Native red/green pending-lookup ordering, exact incarnation/witness scope, and residual acquisition deadline through late attachment.
-- [ ] Both-runtime regressions, counted 4/8-entry costs, disposable Couch conformance, indexed docs, recorded suite and TL-directed live check; SDLC close owns fresh-context review.
+- [x] Implement and verify the regression surface on both runtimes, counted 4/8-entry costs, disposable Couch conformance and indexed docs; prepare the recorded suite and TL-directed live acceptance. SDLC close owns fresh-context review; the recorded pass and live outcome remain mandatory before landing, tracked in the Log below.
 
 ## Log
 
@@ -70,3 +70,11 @@ The broad map completed 58 files, 840 passing cases, three architecture failures
 TL 97e1636a instructed filing the unrelated retry case separately and not blocking #410 on it; filed unclaimed #412 with the failure, isolated 200 ms delayed-producer pass, command durations and explicitly missing failure-time load. Current sampled load was 20.35/33.58/39.16, not a retrospective failure measurement. Diagnostic assertion now records native mode/notifications on recurrence; oracle unchanged. Typed Lua registry support is ariadne#556. Only this exact failure has TL authorization for one evidenced recorded-suite rerun.
 
 PR #333 exists. TL 828e035c authorized a disposable copied operator-profile live check only AFTER review and suite pass. Any :0 stage must wait for #411's operator stage to clear and requires another TL ask before staging. No stage held. Next: commit/push corrections, recorded suite on that exact head, SDLC close review, then authorized live acceptance. Do not restart while the recorded check is queued/running.
+
+Recorded suite lease-1901041664, attempt 1f75cea859f261b4e87927ca0d433a4f, is queued normally on pushed 11c41b7b. Initial FIFO position 14 behind two Pair runs. Log: common Git dir `sdlc/test-stats/inflight/1f75cea859f261b4e87927ca0d433a4f/run.log`. Per tl-worker's explicit overlap rule, the close review may run while this check is queued; a passing recorded final-code suite still precedes live acceptance and landing. No duplicate runner, stage or restart.
+
+## Revisions
+
+### 2026-10-22 — distinguish implementation checklist from landing evidence
+
+The final Plan checkbox originally combined implemented tests/docs with the recorded suite and live check. Clarified it as completed implementation/verification preparation so SDLC can run its single close review while the suite waits, as tl-worker explicitly permits. The mandatory recorded pass and post-review/suite live acceptance are retained above and in the Log; no requirement is waived or represented as already passed.
