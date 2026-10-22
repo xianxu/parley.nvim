@@ -93,7 +93,9 @@ end
 local function apply_locked(event, now, grace)
     local state = M.load()
     local next_state, refused = Model.transition(state, event, now)
-    next_state = Model.transition(next_state, { type = "sweep", grace = grace }, now)
+    if event.type ~= "clear" then
+        next_state = Model.transition(next_state, { type = "sweep", grace = grace }, now)
+    end
     local ok, err = require("parley.helper").table_to_file_atomic(next_state, M.path())
     if not ok then return nil, "cannot write " .. M.path() .. ": " .. tostring(err) end
     return next_state, refused
@@ -104,6 +106,7 @@ end
 --- result, or nil when nothing was written; err is "full" when the model
 --- refused a submit, or the reason the store could not be written. Every
 --- failure is also warned, naming `event.path`.
+--- A successful clear returns its removed count as the second argument.
 ---@param options table|nil # { tries, delay_ms, now, grace, lease } for tests
 function M.apply(event, options, on_done)
     options = options or {}

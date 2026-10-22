@@ -122,6 +122,17 @@ end
 
 local handlers = {}
 
+function handlers.clear(state, event, now)
+    local next_state, count = with_entry(state, nil), 0
+    for _, path in ipairs(event.paths) do
+        if next_state.entries[path] then
+            remove(next_state, path, now)
+            count = count + 1
+        end
+    end
+    return next_state, count
+end
+
 function handlers.submitted(state, event, now)
     local next_state, entry = with_entry(state, event.path)
     if not entry then
@@ -304,7 +315,7 @@ end
 
 --- The one owner of every state change. Returns the new state (the input is
 --- never mutated) and, when a submit is refused because every entry is
---- waiting, the error "full".
+--- waiting, the error "full". Clear returns the actual removed count instead.
 function M.transition(state, event, now)
     local handler = handlers[event.type]
     assert(handler, "attention_model: unknown event " .. tostring(event.type))

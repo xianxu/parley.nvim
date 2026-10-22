@@ -47,8 +47,8 @@ one, so the list grows past what they can go through by hand. Add a one-key **cl
 
 ## Plan
 
-- [ ] Add red model/store cases for exact clear, all states, side retirement and resubmit; add native picker scope/filter/empty/late-refresh controls.
-- [ ] Extend the existing picker action context with its shown-row snapshot; register finder-local Ctrl+R, clear once through the leased model, repaint and notify the removed count.
+- [x] Add red model/store cases for exact clear, all states, side retirement and resubmit; add native picker scope/filter/empty/late-refresh controls.
+- [x] Extend the existing picker action context with its shown-row snapshot; register finder-local Ctrl+R, clear once through the leased model, repaint and notify the removed count.
 - [ ] Document the key and native register-paste override; run focused checks on both nvim versions, recorded suite and close review, then land.
 
 Actions: clear shown rows; submit again. The existing store lease serializes clear with other writes (ARCH-ORDER); a failed write leaves rows intact and surfaces the existing warning. Successful clear removes only listed paths, preserving side retirement through the existing remove rule (ARCH-DRY/PURE); later submits restore waiting. No new durable format, watcher or retry. The picker snapshot includes filtered ancestor context, excludes hidden scope rows, and is empty while a status replaces rows. Snapshot/clear walks N rows once, N <=256; 8/16-entry tests count one batch with exactly N paths. Ctrl+R overrides native register paste only in this finder and is configurable under attention_finder_mappings.clear_shown. Other pickers keep native behavior.
@@ -56,3 +56,13 @@ Actions: clear shown rows; submit again. The existing store lease serializes cle
 ## Log
 
 ### 2026-10-22
+
+Claimed and started from main while #405 waits for its independent bridge acceptance; #405 remains on its own branch. The automatic weave refresh rewrote merge-check.yml; restored that unrelated generated workflow delta before start-plan, so this issue changes no local gates. Design note sent to hub before code: finder-local Ctrl+R overrides native Insert register paste, all other prompts unchanged.
+
+Initial mapping RED327PASS/3FAIL/0ERROR: exact model/store clear missing and prompt Ctrl+R absent (parley-413-red.log). GREEN333PASS/0FAIL/0ERROR on nvim0.12.5 and0.11.7, clean censuses (parley-413-green-final.log and -green-0117.log). Real picker controls cover mixed waiting/answered/seen, side ancestry, scope/filter, legacy entries, current-file omission, empty result, late probe, all-slot toggle, and mapping teardown. Pure/store controls cover idempotent paths, side retirement, persistence and resubmit;8/16-row actions use one batch with exactlyN paths. The expired-hidden-seen counterfactual fails without the clear sweep exception (parley-413-grace-counterfactual.log); the initial custom-map attempt ran no tests and is not evidence. Lint823files is clean, and git diff --check passes. No recorded-suite or live-profile acceptance claimed yet.
+
+## Revisions
+
+### 2026-10-22 — exact hidden-row preservation
+
+The store normally sweeps expired seen entries after every write. Clear must skip that incidental sweep so its one write cannot remove a hidden entry whose grace has expired; ordinary sweep behavior is unchanged. Add the store counterexample. The new outer clear loop is O(N), but each side removal reuses the existing retirement bound check over R <=256 records: total bounded O(NR), rather than a claim of wholly linear removal. The8/16 tests count one store batch containing exactlyN paths; no new scan runs on typing.

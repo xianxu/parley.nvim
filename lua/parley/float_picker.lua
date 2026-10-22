@@ -579,6 +579,7 @@ end
 ---   on_query_change function(query) – called when prompt text changes (optional)
 ---   mappings   table    – list of { key: string|string[], fn: function(item, close_fn) }
 ---                         keys are mapped in the prompt (insert mode)
+---                         third callback argument has items: a copied shown-row snapshot
 ---   recall_key string   – optional. When set, the last confirmed item's id
 ---                         is remembered and used as the initial cursor position
 ---                         on the next open (falling back to initial_index when
@@ -1289,6 +1290,7 @@ function M.open(opts)
 
     local function invoke_extra_mapping(fn)
         local context = {
+            items = status_line == nil and vim.deepcopy(filtered) or {},
             suspend_for_external_ui = suspend_for_external_ui,
             resume_after_external_ui = resume_after_external_ui,
             focus_prompt = focus_prompt,

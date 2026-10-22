@@ -1036,6 +1036,15 @@ M.entries = {
 		help_only = true,
 	},
 	{
+		id = "attention_clear",
+		config_key = "attention_finder_mappings.clear_shown",
+		default_key = "<C-r>",
+		default_modes = { "n", "i" },
+		scope = "attention_finder",
+		desc = "Clear all shown attention entries",
+		help_only = true,
+	},
+	{
 		id = "if_delete",
 		config_key = "issue_finder_mappings.delete",
 		default_key = "<C-d>",
