@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 3.90
+actual_hours: 4.05
 tracker:
     version: 1
     completion:
-        token: close-59de69b7c8f8
+        token: close-2bef4fc7b48f
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: bca7cf786a290f84c66037f358cd20b2475515da
-        evidence_commit: d0531a2f09f05a4f2a4138f2cd80243d4b9de918
+        reviewed_head: 7b8452dfc3fa90be1118d1d07aac6c5881cb038b
+        evidence_commit: 4f2ff92a1aad985f8fdd3de2b31d21f621013cfc
 ---
 
 # Bound insert admission across pending registration lookup
