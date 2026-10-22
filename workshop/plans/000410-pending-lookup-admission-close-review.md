@@ -320,3 +320,57 @@ dispose:
 7. **Plan revision recommendations:** None.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"0b20d9e0-06e7-4bfc-8195-438a351cd3a8","repository":"github.com/xianxu/parley.nvim","issue_id":"000410","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/ee532ee4d33ebdc5","reviewed_head":"bca7cf786a290f84c66037f358cd20b2475515da","slot":"parley.nvim:4","requested_at":"2026-10-22T21:00:30.466242Z"},"phase":"finished","pid":26589,"started_at":"2026-10-22T21:00:30.640011Z","finished_at":"2026-10-22T21:06:37.962134Z","session_id":"01a1656a-5a16-7970-b93a-fb96e742349a","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T16:29:34-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 410 — Bound insert admission across pending registration lookup |
+| repo | parley.nvim |
+| issue file | workshop/issues/000410-pending-lookup-admission.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 7044522d19d0c789c67c7fcbedc1c50c4e571187..7b8452dfc3fa90be1118d1d07aac6c5881cb038b |
+| command | sdlc close --issue 410 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T16:29:34-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned interdiff introduces no defects. The README conflict resolution preserves both recovery guidance and registered-file reload documentation. Tracker revisions record verification and integration work without changing scope. BR-1, BR-2 and BR-3 remain disposed.
+
+```findings
+{}
+```
+
+1. **Strengths**
+   - README retains the exact standalone launch command, matching environment detection and the restart fixture (`README.md:103`, `lua/parley/couch.lua:202`, `tests/integration/session_sync_native_spec.lua:323`).
+   - The resolution also preserves registered-file reload and conflict guidance (`README.md:111`), consistent with `lua/parley/session_sync.lua:920`.
+   - Spec, Done-when and the implementation plan remain unchanged.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes:** Inspected existing recovery and reload regressions. No runtime tests rerun: this window changes no product code, tests or executable instructions. `git diff --check` passed; checkout remained unchanged.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** no duplicated implementation introduced.
+   - **ARCH-PURE — pass:** no logic or IO boundary changes.
+   - **ARCH-PURPOSE — pass:** conflict resolution retains both sides’ documented behavior.
+   - **ARCH-EVOLVE — pass:** no persisted-format or reader/writer changes.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"6ca82bf9-94fd-4da9-8fa6-6035a6772d36","repository":"github.com/xianxu/parley.nvim","issue_id":"000410","recipe":"fix-review","round":5,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/60fe1ad57d185b2b","reviewed_head":"7b8452dfc3fa90be1118d1d07aac6c5881cb038b","slot":"parley.nvim:4","requested_at":"2026-10-22T23:28:48.487634Z"},"phase":"finished","pid":13572,"started_at":"2026-10-22T23:28:48.581154Z","finished_at":"2026-10-22T23:29:34.209571Z","session_id":"01a165f2-1ed2-70e1-b043-d3ffcf4bf3e8","outcome":"returned"}] -->
