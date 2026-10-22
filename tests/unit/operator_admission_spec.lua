@@ -218,4 +218,59 @@ describe('pure operator admission history', function()
         assert.is_false(duplicate)
     end)
 
+    it('rebases a clean unavailable reload before confirmed retry without retiring the turn', function()
+        local model = admission.new()
+        local first = acquire(model, { baseline = 'old', content = 'old', clean = true })
+        failed(model, first, 'unavailable')
+        model.dispatch({ type = 'reload', before = 'old', after = 'external', clean = true })
+        local state = model.snapshot()
+        assert.equals('external', state.baseline)
+        assert.equals('external', state.content)
+        assert.equals('unconfirmed', state.phase)
+        assert.equals('turn-1', state.acquire_token)
+        assert.is_true(state.history)
+        local retry = acquire(model, { baseline = 'external', content = 'external', clean = true })
+        assert.equals('freshen', confirmed(model, retry).kind)
+    end)
+
+    it('cannot rebase outstanding saved edits through a clean disk reload', function()
+        local model = admission.new()
+        local first = acquire(model, { baseline = 'original', content = 'original', clean = true })
+        failed(model, first, 'unavailable')
+        model.dispatch({ type = 'observe', content = 'saved edit' })
+        model.dispatch({ type = 'reload', before = 'saved edit', after = 'external', clean = true })
+        assert.equals('original', model.snapshot().baseline)
+        assert.equals('external', model.snapshot().content)
+        assert.is_true(model.snapshot().unconfirmed_edit)
+    end)
+
+    it('does not advance a dirty, unknown or mismatched reload baseline', function()
+        for _, scenario in ipairs({
+            { baseline = 'old', content = 'old', before = 'old', clean = false },
+            { content = 'unknown', before = 'unknown', clean = true },
+            { baseline = 'old', content = 'old', before = 'other', clean = true },
+            { baseline = 'old', content = 'changed', before = 'old', clean = true },
+        }) do
+            local model = admission.new()
+            local first = acquire(model, { baseline = scenario.baseline, content = scenario.content })
+            failed(model, first, 'unavailable')
+            model.dispatch({ type = 'reload', before = scenario.before, after = 'external', clean = scenario.clean })
+            assert.equals(scenario.baseline, model.snapshot().baseline)
+            assert.equals('external', model.snapshot().content)
+            assert.equals('turn-1', model.snapshot().acquire_token)
+        end
+    end)
+
+    it('still freshens after acknowledgment when a clean reload arrived during acquisition', function()
+        local model = admission.new()
+        local pending = acquire(model, { baseline = 'old', content = 'old', clean = true })
+        model.dispatch({ type = 'reload', before = 'old', after = 'external', clean = true })
+        assert.equals('acquiring', model.snapshot().phase)
+        assert.equals('external', model.snapshot().baseline)
+        local freshen = confirmed(model, pending)
+        assert.equals('freshen', freshen.kind)
+        model.dispatch({ type = 'freshened', witness = freshen.witness, content = 'freshest', clean = true })
+        assert.equals('freshest', model.snapshot().baseline)
+    end)
+
 end)

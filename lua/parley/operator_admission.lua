@@ -102,6 +102,16 @@ function M.new()
             end
             baseline, proof, token, history = event.baseline, event.proof, event.token, true
             phase, message, operation = 'held', nil, nil
+        elseif kind == 'reload' then
+            -- A validated clean disk reload is not an operator edit. Advance
+            -- only an exact known preimage with no outstanding operator delta.
+            if event.clean == true and baseline ~= nil and baseline == event.before and content == event.before then
+                baseline = event.after
+                if operation and operation.kind == 'acquire' and operation.can_freshen then
+                    operation.content = event.after
+                end
+            end
+            content = event.after
         elseif kind == 'rebase' and history and baseline ~= nil and baseline == event.before then
             baseline = event.after
         end

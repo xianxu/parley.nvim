@@ -38,6 +38,8 @@ Held-lock refusal or malformed/mismatched acknowledgment blocks edits visibly; p
 - Replace the old clobber expectation at session_sync_native_spec.lua's insert-entry race where the new contract applies; modified-buffer and genuine post-acquisition violations remain safe.
 - Named 500 ms acquisition bound is measured; unreachable/timeout applies queued edits with warning and preserves concurrent copies, while held refusal/invalid ack blocks edits without guessing ownership.
 - Producer write-side exclusion and acknowledgment semantics are documented and tested, or a blocking producer issue is linked before claiming the end-to-end guarantee.
+- Unavailable/refused retries preserve the original saved-edit baseline. A clean foreign reload with no operator change remains clean; unknown or outstanding baselines cannot advance, and stale outcomes cannot retire a newer turn.
+- Refused-only native i/a/o/I/A/O recovery and :ParleySessionRetry share admission without a writable gap; admitted/detached buffers recover displaced mappings.
 
 ## Plan
 
@@ -393,3 +395,26 @@ operator work, and unchanged history/token/phase. R2 on 3a8c4552 is superseded;
 its verdict cannot authorize landing. Own queued suite lease-728916138 was
 confirmed cancelled through sdlc; no other runner touched and no stage held.
 The durable plan records the completed reload row.
+
+### 2026-10-22 — reload correction verified and accepted plan re-entry
+
+The permanent native reload regression and IO-free reload sequences are green.
+Final focused pass on EACH runtime: 16 native cases, 18 pure owner cases,
+2 ownership guards; 0 failures/errors. Lint: 0 warnings/0 errors in 822 files.
+Logs reload-green2.log, reload-green-011.log and reload-lint.log under
+/Volumes/TestScratch/parley-408-owner-fs58vfkw/.
+
+Managed :edit! detaches observers before BufReadPost, so observing on_reload
+alone left the native test red. Both completed read paths now publish the same
+atomic reload fact before reattachment replaces the preimage; moving reads
+retain their existing explicit journal-rebase boundary. Native red remains in
+reload-green.log; the revised complete read-path handoff passes.
+
+The redundant post-close change-code re-entry now infers full flow. Its
+plan-quality check requested function-level test strategies (PQ-1); the plan
+was refined and the next round was CLEAN, disposing PQ-1. --no-estimate and
+--no-estimate-recon acknowledge that this issue entered quick flow and was
+promoted at close after implementation: no retrospective estimate is invented.
+Measured actuals and all verification/review gates remain in effect. Accepted
+design checkpoint: 27a05dfe. Done-when now explicitly names the approved
+history/reload/retry acceptance rather than relying only on the lifecycle clause.

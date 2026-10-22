@@ -70,6 +70,10 @@ Couch supervisor; its absence alone is not a degraded condition.
 
 The pure `operator_admission.lua` owner retains the original baseline, token and
 proof through unavailable/refused retries, saved edits and status refreshes.
+A clean native reload carries its before/after hashes: an exact known baseline
+with no operator change may follow the new clean snapshot, while saved operator
+edits and unknown baselines remain anchored. Both managed edit rereads and
+native checktime completion report that same atomic fact.
 Its phases are idle, acquiring, freshening, held, unconfirmed and refused; only
 a confirmed release retires normal turn history. The session engine runs its
 IO effects and returns matching operation witnesses. Validated move restoration

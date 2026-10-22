@@ -67,6 +67,13 @@ local function observe_content(buf, s, content)
     dispatch_admission(buf, { type = "observe", content = content })
 end
 
+local function observe_reload(buf, s, after, clean)
+    if s.moving then return observe_content(buf, s, after) end
+    local before = s.content
+    s.content = after
+    dispatch_admission(buf, { type = "reload", before = before, after = after, clean = clean })
+end
+
 --- Frontmatter lines → normalized { owner, operator } for session-sync.
 --- This is the single owner accessor: couch-owner first, owner fallback.
 ---@param lines string[]
@@ -855,7 +862,7 @@ M.attach = function(buf, identity, observed, restoring_move)
 			-- An external reload is not an operator edit; keep the attachment for
 			-- the next keystroke and invalidate any pending clean-edit check.
 			on_reload = function()
-				observe_content(buf, s, content_hash(buf))
+                observe_reload(buf, s, content_hash(buf), not vim.bo[buf].modified)
 				s.edit = nil
                 s.feedback = nil
                 refresh(buf)
@@ -915,6 +922,12 @@ M.attach = function(buf, identity, observed, restoring_move)
             end
             if s.moving then return end
             s.loaded = disk_mtime(buf)
+            -- :edit! detaches native observers before BufReadPost, whereas a
+            -- checktime reload retains on_reload. Both publish the same fact
+            -- before attach_edits can replace the cached preimage.
+            if event.event ~= "BufWritePost" then
+                observe_reload(buf, s, content_hash(buf), not vim.bo[buf].modified)
+            end
             if event.event ~= "BufWritePost" and s.feedback then s.feedback = nil; refresh(buf) end
 			attach_edits() -- :edit! detaches buffer callbacks before BufReadPost.
 		end,
