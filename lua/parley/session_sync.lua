@@ -541,8 +541,10 @@ local function violation(buf, race)
 	end
 	local path = file_of(buf)
 	local clobbered = path .. ".clobbered"
-	local verb = race and "changed as you started typing:" or "wrote under your lock:"
-	local when = race and " as the operator started editing" or " while the operator held the lock"
+    local protected = read_turn(buf) == "operator"
+	local verb = race and "changed as you started typing:" or protected and "wrote under your lock:" or "changed on disk:"
+	local when = race and " as the operator started editing" or protected and " while the operator held the lock"
+        or " while the operator had local changes"
 	local band, told
 	if not vim.uv.fs_stat(path) then
 		band, told = "deleted it, yours restored", "was deleted" .. when .. ";"
@@ -913,8 +915,8 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
 	attach_edits()
 	-- No prompt about a file changed on disk: someone else wrote it. During
 	-- disk_changed's own check, only record that; else under the operator's
-	-- lock it is a violation (handled outside the autocmd, which may not
-	-- write), and otherwise what autoread would do.
+	-- lock or with registered local edits it needs preservation outside the
+    -- autocmd (which may not write); otherwise follow the clean disk read.
 	vim.api.nvim_create_autocmd("FileChangedShell", {
 		group = group,
 		buffer = buf,
@@ -928,7 +930,14 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
 				vim.v.fcs_choice = ""
 				return
 			end
-			if read_turn(buf) ~= "operator" and not admission(s).unconfirmed_edit then
+            local registered_dirty = s.identity.ID and vim.bo[buf].modified
+            if registered_dirty and not admission(s).history then
+                -- Attachment may follow an edit. Remember that work through
+                -- the sole owner, with unknown preimage, before preservation's
+                -- write clears modified and a later disk read could discard it.
+                dispatch_admission(buf, { type = "observed", content = content_hash(buf) })
+            end
+			if read_turn(buf) ~= "operator" and not admission(s).unconfirmed_edit and not registered_dirty then
 				vim.v.fcs_choice = vim.bo[buf].modified and "ask" or "reload"
                 if vim.v.fcs_choice == "reload" then
                     -- FileChangedShellPost ends the synchronous native check.
@@ -940,8 +949,11 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
 				return
 			end
 			vim.v.fcs_choice = ""
+            local id, path = s.identity.ID, s.identity.File
 			vim.schedule(function()
-				if state[buf] == s and not s.moving and s.epoch == epoch and vim.api.nvim_buf_is_loaded(buf) and (read_turn(buf) == "operator" or admission(s).unconfirmed_edit) then
+				if state[buf] == s and not s.moving and s.epoch == epoch
+                    and s.identity.ID == id and s.identity.File == path and vim.api.nvim_buf_is_loaded(buf)
+                    and (read_turn(buf) == "operator" or admission(s).unconfirmed_edit or (id and vim.bo[buf].modified)) then
 					violation(buf)
 				end
 			end)

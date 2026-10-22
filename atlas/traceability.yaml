@@ -725,6 +725,8 @@ atlas:
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua
       - scripts/reap-test-orphans.py
+      - scripts/test-run-lease.py
+      - tests/unit/test_run_lease.py
       - tests/fixtures/ps_test_orphans.txt
       - tests/fixtures/fake_sse_server
       - tests/fixtures/fake_sips
@@ -845,6 +847,7 @@ atlas:
       - tests/unit/helper_io_spec.lua
       - tests/integration/session_sync_spec.lua
       - tests/integration/session_sync_native_spec.lua
+      - tests/integration/session_sync_file_changed_spec.lua
       - tests/integration/fake_couch_operator_spec.lua
       - tests/integration/agentic_document_spec.lua
       - tests/integration/agentic_document_owned_move_spec.lua

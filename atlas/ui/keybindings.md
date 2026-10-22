@@ -51,6 +51,8 @@ registry's `pum_passthrough`). Configure it with
 `global_shortcut_attention = { modes = { "n", "i" }, shortcut = { "<M-Space>", "<C-y><Space>" } }`,
 or `shortcut = {}` to disable it. Adding it to Couch's own key help is pair#619 (now for Alt+Space). Nothing in pair's zellij config, Couch or parley binds Alt+Space; Ghostty sends Option as Alt.
 
+Within the finder, **Ctrl+R** clears all shown entries, respecting current/all-slot scope and the typed filter (including visible parent context). It reports the count without confirmation. `attention_finder_mappings.clear_shown` configures the key; its buffer-local Insert mapping replaces native register paste only here. Hidden entries remain, and a later submit restores a cleared file.
+
 ## Command
 `:ParleyKeyBindings` (`<C-g>?`, alias `<M-h>`, #292): centered floating window showing context-scoped
 shortcuts. Press Ctrl+g, then `?`. Help is built when opened from the current

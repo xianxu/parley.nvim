@@ -115,6 +115,7 @@ tasks/*
 .test-xdg/
 .test-tmp/
 .test-home/
+.test-run.lock
 COMPARE-SHA
 .openshell/.bootstrap/
 .openshell/ssh_config

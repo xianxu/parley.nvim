@@ -216,8 +216,19 @@ all reach one handler: it copies the agent's file to `<file>.clobbered`
 (one per file, overwritten by the next violation), writes the operator's
 buffer back with `:write!` (so no save prompts later), flags the band, and
 sends the owner one `couch --send-to` message per operator turn
-(`session-sync violation: …`). Outside the operator's turn `FileChangedShell`
-does what autoread would.
+(`session-sync violation: …`). Registered session files and side docs use
+that same buffer-local handler even without a confirmed lock (#411): clean
+buffers with no outstanding operator work reload silently, preserving each
+window's cursor/view; dirty buffers preserve both copies and show the notice
+instead of Neovim's prompt. Dirty text already present at attachment is recorded
+with an unknown preimage through `operator_admission` before preservation saves
+it, so a second agent write cannot discard it merely because modified cleared.
+No new registration lookup is performed. Internal freshness checks and managed
+moves retain their existing ownership; a detached/replaced attachment cannot
+run deferred preservation. If the foreign copy cannot be kept, the disk is not
+overwritten and the operator's text remains in the buffer with the existing
+failure notice. Unregistered Markdown retains native Neovim behavior. Legacy
+frontmatter-only sessions keep their existing handling.
 
 **Owed work and the liveness ping (#314, #315).** At most once a minute (and
 right after a submit or a reload) the watch asks

@@ -9,6 +9,19 @@
 - Supply outstanding edit observations before an attachment can automatically acquire an already-active insert turn. Auto-saved modified=false text is not its original baseline; exercise this ordering on every supported Neovim runtime.
 - Preserve production attachment order in native fixtures. Detaching a header-driven controller before S1 discovery hides the existing-controller consumer and its earlier InsertEnter callback; verify both consumers route through the same admission scope.
 - An ordinary release retires history; an ownership handoff must not borrow it as an intermediate step. Keep a witnessed handoff continuation inside the original owner so failure or expiry cannot lose saved edits or temporarily reopen a refused edit gate.
+## 2026-10-22 (#409 — a census is not run ownership)
+
+- Persistence and a recognizable command prove that a process exists, not that
+  its owner has finished. Hold one checkout lease across scratch mutation,
+  execution and both cleanup phases; reuse its descriptor through recursive make.
+  Reentry alone does not order sibling goals: serialize them within the owner too.
+- #409 close BR-1: MAKECMDGOALS describes requested roots, not Make's transitive
+  recipe graph. Put admission at the protected target's execution boundary and
+  reject unowned internal bodies. Test direct, alias-chain and default entry;
+  source enumeration alone did not catch the bypass.
+- Test dry-run behavior through recursive make with long options too. Apple's
+  make can put `-n` after `--no-print-directory` in MAKEFLAGS, so its first word
+  alone cannot establish whether a nested command is print-only.
 
 ## 2026-10-16 (#353 — displayed ancestry and native history)
 
@@ -965,3 +978,6 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   regression mapping as well as the new successful handoff; native insert-only
   coverage cannot prove background absence/unavailability preserves policy.
   A second hole in the admission mechanism goes to the TL/operator before code.
+- #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
+
+- #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).

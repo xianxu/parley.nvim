@@ -279,8 +279,12 @@ function M.open(options)
     local function show(state)
         latest = state
         local handle
+        local config = (package.loaded.parley or {}).config or require("parley.config")
+        local bindings = require("parley.keybinding_registry")
+        local clear_keys = bindings.keys_for("attention_clear", config)
         local function title()
             return "Attention — " .. (all_slots and "all slots" or slot)
+                .. (#clear_keys > 0 and (" — " .. table.concat(clear_keys, "/") .. " clear shown") or "")
         end
         local function repaint(prefer_unread)
             if not handle then return end
@@ -291,7 +295,17 @@ function M.open(options)
                 retarget and { ensure_visible = true } or nil)
             if handle.set_title then handle.set_title(title()) end
         end
-        local config = (package.loaded.parley or {}).config or require("parley.config")
+        local mappings = slot and { { key = bindings.keys_for("attention_scope", config),
+            fn = function() all_slots = not all_slots; repaint(true) end } } or {}
+        mappings[#mappings + 1] = { key = clear_keys, fn = function(_, _, context)
+            local paths = vim.tbl_map(function(item) return item.value end, context.items)
+            apply({ type = "clear", paths = paths }, seam.store, function(next_state, count)
+                if not next_state then return end
+                latest = next_state
+                repaint()
+                logger.info(("Cleared %d entries."):format(count))
+            end)
+        end }
         local shown, initial = items(state)
         handle = seam.picker.open({
             title = title(),
@@ -299,8 +313,7 @@ function M.open(options)
             initial_index = initial,
             filter_items = Rows.filter,
             anchor = "top", -- forest preorder must put parents physically above children
-            mappings = slot and { { key = require("parley.keybinding_registry").keys_for("attention_scope", config),
-                fn = function() all_slots = not all_slots; repaint(true) end } } or {},
+            mappings = mappings,
             on_select = function(item) select(item.value, seam, options and options.on_selected) end,
         })
         M.refresh(options, function(next_state) latest = next_state; repaint() end, options and options.on_refreshed)
