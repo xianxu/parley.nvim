@@ -127,6 +127,12 @@ Frontend admission builds and validates its immutable known context before runti
 
 Final lint0warnings/0errors in834files (parley-405-br7-lint.log); endpoint native fake conformance and corrupt-identity negative controls pass both versions (parley-405-editor-conformance-{preferred,0117}-br7.log). Next pushed-head recorded suite and TL-authorized M1 round5; another new family goes to the hub for a scope decision before patching.
 
+### 2026-10-22 — M1 SHIP; M2 red lifecycle and owned IO seams
+
+M1 R5 returned SHIP, all seven findings disposed, no new family. SDLC committed/pushed evidence219cd3e0da42b157b7a8f6a872c18d8962a4b1ba. Reviewer reproduced195PASS both versions and10counterfactual BR-7 failures with zero errors. Recorded suite lease-3944042560 on code411be8eb remains queued; no suite pass claimed and no landing yet. Reported the milestone to the hub; M2 proceeds under its approved plan.
+
+M2 owned IO seams: existing registry queue supports optional queue-inclusive absolute_deadline_ms without resetting on spawn; queued expiration never launches, admitted expiration kills only its CLI and retains joined completion ownership. Runtime stop_listeners reuses exact native ownership checks without marker IO or a lease wait; close reuses it. Controlled RED registry8pass/4fail, runtime37pass/2fail; GREEN51 total on both versions, clean census (parley-405-m2-io-{red,green,green-0117}.log). Six new embedded native lifecycle cases are RED0pass/6fail/0errors before wiring, covering outside-pane discovery/absence, passive+guarded active/superseded reads and in-pane parent/side admission (parley-405-m2-native.j_mnudiu/red.log). Plan refinement uses the proven global BufUnload/read guard boundary, avoiding a second per-buffer observer lifecycle. No real-producer acceptance yet; pair#801 interface remains in coordination with pair:7.
+
 ## Revisions
 
 ### 2026-10-22 — producer prerequisite and outside-pane discovery
