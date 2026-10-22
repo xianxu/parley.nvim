@@ -184,3 +184,83 @@ dispose:
 7. **Plan revision recommendations:** None required.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"066496e4-8393-40b7-ad34-584e1fbabfff","repository":"github.com/xianxu/parley.nvim","issue_id":"000408","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/6e7faea0d0a7ff61","reviewed_head":"3a8c455256e0ff2b7629d578adee08ba30ee6264","slot":"parley.nvim:1","requested_at":"2026-10-22T09:26:35.651774Z"},"phase":"finished","pid":29422,"started_at":"2026-10-22T09:26:35.820119Z","finished_at":"2026-10-22T09:32:44.480482Z","session_id":"01a162ef-0dbc-7a73-8470-fca85d4edd33","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T02:49:34-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 408 — session-sync: fence insert admission and reload after lock acquisition |
+| repo | parley.nvim |
+| issue file | workshop/issues/000408-insert-admission-freshness.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | ec4dcf71361ed40c78c76044928d4bea23e5caa3..4805170dcbd53e6d71529c75ac2a2881f76e2416 |
+| command | sdlc close --issue 408 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T02:49:34-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation matches the revised Spec and Plan. Acquisition, freshness, refusal recovery, and release preserve ownership and outstanding-edit history. No new blocking findings emerged. Required diff inspections completed; the reviewed checkout remains unchanged.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      operator_admission.lua:41–60 preserves the original baseline across retries. The native regression at session_sync_native_spec.lua:301 passes on both runtimes; removing baseline preservation in a disposable checkout caused four pure regression failures.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      operator_admission.lua owns private transition state; session_sync.lua dispatches witnessed effects and outcomes. Pure sequence tests and the ownership guard pass, including stale completion rejection and negative bypass fixtures.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The plan's Core concepts table at line 30 correctly marks operator_lock as new. Inspection confirms the function is absent at base and added in couch.lua within the pinned range.
+```
+
+1. **Strengths**
+
+   - Native tests observe confirmed acquisition and fresh content before the first queued character, for parent and side documents.
+   - Baseline retention, clean foreign reloads, stale outcomes, and failed releases have independent sequence coverage.
+   - README and atlas explain the new retry command, temporary mappings, degraded editing, and known-identity boundary.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+
+   - Full `modes/session_sync` mapping passed on Neovim 0.12.5.
+   - All 142 native cases passed on both 0.12.5 and 0.11.7.
+   - Admission model: 18 tests; Couch protocol: 19; ownership guard: 2—all passed on both runtimes.
+   - Fake conformance, corrupted-fake negative control, and eight executable fake tests passed.
+   - Lint: zero warnings/errors across 822 files. `git diff --check` passed.
+   - Real-producer conformance and live-profile staging were not rerun during this review.
+
+6. **Architecture**
+
+   - **ARCH-DRY — pass:** acquisition and release share the protocol seam and admission owner.
+   - **ARCH-PURE — pass:** private transition logic is tested directly without IO.
+   - **ARCH-PURPOSE — pass:** registered admission consumers share the implementation; discovery deferral is explicitly approved and documented.
+   - **ARCH-MOCK — pass:** production flow and stateful executable fake share the Couch boundary; conformance tooling covers that seam.
+   - **ARCH-CONSTRAINTS — pass:** deadline, child termination, and 4/8-turn work bounds are exercised.
+   - **ARCH-SECURE — pass:** acknowledgments require matching identity, path, token, and ownership evidence.
+   - **ARCH-ORDER — pass:** transitions own history; witnessed outcomes reject stale completions.
+   - **ARCH-FUNERAL — pass:** temporary gates/mappings restore on admission or detach; no new production artifact family grows.
+   - **ARCH-EVOLVE — pass:** existing journal formats remain unchanged and retain opaque protection bytes.
+
+7. **Plan revisions:** None required. Recorded-suite completion and the approved post-review stage/clear remain landing obligations.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4bd5859c-b143-442e-8d75-0480f6ec28df","repository":"github.com/xianxu/parley.nvim","issue_id":"000408","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/b936ef8f4f9f6565","reviewed_head":"4805170dcbd53e6d71529c75ac2a2881f76e2416","slot":"parley.nvim:1","requested_at":"2026-10-22T09:44:06.968586Z"},"phase":"finished","pid":48334,"started_at":"2026-10-22T09:44:07.135625Z","finished_at":"2026-10-22T09:49:34.004179Z","session_id":"01a162ff-1852-7323-88fc-c28fcfef002d","outcome":"returned"}] -->
