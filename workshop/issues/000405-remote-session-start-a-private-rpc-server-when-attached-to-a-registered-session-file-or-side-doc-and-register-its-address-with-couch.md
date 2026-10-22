@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
 ---
 
 # remote-session: start a private RPC server when attached to a registered session file or side doc, and register its address with Couch

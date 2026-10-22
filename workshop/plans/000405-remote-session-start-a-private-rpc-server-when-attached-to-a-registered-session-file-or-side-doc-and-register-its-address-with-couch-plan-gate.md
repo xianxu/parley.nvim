@@ -1,4 +1,24 @@
 ---
+reviewer_runs:
+    - version: 1
+      intent:
+        id: 5b1b1a38-48b0-40eb-8f0e-557fbe0d0fa8
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000405"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        reviewed_head: f3e6aae133600f67b800f6c3c4df28f94e043579
+        slot: parley.nvim:1
+        requested_at: "2026-10-22T12:18:59.818207Z"
+      phase: finished
+      pid: 78490
+      started_at: "2026-10-22T12:18:59.914612Z"
+      finished_at: "2026-10-22T12:19:33.000207Z"
+      session_id: 01a1638c-e3cf-7b91-a5c2-fb326f3ae063
+      outcome: returned
 gate: plan-quality
 issue: 405
 id_prefix: PQ
@@ -75,7 +95,32 @@ rounds:
           note: The named asynchronous process seam includes stateful doubles, typed uncertainty, numeric inspection/startup deadlines, cancellation ownership and controlled sequence verification.
           round: 2
       blocked: false
-content_hash: df35f99de91494925313095bd32ec53c838384183294338cd810baa988b18c5f
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: 0af70cf0-e59d-484c-80a8-865b4da9bf0a
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000405"
+            recipe: plan-quality
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+            reviewed_head: f3e6aae133600f67b800f6c3c4df28f94e043579
+            slot: parley.nvim:1
+            requested_at: "2026-10-22T12:18:29.721842Z"
+          phase: finished
+          pid: 73525
+          started_at: "2026-10-22T12:18:29.814692Z"
+          finished_at: "2026-10-22T12:18:58.928907Z"
+          session_id: 01a1638c-6e36-7142-94d2-59f91265ff08
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-22T05:18:59-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      blocked: false
+content_hash: c0b28aa9b77cc5b45edb11571d27cc2e32c013b87796749312569c12735a431e
 ---
 
 # Gate ledger — parley.nvim#405 (plan-quality)
@@ -98,6 +143,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - PQ-1 — addressed — One kernel guard serializes count/create/reclaim; interrupted residue remains counted, with controlled concurrent-admission and owner-death tests.
 - PQ-2 — addressed — The named asynchronous process seam includes stateful doubles, typed uncertainty, numeric inspection/startup deadlines, cancellation ownership and controlled sequence verification.
+
+## Round 3 — 2026-10-22T05:18:59-07:00 (codex) — passed
 
 ## Open findings
 
