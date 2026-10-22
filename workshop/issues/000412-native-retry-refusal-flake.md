@@ -1,13 +1,21 @@
 ---
 id: 000412
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '8b1aff4acc71304554ef77b01df4d4220d4bcb18' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a41eddb50f8e229260100258f886f32522d30388' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-22T12:53:55-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Investigate native o-retry refusal flake on Neovim 0.11
@@ -33,9 +41,20 @@ Identify whether native mode becomes observable before admission settles, or the
 
 ## Plan
 
-- [ ]
+- [ ] Pin the observed distinction with controlled native cases: completed explicit operator-lock refusal blocks editing; completed timeout/unavailable remains editable with the existing visible warning. Record outcome, elapsed time, mode, notifications, runtime and load; never infer refusal from mode alone (ARCH-ORDER).
+- [ ] In refuse_insert_entry only, give the external stateful fake the existing arrival.MS test budget; retain the production 500ms constant and real-deadline tests, including #410's pending-lookup cases. The override lives only in each disposable child. Observe completion after the attached InsertEnter handler returns, then assert the completed refusal and modifiable=false with diagnostics. Retain every native I/i/a/o/A/O retry assertion and queued-input oracle (ARCH-DRY, ARCH-PURPOSE).
+- [ ] Prove the refusal oracle goes RED if refusal protection is removed. Run the relevant native retry/policy matrix on Neovim0.11.7 and preferred0.12.5, then the existing native/Couch/architecture tests serially with make -k. Update the harness guidance/lesson for separating product latency tests from behavioral fixtures; preserve diagnostic evidence for any further load failure.
+- [ ] Push, run the recorded suite, close and land under normal gates. Check ariadne#556 before any Lua flake registration; until a typed Lua identity exists, record the blocker rather than fabricate a Go identity.
+
+No product state, deadline, parser or durable format changes are planned. Existing production admission model and fake_couch operator protocol remain the owners. The alternatives are waiting longer for modifiable=false (cannot turn a completed unavailable outcome into refusal) or widening the product deadline (changes operator policy); neither fixes this test's mixed contract. No hot-path cost changes. Existing child teardown and temporary-root cleanup own all probe state; no new durable artifact family. No new trust boundary or credentials.
+
 
 ## Log
+
+- 2026-10-22: claimed after verifying the card unowned; start-plan completed on its own main-based branch. Catch-up regenerated only the unrelated workflow SIGPIPE correction; inspected and restored it before the successful start-plan retry. #411 independently verified merged at52b38427dc49b61d86b1d5385529258df8927afe, tracker done and matching archive.
+- Controlled temporary probe /tmp/parley412-probe_spec.lua uses the existing fake's real executable seam with a pre-reply delay, captures the actual couch.operator_lock result and elapsed time, and reproduces both completed outcomes. /tmp/parley412-probe-operator-v2.log (Neovim0.11.7): delay0.2s returned refused/operator-lock at356.18ms, modifiable=false; delay2s returned unavailable at501.54ms, modifiable=true. /tmp/parley412-probe-preferred.log (Neovim0.12.5): corresponding367.32ms/refused/false and501.27ms/unavailable/true. Both2/0/0, clean child teardown. Mode observations already had a completed outcome in these probes; no early-mode observation established. Sampled machine load at12:58 local46.38/48.25/44.23; this is not failure-time load for the historical run.
+- Root cause of the reproducible failure class: a behavioral refusal fixture relies on an external Python producer replying within the production500ms UI budget. When it does not, the approved unavailable policy intentionally leaves modifiable=true, invalidating the fixture's assumption. The original failure captured no outcome, so its exact historical cause remains unknown; these probes prove a sufficient mechanism, not retrospective certainty. An initial external-release-gate probe was stopped after it stalled; it supplies no behavior evidence. Corrected probes above use bounded real child delays.
+- #410 author coordination: its only helper overlap is added mode/notification diagnostics. Its new pending-lookup cases exercise the actual shared500ms budget and must retain it. Restrict test-only budget control to refuse_insert_entry callers; #410 product optional deadline parameter is not required for this fix. Plan goes to hub before code.
 
 Filed unclaimed at TL direction (Couch 97e1636a-a721-4076-a494-410d5296969b). TL explicitly said not to block #410 on this separate case. Until ariadne#556 lands, a recorded suite failure on this exact case allows one evidenced rerun under that instruction. No other unknown failure is covered by that exception.
 
