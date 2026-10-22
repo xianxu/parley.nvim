@@ -909,3 +909,14 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #407 round3: repeated inline-normalization findings mean the hand-written grammar is the wrong owner. Use bundled markdown_inline structure for visible source spans (ordinary text is in gaps), and keep anchor matching tolerant through a documented shared key. Verify Unicode API semantics: Vim POSIX alnum is ASCII-only, and word classes are not general Unicode categories; take the actual capability boundary to the TL before adding data or approximations.
 
 - #407 close4: after a scope revision, check acceptance criteria and atlas module classifications as well as Spec/Revisions and user instructions. A revised parser/key contract must retire exact-slug acceptance wording, and adding an editor parser changes the lookup's integration label even when its level helper remains pure.
+- #404 close BR-1: Neovim skips InsertLeave on Ctrl-C. State representing an
+  actual editor mode must follow ModeChanged too, through one departure
+  handler, with native tests for every exit family rather than Escape alone.
+  Enumerate every automatic release consumer (including move finalization)
+  before claiming that an intent stays protected for its full lifetime.
+
+- #404 close BR-2: A persisted cleanup intent authorizes an old turn, not the
+  current one. Revalidate live release eligibility immediately before each
+  destructive effect and before recovery attachment can acquire obsolete state.
+  Test recovery before cleanup, between effects and after cleanup, with a new
+  user intent as well as the ordinary idempotent replay controls.
