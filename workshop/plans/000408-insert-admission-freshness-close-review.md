@@ -264,3 +264,57 @@ dispose:
 7. **Plan revisions:** None required. Recorded-suite completion and the approved post-review stage/clear remain landing obligations.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4bd5859c-b143-442e-8d75-0480f6ec28df","repository":"github.com/xianxu/parley.nvim","issue_id":"000408","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/b936ef8f4f9f6565","reviewed_head":"4805170dcbd53e6d71529c75ac2a2881f76e2416","slot":"parley.nvim:1","requested_at":"2026-10-22T09:44:06.968586Z"},"phase":"finished","pid":48334,"started_at":"2026-10-22T09:44:07.135625Z","finished_at":"2026-10-22T09:49:34.004179Z","session_id":"01a162ff-1852-7323-88fc-c28fcfef002d","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T03:12:48-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 408 — session-sync: fence insert admission and reload after lock acquisition |
+| repo | parley.nvim |
+| issue file | workshop/issues/000408-insert-admission-freshness.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 59a7d8a7864b216b2fb6c26c15a72b666713b599..25674936013026ee64bbb2a366eb197658db07e3 |
+| command | sdlc close --issue 408 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T03:12:48-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The interdiff correctly repairs the README command inventory test by inspecting an attached document’s buffer-local commands. It introduces no production behavior, Spec, or Plan changes. No blocking defects found; previously disposed BR-1–BR-3 remain closed.
+
+```findings
+{}
+```
+
+1. **Strengths**
+   - `tests/integration/keybinding_agreement_spec.lua:254` checks command presence on an attached document and absence globally and in chat.
+   - The inventory still derives command names from README without an allowlist.
+   - Attachment reuses the executable Couch fake; atlas traceability includes the corrected test.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage:** All 36 agreement tests passed on Neovim 0.12.5 and 0.11.7. CLI sentinel and orphan checks passed on both. `git diff --check` passed; checkout remains unchanged. Full recorded suite was not rerun during this review.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** reuses attachment and fake helpers.
+   - **ARCH-PURE — pass:** IO stays in the integration test.
+   - **ARCH-PURPOSE — pass:** fixes the inventory’s scope assumption while retaining comprehensive README scanning.
+   - **ARCH-EVOLVE — pass:** no persisted-format reader or writer changes.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b3c36491-5539-436b-80f2-849aa15c042e","repository":"github.com/xianxu/parley.nvim","issue_id":"000408","recipe":"fix-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/3dfcf8ac46f67d27","reviewed_head":"25674936013026ee64bbb2a366eb197658db07e3","slot":"parley.nvim:1","requested_at":"2026-10-22T10:11:30.280095Z"},"phase":"finished","pid":59797,"started_at":"2026-10-22T10:11:30.380226Z","finished_at":"2026-10-22T10:12:47.924789Z","session_id":"01a16318-2af8-79c0-b79e-edec0f20c505","outcome":"returned"}] -->
