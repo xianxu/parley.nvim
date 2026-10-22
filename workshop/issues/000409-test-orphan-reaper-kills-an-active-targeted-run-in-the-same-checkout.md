@@ -40,7 +40,8 @@ Reproduce with one deliberately gated targeted spec running, then start another 
 - [x] Add a controlled-process regression: gate the first target after entry, start a second target with a different scratch root, and prove the second cannot reach preparation/census until the first finishes. Red-check against the current harness. Exercise before and after census, nested make, cancellation, and a separate-checkout control.
 - [x] Add one Python checkout-lease wrapper using stdlib `fcntl.flock`, an inherited descriptor, and command argv. Route every harness target and standalone live reaper through that owner; acquire before scratch changes or census, retain through final checks. Preserve exit status and native signal behavior.
 - [x] Extend existing recorded-table and native reaper tests for dead-owner leftovers, own leaks, unrelated path mentions, and unchanged cleanup identity checks. Add a Makefile coverage guard for every harness entry; map new tests into infra/test_harness.
-- [ ] Update TOOLING and atlas ownership/recovery guidance; run direct Python regressions, mapped infra/test_harness and architecture guards, then the recorded full suite before close. Let measured added code decide quick/full flow.
+- ~~Update TOOLING and atlas ownership/recovery guidance; run direct Python regressions, mapped infra/test_harness and architecture guards, then the recorded full suite before close. Let measured added code decide quick/full flow.~~ (Scheduling superseded below; passing verification remains required before landing.)
+- [x] Update guidance, run direct/mapped checks and lint, and submit the recorded suite on the pushed final code. Overlap close review with the queued suite under tl-worker's explicit scheduling rule; require its passing record before landing. Let measured added code decide quick/full review.
 
 ## Log
 
@@ -60,8 +61,13 @@ Filed unclaimed as an independent harness defect discovered during #407 close re
 - Red: the new gated real-make regression failed on the original code: second targeted run entered instead of waiting for the active owner. Green: 12 disposable process/lease tests pass, covering two targeted runs plus manual after census, separate checkouts, nested wrappers/status propagation, owner death, inherited-child lifetime, waiter cancellation, invalid/independent descriptors, path aliases, real orphan cleanup in both phases, target coverage and recursive dry runs.
 - The first mapped infra/test_harness run exposed Apple's make 3.81 recursive MAKEFLAGS spelling (`--no-print-directory -n`). Checking only its first word missed dry-run mode in recursive make. Interrupted that blocked spec through its own exec session, fixed the flag check, and added a gated recursive dry-run regression. The remaining mapped tests finished without assertion failures, including the Python lease tests, native reaping and isolation checks; that interrupted run is not passing-suite evidence. Fresh mapped run and recorded suite are next.
 - Fresh `make test-spec SPEC=infra/test_harness` passed with a clean final census (log /Volumes/TestScratch/tmp/parley.nvim-slot3/parley409-harness.L4c1tR). Before the recorded suite, two additional focused regressions exposed overlapping `make -j` goals within one lease and a missing outer help prerequisite; both failed before the two-line Makefile correction and now pass. Native `.NOTPARALLEL` orders goals within the same owner; the wrapper retains help-parley for mixed goals. Direct Python checks now pass 27 tests, including 14 lease/process cases and 13 existing predicate/sampling tests. Recorded suite on the final commit is next.
+- `make lint` passed: 0 warnings/errors in 822 files. PR #332 is pushed at code head 53b4585618179812e132c549dab4b3363e4dfc2c. Recorded suite run lease-3134723290 on that head is retained, queued at position 12 behind machine-wide admission; no suite outcome yet. Close review may overlap this queued run per the current tl-worker contract. No landing before its verified pass.
 
 ## Revisions
+
+### 2026-10-22 — verification scheduling
+
+Reason: the machine-wide suite queue is long. Delta: use tl-worker's explicit permission to overlap close review with a queued recorded suite, while retaining the exact run and requiring its pass before landing. The original Spec and Done-when requirements remain unchanged; this revises scheduling only. No claim of a full-suite pass is made before the run finishes.
 
 ### 2026-10-22 — proposed implementation design
 
