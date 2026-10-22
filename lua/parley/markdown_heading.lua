@@ -22,142 +22,93 @@ function M.level(line)
 	return #hashes
 end
 
-local function starts_html_tag(text, first)
-    if text:sub(first, first) == "/" then first = first + 1 end
-    if not text:sub(first, first):match("%a") then return false end
-    local last = first + 1
-    while text:sub(last, last):match("[%w-]") do last = last + 1 end
-    local boundary = text:sub(last, last)
-    return boundary == ">" or boundary == "/" or boundary:match("%s") ~= nil
+-- Parse strings only: no buffer, injection parser or persistent state is owned
+-- by this command-time adapter. Grammar absence is handled by raw-text fallback.
+local function parse_inline(text)
+    local parser = vim.treesitter.get_string_parser(text, "markdown_inline", { injections = {} })
+    local trees = parser:parse()
+    return trees[1] and trees[1]:root()
 end
 
-local function autolink_end(text, first)
-    -- Stop at the next angle delimiter so malformed nested openers cannot
-    -- repeatedly scan/copy the same suffix.
-    local last = text:find("[<>]", first + 1)
-    if not last or text:sub(last, last) ~= ">" then return nil end
-    local content = text:sub(first + 1, last - 1)
-    local scheme = content:match("^(%a[%w+.-]*):[^%s<>]*$")
-    local email = content:match("^[%w.!#$%%&'*+/=?^_`{|}~-]+@[%w.-]+%.[%a]+$")
-    if (scheme and #scheme >= 2 and #scheme <= 32) or email then return last end
+local omitted = {
+    emphasis_delimiter = true, code_span_delimiter = true,
+    strikethrough_delimiter = true, link_destination = true, link_title = true,
+}
+local unsupported = { html_tag = true, entity_reference = true, numeric_character_reference = true }
+
+local function heading_text(text, parse)
+    local ok, root = pcall(parse, text)
+    if not ok or not root then return text end
+    local parts = {}
+    local function walk(node)
+        local kind = node:type()
+        if unsupported[kind] then return false end
+        if omitted[kind] then return true end
+        local _, first, _, last = node:range()
+        -- Ordinary text is represented by gaps between syntax children in the
+        -- bundled grammar. Copy each gap once, excluding markup-owned spans.
+        local pos = first
+        for child in node:iter_children() do
+            local _, child_first, _, child_last = child:range()
+            parts[#parts + 1] = text:sub(pos + 1, child_first)
+            if not walk(child) then return false end
+            pos = child_last
+        end
+        parts[#parts + 1] = text:sub(pos + 1, last)
+        return true
+    end
+    if not walk(root) then return nil end
+    return table.concat(parts)
 end
 
--- Extract the ordinary inline forms used in heading labels. Keep code and
--- escaped underscores literal; an underscore inside a word is not emphasis.
--- This deliberately does not implement reference-link definitions or a full
--- Markdown renderer. Delimiter indexes keep malformed input scans linear.
-local function anchor_content(text)
-    local parens, stack, ticks, next_tick = {}, {}, {}, {}
-    local i = 1
-    while i <= #text do
-        local c = text:sub(i, i)
-        if c == "\\" then
-            i = i + 2
-        elseif c == "`" then
-            local last = i
-            while text:sub(last + 1, last + 1) == "`" do last = last + 1 end
-            ticks[#ticks + 1] = { first = i, last = last, width = last - i + 1 }
-            i = last + 1
-        else
-            if c == "(" then stack[#stack + 1] = i end
-            if c == ")" and #stack > 0 then
-                parens[stack[#stack]] = i
-                stack[#stack] = nil
-            end
-            i = i + 1
+-- Identical compact keys on both sides make GitHub punctuation spelling
+-- non-load-bearing. Keep non-ASCII codepoints unchanged except the two approved
+-- punctuation blocks; no Unicode database or buffer-dependent word class.
+local function key(text)
+    local parts = {}
+    for _, cp in ipairs(vim.fn.str2list(text, true)) do
+        if cp >= 65 and cp <= 90 then cp = cp + 32 end
+        if (cp >= 97 and cp <= 122) or (cp >= 48 and cp <= 57) then
+            parts[#parts + 1] = string.char(cp)
+        elseif cp >= 128 and not (cp >= 0x2000 and cp <= 0x206F)
+            and not (cp >= 0x3000 and cp <= 0x303F) then
+            parts[#parts + 1] = vim.fn.nr2char(cp, true)
         end
     end
-    local by_width = {}
-    for n = #ticks, 1, -1 do
-        local run = ticks[n]
-        next_tick[run.first] = by_width[run.width]
-        by_width[run.width] = run
-    end
-
-    local chars, literal = {}, {}
-    local function append(value, protected)
-        for n = 1, #value do
-            chars[#chars + 1] = value:sub(n, n)
-            literal[#chars] = protected
-        end
-    end
-    i = 1
-    while i <= #text do
-        local c, close = text:sub(i, i), next_tick[i]
-        local autolink = c == "<" and autolink_end(text, i)
-        if c == "\\" and text:sub(i + 1, i + 1):match("%p") then
-            append(text:sub(i + 1, i + 1), true)
-            i = i + 2
-        elseif c == "`" and close then
-            local width = close.width
-            append(text:sub(i + width, close.first - 1), true)
-            i = close.last + 1
-        elseif c == "]" and text:sub(i + 1, i + 1) == "(" and parens[i + 1] then
-            i = parens[i + 1] + 1
-        elseif autolink then
-            append(text:sub(i + 1, autolink - 1), true)
-            i = autolink + 1
-        elseif c == "<" and (text:sub(i, i + 3) == "<!--" or starts_html_tag(text, i + 1)) then
-            -- HTML rendering is outside the anchor contract; do not invent a
-            -- raw-source slug for content whose visible text we cannot know.
-            return nil
-        elseif c == "&" and (text:find("^&[%a][%w]*;", i)
-            or text:find("^&#%d+;", i) or text:find("^&#[xX]%x+;", i)) then
-            return nil
-        else
-            append(c)
-            i = i + 1
-        end
-    end
-
-    local open = {}
-    i = 1
-    while i <= #chars do
-        if chars[i] == "_" and not literal[i] then
-            local last = i
-            while chars[last + 1] == "_" and not literal[last + 1] do last = last + 1 end
-            local before, after = chars[i - 1] or "", chars[last + 1] or ""
-            local width = last - i + 1
-            local can_open = after ~= "" and not after:match("%s")
-                and (before == "" or before:match("[%s%p]"))
-            local can_close = before ~= "" and not before:match("%s")
-                and (after == "" or after:match("[%s%p]"))
-            if can_close and open[width] then
-                for n = open[width], open[width] + width - 1 do chars[n] = "" end
-                for n = i, last do chars[n] = "" end
-                open[width] = nil
-            elseif can_open then
-                open[width] = i
-            end
-            i = last + 1
-        else
-            i = i + 1
-        end
-    end
-    return table.concat(chars):gsub("^%s+", ""):gsub("%s+$", "")
+    return table.concat(parts)
 end
 
--- Link anchors use GitHub-style ATX slugs, independently of outline depth.
-function M.anchor_row(lines, fragment)
+-- Integration: bundled treesitter structure plus codepoint decoding. Outline
+-- and editing retain their independent level() dialect. The optional parser
+-- adapter exposes unavailable-grammar behavior without changing editor globals.
+function M.anchor_row(lines, fragment, opts)
     fragment = fragment:gsub("%%(%x%x)", function(hex) return string.char(tonumber(hex, 16)) end)
+    local full = key(fragment)
+    if full == "" then return nil end
+    local base, suffix = fragment:match("^(.-)%-(%d+)$")
+    local duplicate = suffix and tonumber(suffix)
+    base = base and key(base)
+    local parse = (opts and opts.parse) or parse_inline
     local code = require("parley.document.lexical").code_block_memo(lines, {}, true, false)
-    local used, counts = {}, {}
+    local count, candidate = 0, nil
     for row, line in ipairs(lines) do
         local hashes, text = line:match("^ ? ? ?(#+)%s+(.+)$")
         if hashes and #hashes <= 6 and not code[row] then
-            text = text:gsub("%s+#+%s*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
-            text = anchor_content(text)
-            if text then
-                text = text:lower()
-                local base = text:gsub("%p", function(c) return (c == "-" or c == "_") and c or "" end)
-                    :gsub(" ", "-"):gsub("%s", "")
-                local slug, count = base, counts[base] or 0
-                while used[slug] do count = count + 1; slug = base .. "-" .. count end
-                counts[base], used[slug] = count, true
-                if slug == fragment then return row end
+            text = text:gsub("%s+#+%s*$", "")
+            text = heading_text(text, parse)
+            local canonical = text and key(text)
+            if canonical and canonical ~= "" then
+                -- A complete natural numeric heading wins even when it occurs
+                -- after a potential duplicate; only return that duplicate later.
+                if canonical == full then return row end
+                if duplicate and duplicate >= 1 and base ~= "" and canonical == base then
+                    if count == duplicate then candidate = row end
+                    count = count + 1
+                end
             end
         end
     end
+    return candidate
 end
 
 return M

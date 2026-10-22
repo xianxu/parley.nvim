@@ -218,6 +218,37 @@ describe("entity navigation native input", function()
             end)
         end
 
+        for _, case in ipairs({
+            { name = "CJK punctuation", heading = "## 中文—标题「计划」", fragment = "中文-标题计划", row = 3 },
+            { name = "accented text with curly quotes", heading = "## ÉTÉ “à”—Montréal",
+                fragment = "ÉTÉ-à-Montréal", row = 3 },
+            { name = "an empty punctuation key", heading = "## !!!", fragment = "---", row = 1 },
+        }) do
+            it("opens a linked heading with " .. case.name .. " in " .. mode .. " mode", function()
+                vim.fn.writefile({ "# Intro", "", case.heading, "Destination content." }, target)
+                local lines = { "[answer](answer.md#" .. case.fragment .. ")" }
+                open_source(lines, 1, insert)
+                keys("<M-o>")
+                wait_for([[return vim.api.nvim_buf_get_name(0) == target]])
+                wait_for(insert and [[return vim.api.nvim_get_mode().mode == "i"]]
+                    or [[return vim.api.nvim_get_mode().mode == "n"]])
+                assert.equals(case.row, exec("return vim.api.nvim_win_get_cursor(0)[1]"))
+                assert.same({ source, target }, exec([[return require("parley.file_history").snapshot(0).paths]]))
+                assert.same(lines, vim.fn.readfile(source))
+                if case.row == 1 then
+                    wait_for([[
+                        for _, message in ipairs(notifications) do
+                            local text = tostring(message):lower()
+                            if text:find("---", 1, true) and text:find("not found", 1, true) then return true end
+                        end
+                        return false
+                    ]])
+                else
+                    assert.same({}, exec([[return notifications]]))
+                end
+            end)
+        end
+
         for _, fragment in ipairs({ "revised-plan-ready-10-21-0040", "unknown-section", "" }) do
             local description = fragment == "" and "plain file link"
                 or (fragment == "unknown-section" and "unknown heading anchor" or "heading anchor")

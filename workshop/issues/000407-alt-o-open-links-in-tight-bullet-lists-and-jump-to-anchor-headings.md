@@ -48,8 +48,8 @@ Current scope (hub Revision2026-10-21): anchors refer to Markdown ATX headings1�
 
 - [x] Add red headless regressions for tight/loose/nested bullet items and direct links; anchored headings with digits/parentheses/colons, unknown anchor and plain links.
 - [x] Narrow navigation-only bullet ranges to the enclosing item, reusing fence/bounds context; keep editing ranges and numbered-item behavior intact (ARCH-DRY).
-- [x] Split file/fragment before existing path resolution; pure heading lookup uses GitHub-style slugs, then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
-- [x] Run mapped tests and recorded suite; update README/atlas.
+- [x] Split file/fragment before existing path resolution; ~~pure heading lookup uses GitHub-style slugs~~ parser-backed text uses the approved shared codepoint key (latest Revision), then the editor jumps only after confirmed destination arrival (ARCH-PURE, ARCH-ORDER).
+- [ ] Run mapped tests and recorded suite; update README/atlas.
 
 Close review and normal landing follow verification. Per the hub, no stage: operator receives the landed change in normal use.
 
@@ -118,3 +118,6 @@ Hub delivery9b6945ae-2054-4378-80d9-ee793674c844 approves structural markdown_in
 ### 2026-10-21 — Final canonical-key rule, no Unicode data artifact
 
 Hub deliveryee127634-4137-417c-9b63-998d982fe878 replaces the general Unicode-letter requirement: lowercase/keep ASCII letters and digits; remove other ASCII and U+2000–U+206F/U+3000–U+303F; preserve every other non-ASCII codepoint unchanged. Apply identically to heading text and fragment, retaining full-key-before-duplicate precedence. Non-ASCII case stays unchanged. Document this one-line rule and the exotic-symbol fragment miss fallback. No generated data/dependency or editor word classes. RED /tmp/parley407-parser-rule-red3.log exposes17 failures before implementation, including reviewer8 and CJK/accented/em-dash/curly-quote controls.
+
+- Parser replacement implemented: deleted the handwritten inline normalizer; bundled markdown_inline source spans omit delimiter/destination/title nodes. Raw heading fallback covers parser error/nil root. Exact approved codepoint rule is documented in README/atlas; complete-fragment priority protects naturally numeric headings before duplicate fallback. Public heading lookup is now explicitly INTEGRATION, while level/range/fence contracts remain unchanged.
+- RED/GREEN: /tmp/parley407-parser-rule-red3.log17 failures before replacement, /tmp/parley407-parser-rule-green.log33/33 after. Native counterfactual /tmp/parley407-native-rule-red.log fails4 Unicode mapping checks against the previous resolver; restored replacement passes full context/file_references mapping, /tmp/parley407-parser-mapped-green.log (native54, heading33, range256, scanner22 plus all mapped consumers). Heading dialect conformance1/1 passes. A mistaken unit documentation-spec path produced a load failure; corrected integration path passes4/4 in /tmp/parley407-parser-docs.log. Lint818 files0warnings/errors (/tmp/parley407-parser-lint.log), diff-check clean. Required fresh suite and full re-close remain pending; another rule gap from review goes to the hub, without another patch.

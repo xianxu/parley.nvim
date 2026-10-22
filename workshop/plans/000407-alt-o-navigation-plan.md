@@ -6,9 +6,9 @@ collaboration-mode: discussion
 
 > **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy). This records the hub-approved close-repair design; the original implementation entered through the quick flow.
 
-**Goal:** Follow only the enclosing bullet item's references and land file fragments on their rendered heading slug.
+**Goal:** Follow only the enclosing bullet item's references and match file fragments to structural heading text through shared canonical keys (latest approved Revision).
 
-**Architecture:** Keep range, fence and slug decisions pure. Existing reference opening owns buffer/window effects and validates destination arrival. Repair fence state at its shared lexical owner (ARCH-DRY), retaining render and partition contracts.
+**Architecture:** Range/fence logic remains PURE. Parser-backed heading lookup is INTEGRATION, wrapping bundled markdown_inline and codepoint decoding; existing reference opening owns buffer/window effects and validates destination arrival. The latest Revision replaces inline-normalizer syntax rules with parser structure and one key on both sides. Shared lexical fence ownership retains render and partition contracts (ARCH-DRY).
 
 **Tech Stack:** Lua, Neovim, existing Plenary/make harness and real embedded editor input.
 
@@ -28,7 +28,7 @@ Navigation owns one transient range per invocation; nested items are bounded by 
 |---|---|---|---|
 | Alt+O open and jump | lua/parley/init.lua | modified | Existing file-history/open_buf and Neovim cursor/view APIs |
 
-Actual editor tests use tests/helpers/embedded_nvim.lua and real mappings/files. No new external binary/service is introduced. Pure tests live in tests/unit/entity_range_spec.lua, document_lexical_spec.lua and markdown_heading_spec.lua.
+Actual editor tests use tests/helpers/embedded_nvim.lua and real mappings/files. No new external binary/service is introduced. Pure range/fence tests live in tests/unit/entity_range_spec.lua and document_lexical_spec.lua. markdown_heading_spec.lua covers PURE level detection and parser-backed integration behavior under real headless Neovim.
 
 ## Approved repair tasks
 
@@ -129,3 +129,14 @@ RED evidence: /tmp/parley407-parser-rule-red.log, make -k temporary map, exit2,1
 Deliveryee127634-4137-417c-9b63-998d982fe878 supersedes general Unicode-letter classification: lowercase/keep ASCII letters and digits, drop other ASCII characters and U+2000–U+206F/U+3000–U+303F, and preserve every other non-ASCII codepoint unchanged. Apply this same compact key on both sides. No category table, word-class approximation or private ABI is used. Non-ASCII case is deliberately unchanged; unusual symbols outside those two ranges participate in the key, and a GitHub fragment that strips them may miss with the existing top+notice. Codepoint decoding is the only editor primitive the key needs. The parser-backed public lookup remains INTEGRATION, with the existing PURE outline/editing dialect untouched.
 
 New rule RED: /tmp/parley407-parser-rule-red3.log, exit2,17 failures including reviewer8, required punctuation/Unicode/canonical behavior, direct numeric precedence, empty keys and parser fallback. Assertion adapters preserve explicit nil so RED shows missing/wrong rows rather than a luassert arity artifact. Proceed with this approved rule; do not patch a subsequent review gap without returning to the hub.
+
+Current replacement verification:
+
+- [x] Checkpoint the approved parser/codepoint rule and reviewer8 RED before replacing production normalization.
+- [x] Replace handwritten inline normalization; parser/key focused checks pass33/33 in /tmp/parley407-parser-rule-green.log.
+- [x] Pass the serial real-input counterfactual and full mapped tests, lint and whitespace checks; update shipped docs to the exact rule.
+- [ ] Commit/push the replacement and pass a fresh required recorded suite on its exact head.
+
+Full re-close and normal landing follow those checks; a further rule gap from review goes to the hub.
+
+Parser replacement verification: reviewer8 and canonical/fallback cases fail before replacement (/tmp/parley407-parser-rule-red3.log,17 failures); /tmp/parley407-parser-rule-green.log passes33/33 against actual bundled grammar. Native Unicode counterfactual fails4 mapping cases with the previous resolver, /tmp/parley407-native-rule-red.log; restored replacement passes the complete mapped context/file_references selection including native54/54, heading33/33, range256/256 and scanner22/22, /tmp/parley407-parser-mapped-green.log. Existing heading dialect conformance passes1/1; an initial consumer map named a nonexistent unit documentation path (load failure, not assertion/flake), corrected integration/documentation passes4/4 in /tmp/parley407-parser-docs.log. Lint passes818 files with0warnings/errors in /tmp/parley407-parser-lint.log; diff-check clean. No generated Unicode/HTML data, runtime dependencies or editor buffer state. Fresh recorded suite remains pending.
