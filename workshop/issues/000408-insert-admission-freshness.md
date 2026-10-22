@@ -307,6 +307,39 @@ The corrected command agreement file also passes all 36 cases on Neovim
 0.11.7, including CLI sentinel/census checks; lint remains 0 warnings/errors
 over 822 files. No production diff was introduced by this correction.
 
+### 2026-10-22 — final suite and post-review staged acceptance
+
+R4 returned SHIP with no findings (8a492c25), retaining R3's production
+approval. Fresh recorded suite on 25674936013026ee64bbb2a366eb197658db07e3
+passed both preferred 0.12.5 and installed 0.11.7, including session_sync,
+session_sync_native and the corrected keybinding_agreement spec. Attempt
+9e33372b5b221d1f3b034b50d70eb46e, lease-3537999731: queue 2349 s, runtime
+4m58s, exit 0, log SHA-256 prefix f419d47b701d. Both process censuses clean.
+
+Staged reviewed HEAD 96502b3ad3f4165551e3c8e6cd62eed3759ee12e on parley:0
+with sdlc stage --build. The disposable real operator profile on 0.11.7,
+using pinned fresh pair#777 Couch through process-local PATH, passed for
+session.md and session.side/discussion.md: fresh disk bytes and ownership
+proof before the first edit; unchanged Escape/Ctrl-C release; changed
+Escape/Ctrl-C and save hold; Alt+Return saves/releases; foreign-lock refusal
+followed by native i retry freshens before admitting the queued edit.
+No supervisor exists in this isolated root, so actual agent delivery remains
+outside this check; Alt+Return's save/release path was exercised.
+
+The first probe timed out because its RPC reader did not dismiss Neovim's
+hit-enter prompt after the expected refusal notification. The probe's fast
+mode query confirmed mode r/blocking; dismissing that prompt fixed the driver,
+without changing production code. Retained profile.live-r4-timeout.log and
+profile.live-r4-pass.log under the producer scratch root record both outcomes.
+
+Both brief stages were cleared immediately, even on probe failure. Scratch
+registry list was empty after cleanup; disposable files were removed. Final
+parley:0 is clean on main, HEAD and freshly fetched origin/main both
+c6ea87fb63c55ddcf5218454008c147c87bd397e. No running operator nvim, live
+store, credentials or real documents were touched. TL holds the post-landing
+fast-forward until the operator's running Couch includes pair#777; held turns
+must be submitted or released before restarting onto the new Parley.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
