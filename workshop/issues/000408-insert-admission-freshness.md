@@ -191,6 +191,22 @@ sdlc local-check cancel --run lease-3037014451 (confirmed cancelled on 661a70b6)
 Push this settled test head and enqueue its replacement once; do not restart or
 duplicate it while waiting for producer deployment. No live stage has occurred.
 
+### 2026-10-21 — restart recovery: recorded suite and CI green
+
+Recovered the original replacement runner after Couch restarts and the DNS
+outage. Lease-3837696730 completed successfully on
+5d2d9768b6b580d2702c91e2ec4ce46018b85e40: exit 0 in 5m30s, log SHA-256 prefix
+bf02d640336e, recorded sdlc-local/suite success. All PR #329 server checks also
+pass. No suite was restarted or duplicated; no flake resume was needed.
+
+Pair main now contains #752 at 5fafe0f807a9076039a934f4f1d31c45fee637ae,
+but #777 implementation has not landed yet. Pair:0's current clean binary
+reports revision f2cd7108abcad8788ee062ab94c95b4f09b66393, which therefore is
+not the producer deployment needed for this check. Hold :0 staging until #777
+lands and the hub confirms its rebuild/deployment. Then run isolated real
+conformance on the merge pin, the authorized disposable live check/cleanup,
+and close/landing. Hub outcome report a8d34338-7bf2-433b-a4d8-73147ed5e902.
+
 ## Revisions
 
 ### 2026-10-21 — editable unavailable mode approved
