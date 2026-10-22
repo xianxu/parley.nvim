@@ -963,3 +963,6 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   for attachment's status/round queries; even a declaration check can spawn IO.
 
 - #405: A child RPC wait can inherit the correct arrival budget while hiding it behind a generic local or vararg. Keep its arrival-derived name inside the child and run the architecture guards with the targeted mapping; behavioral passes alone miss those contracts. Parser-wide protection likewise needs each external decode locally explicit to the JSON guard.
+- #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
+
+- #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
