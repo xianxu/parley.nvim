@@ -1,5 +1,19 @@
 # Lessons
 
+## 2026-10-22 (#409 — a census is not run ownership)
+
+- Persistence and a recognizable command prove that a process exists, not that
+  its owner has finished. Hold one checkout lease across scratch mutation,
+  execution and both cleanup phases; reuse its descriptor through recursive make.
+  Reentry alone does not order sibling goals: serialize them within the owner too.
+- #409 close BR-1: MAKECMDGOALS describes requested roots, not Make's transitive
+  recipe graph. Put admission at the protected target's execution boundary and
+  reject unowned internal bodies. Test direct, alias-chain and default entry;
+  source enumeration alone did not catch the bypass.
+- Test dry-run behavior through recursive make with long options too. Apple's
+  make can put `-n` after `--no-print-directory` in MAKEFLAGS, so its first word
+  alone cannot establish whether a nested command is print-only.
+
 ## 2026-10-16 (#353 — displayed ancestry and native history)
 
 - A displayed trail and Back entries must commit together in the actual landing window, including reused splits. Reconstruct through one pure transition; changing only the label can send Back into an unrelated file.
@@ -956,3 +970,4 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   editing. Scope a test arrival budget to the behavioral fixture, retain separate
   product-deadline controls, and assert the completed outcome before protection.
   Failure diagnostics include outcome, elapsed time, mode, runtime and load.
+- #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).

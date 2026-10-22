@@ -23,6 +23,12 @@ describe("#220 orphan census", function()
         assert.equals(0, out.code, (out.stdout or "") .. (out.stderr or ""))
     end)
 
+    it("serializes real targeted runs and retains orphan cleanup (#409)", function()
+        local out = vim.system({ "python3", "-B", "-m", "unittest",
+            "tests/unit/test_run_lease.py" }, { text = true }):wait(30000)
+        assert.equals(0, out.code, (out.stdout or "") .. (out.stderr or ""))
+    end)
+
     it("selects exactly this checkout's leaked harness processes", function()
         local out = run(ROOT, "after", { "--grace", "0" })
         assert.equals(1, out.code, "survivors must fail the run")
@@ -67,9 +73,12 @@ describe("#220 orphan census", function()
     end)
 
     it("skips visibly, and passes, where ps is refused", function()
-        local out = vim.system({ "python3", SCRIPT, "--root", vim.fn.getcwd(),
+        local root = vim.fn.tempname()
+        vim.fn.mkdir(root, "p")
+        local out = vim.system({ "python3", SCRIPT, "--root", root,
             "--phase", "after", "--ps-command", "/nonexistent/ps" },
             { text = true }):wait(10000)
+        vim.fn.delete(root, "rf")
         assert.equals(0, out.code)
         assert.is_truthy(out.stdout:lower():find("skipped", 1, true))
     end)

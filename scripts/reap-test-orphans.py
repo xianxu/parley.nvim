@@ -10,12 +10,18 @@ from __future__ import annotations
 
 import argparse
 import os
+import pathlib
 import re
+import runpy
 import signal
 import subprocess
 import sys
 import time
 from typing import Iterable
+
+
+def acquire_lease(root: str) -> None:
+    runpy.run_path(str(pathlib.Path(__file__).with_name('test-run-lease.py')))['enter'](root)
 
 
 def parse_ps(text: str) -> list[dict[str, int | str]]:
@@ -187,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--caller-pid", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
+    if args.ps_from is None:
+        acquire_lease(args.root)
     text, why_not = read_process_table(args.ps_from, args.ps_command)
     if why_not == "unreadable":
         print("orphan check skipped: `ps` is unavailable here, so surviving test processes cannot be counted")

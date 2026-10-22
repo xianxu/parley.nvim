@@ -28,6 +28,35 @@ local SETUPS = {
 }
 
 describe("attention_model.transition", function()
+    it("clears only named entries in every state, retires sides, and permits resubmit", function()
+        local state = Model.empty()
+        for kind, events in pairs(SETUPS) do
+            if kind ~= "absent" then
+                local entry = run(events).entries["/a.md"]
+                entry.path = "/" .. kind .. ".md"
+                state.entries[entry.path] = entry
+            end
+        end
+        state.entries["/side.md"] = { path = "/side.md", kind = "side", parent = "/hidden.md", pending = {}, submitted_at = 10 }
+        state = Model.transition(state, submitted("/hidden.md", "keep"), 90)
+        local before = vim.deepcopy(state)
+        local paths = { "/waiting.md", "/answered.md", "/seen.md", "/side.md", "/side.md", "/missing.md" }
+        local cleared, count = Model.transition(state, { type = "clear", paths = paths }, 100)
+        assert.equals(4, count)
+        assert.same(before, state)
+        assert.same({ "/hidden.md" }, vim.tbl_keys(cleared.entries))
+        assert.equals(100, cleared.retired["/side.md"])
+        assert.same({}, Model.scan(cleared, { { path = "/side.md", parent = "/hidden.md", mtime_sec = 99, mtime_id = "99.0" } }))
+        local again, removed = Model.transition(cleared, { type = "clear", paths = paths }, 101)
+        assert.equals(0, removed)
+        assert.same(cleared, again)
+        local revived = Model.transition(cleared, submitted("/waiting.md", "fresh"), 102)
+        assert.equals("waiting", state_of(revived, "/waiting.md"))
+        assert.same({ fresh = 102 }, revived.entries["/waiting.md"].pending)
+        local late = Model.transition(cleared, observed("/waiting.md", { "m1" }, {}), 103)
+        assert.is_nil(late.entries["/waiting.md"])
+    end)
+
     -- Each event in each derived state, applied at t=100.
     local cases = {
         { "absent", submitted("/a.md", "m2"), "waiting" },
