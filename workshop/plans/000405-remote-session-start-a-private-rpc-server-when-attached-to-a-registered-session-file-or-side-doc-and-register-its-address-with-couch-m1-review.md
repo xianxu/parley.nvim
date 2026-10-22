@@ -318,3 +318,112 @@ findings:
    None required; the remaining correction enforces the existing acknowledgment-validation contract.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"60178087-20d6-466e-8544-644f1b2bc26a","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/bf660ed24e2a3884","reviewed_head":"1b91aadf4c99449d99397c3a7a0cecc46ccd61c6","slot":"parley.nvim:1","requested_at":"2026-10-22T14:04:21.316156Z"},"phase":"finished","pid":38139,"started_at":"2026-10-22T14:04:21.488193Z","finished_at":"2026-10-22T14:09:18.857247Z","session_id":"01a163ed-5ac1-7c11-a18c-c6bd35b84cd8","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T07:26:18-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 405 — remote-session: start a private RPC server when attached to a registered session file or side doc, and register its address with Couch |
+| repo | parley.nvim |
+| issue file | workshop/issues/000405-remote-session-start-a-private-rpc-server-when-attached-to-a-registered-session-file-or-side-doc-and-register-its-address-with-couch.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c..3ae643672ab1a24d763cd40141533899ec980d07 |
+| command | sdlc milestone-close --issue 405 --milestone M1 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T07:26:18-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-6 is addressed with meaningful regression evidence. M1’s ownership, cancellation, transport, and documentation work is otherwise well supported. One new blocking defect remains: an unsupported filename can throw after listener creation and permanently stall the shared dispatcher. This reproduces on both supported Neovim versions.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Exact listener cancellation remains implemented; queued-publication, held-startup, reservation/publication cancellation, and slot-reuse regressions pass on both runtimes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Acquisition passes its absolute deadline into first-listener publication; reservation and publication deadline regressions pass on both runtimes.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The Core concepts table names lua/parley/remote_runtime_record.lua, whose implementation contains the pure ownership codec and cleanup decision.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      remote_session_spec.lua:462 verifies final detach removes the listener, marker, and directory without closing the editor; it passes on both runtimes.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      README.md:208 documents --editor-endpoints --fake-only and the deferred real prerequisites; the documented command passes its positive and corrupt-reply controls.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Model normalization and shell consumption of snapshot().result are reachable. Removing the correction produces 12 model failures and one dispatcher failure; pinned-head regressions pass.
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: validate-before-resource-allocation
+    title: |
+      Unsupported attachment paths throw after listener creation and wedge the dispatcher
+    detail: |
+      lua/parley/remote_session.lua:197-200 validates Namespace and DocumentID but not File against the complete attachment-context contract. A real canonical filename containing a newline passes preflight, starts a listener, then throws at model.new on line 238 because remote_session_model.lua:47 rejects that spelling. The exception skips done(listening) at line 254, leaving io_busy set. Native probes on 0.12.5 and 0.11.7 observed invalid attachment context, no attachment callback, and no subsequent ordinary-attachment or close callback. Validate the complete context through shared pure validation before allocating resources, handle rejected construction through normal cleanup/completion, and add a sequence regression proving a rejected attachment cannot block later attachment or close. ARCH-SECURE, ARCH-ORDER.
+```
+
+1. **Strengths**
+
+   - The pure owner now controls accepted acknowledgment outcomes; callbacks, notices, and duplicate attachment responses consume that result.
+   - Runtime cleanup preserves uncertain and replaced artifacts, with exact ownership checks before destructive operations.
+   - Stateful process and Couch fixtures exercise production seams and controlled event ordering.
+   - README, indexed atlas, and traceability cover the new M1 surface and explicitly identify M2 prerequisites.
+
+2. **Critical findings**
+
+   - **Attachment validation can strand the shared queue — `lua/parley/remote_session.lua:238`.** Apply the validation/completion rule above across every field passed to `model.new`, including `File` and the allocated socket path. Unsupported input must produce one terminal result and permit subsequent work.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - Focused mapping: **184 passed, zero failures/errors** on both Neovim **0.12.5 and 0.11.7**, with clean process censuses.
+   - BR-6 counterfactual: **12 model failures and one dispatcher failure** without the correction.
+   - Endpoint fake conformance and its corrupt-identity negative control passed.
+   - The new filename sequence fails on both runtimes. [Probe evidence](/Volumes/TestScratch/parley-405-review.qicKbs/input-probe-sequence.log).
+   - Real-producer acceptance remains explicitly deferred to M2. The disposable checkout was removed; the reviewed repository is unchanged.
+
+6. **Architectural notes for upcoming work**
+
+   - **ARCH-DRY — pass:** existing transport and lease seams are reused.
+   - **ARCH-PURE — pass:** both declared pure entities have IO-free computational tests.
+   - **ARCH-PURPOSE — pass for M1 scope:** automatic attachment wiring and real acceptance remain documented M2 work.
+   - **ARCH-MOCK — pass for M1:** stateful doubles share production boundaries; real conformance remains outstanding.
+   - **ARCH-CONSTRAINTS — pass:** bounded admission, deadlines, and counted workloads have executable coverage.
+   - **ARCH-SECURE — flag:** complete context validation occurs after resource creation.
+   - **ARCH-ORDER — flag:** constructor failure bypasses queue completion and teardown progress.
+   - **ARCH-FUNERAL — pass structurally:** artifact removal and crash-residue collection are defined; the new finding interrupts normal cleanup progress.
+   - **ARCH-EVOLVE — pass:** marker tests verify nested unknown-field preservation and strict duplicate/known-field validation.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry defining complete attachment-context validation before allocation and guaranteed completion/cleanup on rejection. Require a native sequence test: unsupported canonical filename → one unavailable result → ordinary attachment succeeds → close completes.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"72d1245b-ab98-424b-b7ea-7faf5f1f8a8c","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/fdff89dc44fd75be","reviewed_head":"3ae643672ab1a24d763cd40141533899ec980d07","slot":"parley.nvim:1","requested_at":"2026-10-22T14:19:27.681127Z"},"phase":"finished","pid":4997,"started_at":"2026-10-22T14:19:27.784398Z","finished_at":"2026-10-22T14:26:17.934885Z","session_id":"01a163fb-2db7-7de0-a101-866e044d9e3b","outcome":"returned"}] -->

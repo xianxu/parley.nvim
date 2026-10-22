@@ -112,6 +112,12 @@ Pure RED34pass/12fail; model now normalizes every confirmed-but-unowned binding 
 
 Final make lint0warnings/0errors in834files (parley-405-br6-lint.log). Endpoint native fake conformance and deliberate corrupt-identity negative control pass both versions after BR-6 (parley-405-editor-conformance-{preferred,0117}-br6.log). Real acceptance still waits for producer and shared bridge; no stage, real-producer claim or M2 wiring. Checkpoint before the fixed-head recorded suite and TL-authorized milestone-close round.
 
+### 2026-10-22 — R4 complete admission correction approved
+
+R4 on3ae64367 returned REWORK: BR-1..BR-6 disposed, BR-7 Critical (validate-before-resource-allocation) is new. A canonical filename containing a newline passes partial preflight, then model.new throws after native listener creation and strands the shared IO queue. Reviewer reproduced no callback, no later ordinary attach and no close on both versions. Stopped and reported before code. TL0bb56c13 approved shared complete-known-field validation before allocation, allocated Socket validation before activation and unavailable/cleanup/completion on constructor rejection, with native continuation controls; another review round authorized. If R5 finds another new family, send the family summary and decide scope before patching. Canceled only own queued suite lease-389571463 on superseded3ae64367; cancellation confirmed, no suite pass claimed.
+
+M2 read-only preflight also found unregister has one top-level Namespace. TL14e010ac approves one batch per Namespace sharing one absolute500ms exit observation budget, queued cancellation and owned/joined admitted observers, with a delayed-second-namespace regression. Native SystemObj.wait(500) is unsuitable because0.12 may wait twice; use the existing async seam and a queue-inclusive absolute deadline. Pair:7 now owns pair#801 and accepted the proposed Version/Namespace/Socket/Environment readiness fields, complete isolated environment, explicit candidate/scratch-parent flags and joined EOF/TERM teardown. Its final executable and bounds still require confirmation before bridge code. No M2 code or stage.
+
 ## Revisions
 
 ### 2026-10-22 — producer prerequisite and outside-pane discovery

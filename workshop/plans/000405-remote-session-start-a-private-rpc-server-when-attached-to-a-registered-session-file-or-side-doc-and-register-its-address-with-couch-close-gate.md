@@ -526,6 +526,193 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 72d1245b-ab98-424b-b7ea-7faf5f1f8a8c
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000405"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Volumes/TestScratch/review-checkouts/fdff89dc44fd75be
+            reviewed_head: 3ae643672ab1a24d763cd40141533899ec980d07
+            slot: parley.nvim:1
+            requested_at: "2026-10-22T14:19:27.681127Z"
+          phase: finished
+          pid: 4997
+          started_at: "2026-10-22T14:19:27.784398Z"
+          finished_at: "2026-10-22T14:26:17.934885Z"
+          session_id: 01a163fb-2db7-7de0-a101-866e044d9e3b
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 3ae643672ab1a24d763cd40141533899ec980d07
+        tracker_head: 79c32d5649a5ce72708aa78b7a35c97fbfa0d229
+        branch_point: 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c
+        since: "2026-10-22T04:55:52-07:00"
+        until: "2026-10-22T07:18:31-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-22T04:55:52-07:00"
+              end: "2026-10-22T07:18:31-07:00"
+              began: "2026-10-22T04:55:52-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 83d5f0793e31a5eab1372b53b0fa9c8672466908c3a1f299dc9d644b7995912e
+              started: "2026-10-14T05:35:58.09Z"
+              spawned: false
+              bytes: 97152456
+              windows:
+                - start: "2026-10-22T04:55:52-07:00"
+                  end: "2026-10-22T07:18:31-07:00"
+            - harness: codex
+              id: 01a16378-985a-76f0-ad76-6ef3e4dfec1e
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 9d626a12d4cc6f5e0f10bd5314bb67bbfec39efc88c1a95914d33b71e436f5d0
+              started: "2026-10-22T11:56:50.234Z"
+              spawned: true
+              bytes: 1742856
+              windows:
+                - start: "2026-10-22T11:56:50.234Z"
+                  end: "2026-10-22T07:18:31-07:00"
+            - harness: codex
+              id: 01a16386-b503-73f3-934d-1c36ecd543ba
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 864c95f43326d6cfa30962fc82d3c7840342543291376c403dbd0783e9b89f76
+              started: "2026-10-22T12:12:15.322Z"
+              spawned: false
+              bytes: 616149
+              windows:
+                - start: "2026-10-22T12:12:15.322Z"
+                  end: "2026-10-22T07:18:31-07:00"
+            - harness: codex
+              id: 01a1638a-8d3e-73c2-8e2a-0aed5bf28af9
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 534340d99d4ff0bc9c8ad41342fbb50568e89f9372d668f867f6fc280f779175
+              started: "2026-10-22T12:16:27.346Z"
+              spawned: false
+              bytes: 465654
+              windows:
+                - start: "2026-10-22T12:16:27.346Z"
+                  end: "2026-10-22T07:18:31-07:00"
+            - harness: codex
+              id: 01a1638c-6e36-7142-94d2-59f91265ff08
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 06189877b85000f3bbf7e024dc87c8eba47ac797591173d925a806ec13051cb4
+              started: "2026-10-22T12:18:30.499Z"
+              spawned: false
+              bytes: 471863
+              windows:
+                - start: "2026-10-22T12:18:30.499Z"
+                  end: "2026-10-22T07:18:31-07:00"
+            - harness: codex
+              id: 01a1638c-e3cf-7b91-a5c2-fb326f3ae063
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 7fe16589d51c8c31b02ecbf061c1615352b117f78a66687145005ee7b65d939d
+              started: "2026-10-22T12:19:00.509Z"
+              spawned: false
+              bytes: 434932
+              windows:
+                - start: "2026-10-22T12:19:00.509Z"
+                  end: "2026-10-22T07:18:31-07:00"
+            - harness: codex
+              id: 01a1638e-cd57-7dc1-897b-893fc3112bb1
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 66c885bbc81154f107a863ae8f1ffdbd7cd4c820a0ea32e3d314a17d5106b8a3
+              started: "2026-10-22T12:21:05.59Z"
+              spawned: true
+              bytes: 2358854
+              windows:
+                - start: "2026-10-22T12:21:05.59Z"
+                  end: "2026-10-22T07:18:31-07:00"
+            - harness: codex
+              id: 01a1638f-48c4-7b70-8bd6-fcd4d9154e4b
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 54bf9f72c6d9901ca7404259d3d1249b5fabb6d8628eb1f894afb7e7358fbcd4
+              started: "2026-10-22T12:21:37.186Z"
+              spawned: true
+              bytes: 2808447
+              windows:
+                - start: "2026-10-22T12:21:37.186Z"
+                  end: "2026-10-22T07:18:31-07:00"
+        cuts:
+            - boundary: M1
+              dispatched: "2026-10-22T06:06:25-07:00"
+              finalized: "2026-10-22T06:12:16-07:00"
+              finalizing: false
+            - boundary: M1
+              dispatched: "2026-10-22T06:30:25-07:00"
+              finalized: "2026-10-22T06:35:03-07:00"
+              finalizing: false
+            - boundary: M1
+              dispatched: "2026-10-22T07:04:21-07:00"
+              finalized: "2026-10-22T07:09:19-07:00"
+              finalizing: false
+      "n": 4
+      timestamp: "2026-10-22T07:26:19-07:00"
+      dispatched: "2026-10-22T07:19:27-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Exact listener cancellation remains implemented; queued-publication, held-startup, reservation/publication cancellation, and slot-reuse regressions pass on both runtimes.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Acquisition passes its absolute deadline into first-listener publication; reservation and publication deadline regressions pass on both runtimes.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: The Core concepts table names lua/parley/remote_runtime_record.lua, whose implementation contains the pure ownership codec and cleanup decision.
+          round: 4
+        - id: BR-4
+          disposition: addressed
+          note: remote_session_spec.lua:462 verifies final detach removes the listener, marker, and directory without closing the editor; it passes on both runtimes.
+          round: 4
+        - id: BR-5
+          disposition: addressed
+          note: README.md:208 documents --editor-endpoints --fake-only and the deferred real prerequisites; the documented command passes its positive and corrupt-reply controls.
+          round: 4
+        - id: BR-6
+          disposition: addressed
+          note: Model normalization and shell consumption of snapshot().result are reachable. Removing the correction produces 12 model failures and one dispatcher failure; pinned-head regressions pass.
+          round: 4
+      findings:
+        - kind: defect
+          id: BR-7
+          severity: Critical
+          title: Unsupported attachment paths throw after listener creation and wedge the dispatcher
+          detail: lua/parley/remote_session.lua:197-200 validates Namespace and DocumentID but not File against the complete attachment-context contract. A real canonical filename containing a newline passes preflight, starts a listener, then throws at model.new on line 238 because remote_session_model.lua:47 rejects that spelling. The exception skips done(listening) at line 254, leaving io_busy set. Native probes on 0.12.5 and 0.11.7 observed invalid attachment context, no attachment callback, and no subsequent ordinary-attachment or close callback. Validate the complete context through shared pure validation before allocating resources, handle rejected construction through normal cleanup/completion, and add a sequence regression proving a rejected attachment cannot block later attachment or close. ARCH-SECURE, ARCH-ORDER.
+          family: validate-before-resource-allocation
+          round: 4
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#405 (boundary-review)
@@ -573,6 +760,22 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-6** [Important] `validated-authority-outcomes` (kind: defect) A rejected canonical-file acknowledgment is still reported as confirmed
   At lua/parley/remote_session.lua:131-135, dispatch can reject a binding whose File differs from the attachment identity, yet the shell checks and reports the original confirmed result. remote_session_model.lua:285 also stores that rejected result unchanged. A disposable native probe returning File=/different-document.md observed callback=confirmed and phase=unconfirmed, without an unavailable notice. Normalize rejected confirmations through the model’s accepted outcome, use that outcome for callbacks and notices, and add a dispatcher regression. ARCH-SECURE, ARCH-ORDER.
 
+## Round 4 — 2026-10-22T07:26:19-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Exact listener cancellation remains implemented; queued-publication, held-startup, reservation/publication cancellation, and slot-reuse regressions pass on both runtimes.
+- BR-2 — addressed — Acquisition passes its absolute deadline into first-listener publication; reservation and publication deadline regressions pass on both runtimes.
+- BR-3 — addressed — The Core concepts table names lua/parley/remote_runtime_record.lua, whose implementation contains the pure ownership codec and cleanup decision.
+- BR-4 — addressed — remote_session_spec.lua:462 verifies final detach removes the listener, marker, and directory without closing the editor; it passes on both runtimes.
+- BR-5 — addressed — README.md:208 documents --editor-endpoints --fake-only and the deferred real prerequisites; the documented command passes its positive and corrupt-reply controls.
+- BR-6 — addressed — Model normalization and shell consumption of snapshot().result are reachable. Removing the correction produces 12 model failures and one dispatcher failure; pinned-head regressions pass.
+
+### Raised
+
+- **BR-7** [Critical] `validate-before-resource-allocation` (kind: defect) Unsupported attachment paths throw after listener creation and wedge the dispatcher
+  lua/parley/remote_session.lua:197-200 validates Namespace and DocumentID but not File against the complete attachment-context contract. A real canonical filename containing a newline passes preflight, starts a listener, then throws at model.new on line 238 because remote_session_model.lua:47 rejects that spelling. The exception skips done(listening) at line 254, leaving io_busy set. Native probes on 0.12.5 and 0.11.7 observed invalid attachment context, no attachment callback, and no subsequent ordinary-attachment or close callback. Validate the complete context through shared pure validation before allocating resources, handle rejected construction through normal cleanup/completion, and add a sequence regression proving a rejected attachment cannot block later attachment or close. ARCH-SECURE, ARCH-ORDER.
+
 ## Open findings
 
-- **BR-6** [Important] `validated-authority-outcomes` (kind: defect) A rejected canonical-file acknowledgment is still reported as confirmed
+- **BR-7** [Critical] `validate-before-resource-allocation` (kind: defect) Unsupported attachment paths throw after listener creation and wedge the dispatcher
