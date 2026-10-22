@@ -240,15 +240,20 @@ end
 --- @param line string
 --- @param tildes boolean|nil
 --- @return integer|nil
-function M.is_fence_delim(line, tildes)
+local function fence_parts(line, tildes)
     if type(line) ~= "string" then return nil end
-    local ticks = line:match("^%s*(`+)")
-    if ticks and #ticks >= 3 then return #ticks end
+    local ticks, rest = line:match("^%s*(`+)(.*)$")
+    if ticks and #ticks >= 3 then return #ticks, "`", rest end
     if tildes then
-        local tl = line:match("^%s*(~+)")
-        if tl and #tl >= 3 then return #tl end
+        local tl, tail = line:match("^%s*(~+)(.*)$")
+        if tl and #tl >= 3 then return #tl, "~", tail end
     end
     return nil
+end
+
+function M.is_fence_delim(line, tildes)
+    local size = fence_parts(line, tildes)
+    return size
 end
 
 --- Build a 1-indexed "is this line inside a code block" memo, with #218
@@ -266,14 +271,23 @@ end
 --- @return boolean[] memo
 function M.code_block_memo(lines, patterns, tildes, partitioned)
     local memo = {}
-    local in_block = false
+    local opener, width
     for i, line in ipairs(lines or {}) do
         if partitioned ~= false and M.is_partition(line, patterns) then
-            in_block = false
-        elseif M.is_fence_delim(line, tildes) then
-            in_block = not in_block
+            opener, width = nil, nil
+        else
+            local size, char, tail = fence_parts(line, tildes)
+            if size then
+                if opener then
+                    if char == opener and size >= width and tail:match("^%s*$") then
+                        opener, width = nil, nil
+                    end
+                elseif char ~= "`" or not tail:find("`", 1, true) then
+                    opener, width = char, size
+                end
+            end
         end
-        memo[i] = in_block
+        memo[i] = opener ~= nil
     end
     return memo
 end

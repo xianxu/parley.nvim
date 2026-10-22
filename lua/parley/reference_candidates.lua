@@ -39,6 +39,8 @@ end
 -- The supported Markdown block dialect, shared by wrapped occurrence scanning
 -- and code containment. List starts break before, retaining their continuation;
 -- headings/walls isolate their row. Excluded rows carry no inline syntax.
+-- opener/indent/content_indent describe navigation ownership without importing
+-- the editing heading dialect; only a fence opener has navigation structure.
 function M.markdown_blocks(lines, range, opts)
     if not range then return {} end
     opts = opts or {}
@@ -48,18 +50,42 @@ function M.markdown_blocks(lines, range, opts)
     local out = {}
     for row = math.max(1, range.first), math.min(#lines, range.last) do
         local line = lines[row]
-        local content = line:match("^ ? ? ?(%S.*)$") or ""
+        local indent = #(line:match("^%s*") or "")
+        local content = line:sub(indent + 1)
         local hashes = content:match("^(#+)%s") or content:match("^(#+)$")
-        local heading = require("parley.markdown_heading").level(line) or (hashes and #hashes <= 6)
+        local heading = hashes and #hashes <= 6
         local compact = content:gsub("%s", "")
-        local wall = content:match("^%-+%s*$") or content:match("^=+%s*$") or content:match("^>")
+        local wall = content:match("^%-+%s*$") or content:match("^=+%s*$")
             or compact:match("^%-%-%-+$") or compact:match("^%*%*%*+$") or compact:match("^___+$")
+        local quote = content:match("^>")
         local kind = opts.transcript ~= false and lexical.classify(line, patterns).kind
         local structural = lexical.is_structural_kind(kind) or kind == "reasoning" or kind == "reasoning_end"
-        local boundary = wall or structural or heading or line:match("^%s*%d+[.)]%s") or line:match("^%s*[-+*]%s")
+        local fence = lexical.is_fence_delim(line, true)
+        local opening = fence and in_code[row] and not in_code[row - 1]
+        local bullet = content:match("^[-+*]%s+")
+        local numbered = content:match("^%d+[.)]%s+")
+        -- One block vocabulary serves occurrence barriers and navigation. Walls
+        -- win over list markers ("- - -"), and fenced examples have no openers.
+        local opener, content_indent
+        if opening then
+            opener = "fence"
+        elseif not in_code[row] and not fence then
+            if heading then opener = "heading"
+            elseif wall then opener = "wall"
+            elseif quote then opener = "quote"
+            elseif bullet then opener, content_indent = "bullet", indent + #bullet
+            elseif numbered then opener, content_indent = "numbered", indent + #numbered
+            elseif kind == "user" or kind == "assistant" then opener = "turn" end
+        end
+        -- Wrapped-link scanning retains its established up-to-three-space
+        -- block dialect; navigation uses the same classes relative to items.
+        local inline_wall = indent <= 3 and line:sub(1, indent):match("^ *$")
+            and (heading or wall or quote)
         out[row] = {
-            before = not not boundary, after = not not (heading or wall),
-            excluded = not not (in_code[row] or lexical.is_fence_delim(line, true) or line:match("^%s*$")),
+            before = not not (inline_wall or structural or bullet or numbered),
+            after = not not inline_wall,
+            excluded = not not (in_code[row] or fence or line:match("^%s*$")),
+            opener = opener, indent = indent, content_indent = content_indent,
         }
     end
     return out

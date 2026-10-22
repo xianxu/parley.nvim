@@ -598,6 +598,7 @@ atlas:
       - lua/parley/reference_candidates.lua
       - lua/parley/entity_range.lua
       - lua/parley/document/lexical.lua
+      - lua/parley/markdown_heading.lua
       - lua/parley/artifact_ref.lua
       - lua/parley/issues.lua
       - lua/parley/highlighter.lua
@@ -609,6 +610,7 @@ atlas:
       - tests/integration/entity_navigation_native_spec.lua
       - tests/integration/entity_resolve_spec.lua
       - tests/unit/reference_candidates_spec.lua
+      - tests/unit/markdown_heading_spec.lua
       - tests/unit/entity_range_spec.lua
       - tests/unit/document_lexical_spec.lua
       - tests/unit/artifact_ref_spec.lua

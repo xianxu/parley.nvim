@@ -900,6 +900,15 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 
 - #398 landing: shipped atlas prose must not link relatively into ignored weave overlays. Use a pinned upstream link for inherited contracts and run documentation_spec after adding atlas links; warm-checkout existence hides cold-checkout failures.
 
+- #407: Navigation must separate a destination path from its fragment before file-type checks, and must not restore a source cursor over a successful same-file anchor jump. Test real mapping completion before asserting cursor state; waiting only for the desired cursor can hide an ordering defect behind a stalled fixture.
+
+- #407 close: a GitHub-style anchor is based on heading content, not raw Markdown. Pin whitespace, formatting and duplicate-slug classes, with literal/code controls. A fence memo must retain opener character and width instead of toggling on any delimiter. Determine container boundaries at a fence opener before its contents are excluded; test outside-link negatives as well as successful links.
+
+- #407 round2: navigation boundaries belong to the occurrence scanner's block vocabulary, not the narrower editing-heading dialect. Define ownership by an item's content indentation and enumerate outside-block negatives with indented positive controls. Keep renderer-dependent heading syntax outside the anchor contract unless explicitly required; unsupported syntax must fall back visibly rather than invent an anchor.
+
+- #407 round3: repeated inline-normalization findings mean the hand-written grammar is the wrong owner. Use bundled markdown_inline structure for visible source spans (ordinary text is in gaps), and keep anchor matching tolerant through a documented shared key. Verify Unicode API semantics: Vim POSIX alnum is ASCII-only, and word classes are not general Unicode categories; take the actual capability boundary to the TL before adding data or approximations.
+
+- #407 close4: after a scope revision, check acceptance criteria and atlas module classifications as well as Spec/Revisions and user instructions. A revised parser/key contract must retire exact-slug acceptance wording, and adding an editor parser changes the lookup's integration label even when its level helper remains pure.
 - #404 close BR-1: Neovim skips InsertLeave on Ctrl-C. State representing an
   actual editor mode must follow ModeChanged too, through one departure
   handler, with native tests for every exit family rather than Escape alone.

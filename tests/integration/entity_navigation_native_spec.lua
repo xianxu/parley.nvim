@@ -86,6 +86,201 @@ describe("entity navigation native input", function()
             end)
         end
 
+        local list_cases = {
+            {
+                name = "tight unordered item prose before its inline link",
+                lines = { "- Item one [other](other.md)", "- Item two [answer](answer.md)" },
+                row = 2,
+            },
+            {
+                name = "tight unordered item prose",
+                lines = { "- Other [other](other.md)", "- Chosen item prose",
+                    "  [answer](answer.md)", "- Last [last](last.md)" },
+                row = 2,
+            },
+            {
+                name = "tight unordered item continuation",
+                lines = { "- Other [other](other.md)", "- Chosen item prose",
+                    "  continuation text", "  [answer](answer.md)", "- Last [last](last.md)" },
+                row = 3,
+            },
+            {
+                name = "loose unordered item continuation",
+                lines = { "- Other [other](other.md)", "", "- Chosen item prose", "",
+                    "  continuation text", "  [answer](answer.md)", "", "- Last [last](last.md)" },
+                row = 5,
+            },
+            {
+                name = "nested unordered item continuation",
+                lines = { "- Parent [parent](parent.md)", "  - Other [other](other.md)",
+                    "  - Chosen item prose", "    continuation text", "    [answer](answer.md)",
+                    "  - Last [last](last.md)", "- Outside [outside](outside.md)" },
+                row = 4,
+            },
+            {
+                name = "direct link label in a tight unordered list",
+                lines = { "- Other [other](other.md)", "- [answer](answer.md)", "- Last [last](last.md)" },
+                row = 2,
+                col = 4,
+            },
+        }
+        for _, case in ipairs(list_cases) do
+            it("opens the sole link from " .. case.name .. " without a picker in " .. mode .. " mode", function()
+                for _, name in ipairs({ "other", "last", "parent", "outside" }) do
+                    vim.fn.writefile({ "# " .. name }, root .. "/" .. name .. ".md")
+                end
+                open_source(case.lines, case.row, false)
+                exec([[local row, col = ...; vim.api.nvim_win_set_cursor(0, { row, col })]], case.row, case.col or 0)
+                if insert then
+                    keys("i")
+                    wait_for([[return vim.api.nvim_get_mode().mode == "i"]])
+                end
+                exec([[vim.ui.select = function(items) _G.unexpected_picker = items end]])
+                keys("<M-o>")
+                wait_for([[return vim.api.nvim_buf_get_name(0) == target or _G.unexpected_picker ~= nil]])
+                assert.is_false(exec([[return _G.unexpected_picker ~= nil]]), "enclosing item must exclude sibling links")
+                wait_for(insert and [[return vim.api.nvim_get_mode().mode == "i"]]
+                    or [[return vim.api.nvim_get_mode().mode == "n"]])
+                assert.same({ source, target }, exec([[return require("parley.file_history").snapshot(0).paths]]))
+                assert.same(case.lines, vim.fn.readfile(source))
+            end)
+        end
+
+        it("keeps an enclosing item's same-file anchor jump in " .. mode .. " mode", function()
+            open_source({"- Jump to the section", "  [here](source.md#target)", "", "# Target"}, 1, insert)
+            exec([[
+                local p = require("parley")
+                local open = p.cmd.OpenFileUnderCursor
+                p.cmd.OpenFileUnderCursor = function() open(); _G.jump_completed = true end
+                p.setup_markdown_keymaps(vim.api.nvim_get_current_buf())
+            ]])
+            keys("<M-o>")
+            wait_for([[return _G.jump_completed == true]])
+            assert.equals(4, exec("return vim.api.nvim_win_get_cursor(0)[1]"))
+        end)
+
+        for _, fence in ipairs({'```', '~~~'}) do
+            it("does not open an outside link across dedented " .. fence .. " in " .. mode .. " mode", function()
+                open_source({"- Chosen prose", "", fence .. "md", "sample", fence,
+                    "[outside](answer.md)"}, 1, insert)
+                exec([[
+                    local p = require("parley")
+                    local open = p.cmd.OpenFileUnderCursor
+                    p.cmd.OpenFileUnderCursor = function() pcall(open); _G.jump_completed = true end
+                    p.setup_markdown_keymaps(vim.api.nvim_get_current_buf())
+                ]])
+                keys("<M-o>")
+                wait_for([[return _G.jump_completed == true]])
+                assert.equals(source, exec([[return vim.api.nvim_buf_get_name(0)]]))
+            end)
+        end
+
+        for _, block in ipairs({ "#### Outside", " #", " ###### Outside", "---", "* * *", "===", "> quote" }) do
+            it("keeps Alt+O inside the item before " .. string.format("%q", block) .. " in " .. mode .. " mode", function()
+                open_source({ "- Chosen prose", block, "[outside](answer.md)" }, 1, insert)
+                exec([[
+                    local p = require("parley")
+                    local open = p.cmd.OpenFileUnderCursor
+                    p.cmd.OpenFileUnderCursor = function()
+                        local ok, err = pcall(open)
+                        _G.jump_outcome = { ok = ok, error = ok and false or tostring(err) }
+                        _G.jump_completed = true
+                    end
+                    p.setup_markdown_keymaps(vim.api.nvim_get_current_buf())
+                ]])
+                keys("<M-o>")
+                wait_for([[return _G.jump_completed == true]])
+                local outcome = exec([[return _G.jump_outcome]])
+                assert.equals("boolean", type(outcome.ok))
+                if not outcome.ok then assert.matches("E447:", outcome.error) end
+                assert.equals(source, exec([[return vim.api.nvim_buf_get_name(0)]]))
+                assert.same({ source }, exec([[return require("parley.file_history").snapshot(0).paths]]))
+            end)
+        end
+
+        for _, unsupported in ipairs({ "# <em>Target</em>", "# &#84;arget" }) do
+            it("falls back to file top for unsupported heading " .. unsupported .. " in " .. mode .. " mode", function()
+                vim.fn.writefile({ "# Intro", "", unsupported, "Destination content." }, target)
+                open_source({ "[answer](answer.md#target)" }, 1, insert)
+                keys("<M-o>")
+                wait_for([[return vim.api.nvim_buf_get_name(0) == target]])
+                wait_for(insert and [[return vim.api.nvim_get_mode().mode == "i"]]
+                    or [[return vim.api.nvim_get_mode().mode == "n"]])
+                assert.equals(1, exec("return vim.api.nvim_win_get_cursor(0)[1]"))
+                wait_for([[
+                    for _, message in ipairs(notifications) do
+                        local text = tostring(message):lower()
+                        if text:find("target", 1, true) and text:find("not found", 1, true) then return true end
+                    end
+                    return false
+                ]])
+                assert.same({ source, target }, exec([[return require("parley.file_history").snapshot(0).paths]]))
+            end)
+        end
+
+        for _, case in ipairs({
+            { name = "CJK punctuation", heading = "## 中文—标题「计划」", fragment = "中文-标题计划", row = 3 },
+            { name = "accented text with curly quotes", heading = "## ÉTÉ “à”—Montréal",
+                fragment = "ÉTÉ-à-Montréal", row = 3 },
+            { name = "an empty punctuation key", heading = "## !!!", fragment = "---", row = 1 },
+        }) do
+            it("opens a linked heading with " .. case.name .. " in " .. mode .. " mode", function()
+                vim.fn.writefile({ "# Intro", "", case.heading, "Destination content." }, target)
+                local lines = { "[answer](answer.md#" .. case.fragment .. ")" }
+                open_source(lines, 1, insert)
+                keys("<M-o>")
+                wait_for([[return vim.api.nvim_buf_get_name(0) == target]])
+                wait_for(insert and [[return vim.api.nvim_get_mode().mode == "i"]]
+                    or [[return vim.api.nvim_get_mode().mode == "n"]])
+                assert.equals(case.row, exec("return vim.api.nvim_win_get_cursor(0)[1]"))
+                assert.same({ source, target }, exec([[return require("parley.file_history").snapshot(0).paths]]))
+                assert.same(lines, vim.fn.readfile(source))
+                if case.row == 1 then
+                    wait_for([[
+                        for _, message in ipairs(notifications) do
+                            local text = tostring(message):lower()
+                            if text:find("---", 1, true) and text:find("not found", 1, true) then return true end
+                        end
+                        return false
+                    ]])
+                else
+                    assert.same({}, exec([[return notifications]]))
+                end
+            end)
+        end
+
+        for _, fragment in ipairs({ "revised-plan-ready-10-21-0040", "unknown-section", "" }) do
+            local description = fragment == "" and "plain file link"
+                or (fragment == "unknown-section" and "unknown heading anchor" or "heading anchor")
+            it("opens a " .. description .. " in " .. mode .. " mode through <M-o>", function()
+                local heading = "## _Revised plan ready_ (10-21: 0040)"
+                vim.fn.writefile({ "# Answer", "", "```markdown", heading, "```", "", heading,
+                    "The real section." }, target)
+                local suffix = fragment == "" and "" or "#" .. fragment
+                open_source({ "[answer](answer.md" .. suffix .. ")" }, 1, insert)
+                keys("<M-o>")
+                wait_for([[return vim.api.nvim_buf_get_name(0) == target]])
+                wait_for(insert and [[return vim.api.nvim_get_mode().mode == "i"]]
+                    or [[return vim.api.nvim_get_mode().mode == "n"]])
+                local expected_row = fragment == "revised-plan-ready-10-21-0040" and 7 or 1
+                assert.equals(expected_row, exec("return vim.api.nvim_win_get_cursor(0)[1]"))
+                assert.same({ source, target }, exec([[return require("parley.file_history").snapshot(0).paths]]))
+                if fragment == "unknown-section" then
+                    wait_for([[
+                        for _, message in ipairs(notifications) do
+                            local text = tostring(message):lower()
+                            if text:find("unknown-section", 1, true) and text:find("not found", 1, true) then
+                                return true
+                            end
+                        end
+                        return false
+                    ]])
+                else
+                    assert.same({}, exec([[return notifications]]))
+                end
+            end)
+        end
+
         it("cancel preserves source cursor and " .. mode .. " mode", function()
             vim.fn.writefile({ "# Other" }, root .. "/other.md")
             local lines = { "## Choices", "[answer](answer.md)", "[other](other.md)" }
