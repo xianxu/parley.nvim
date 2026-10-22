@@ -100,6 +100,12 @@ Native runtime cancellation captures the created temporary inode and intended by
 
 Final canonical modes/remote_session mapping171pass/0fail/0errors on0.12.5 and0.11.7, both process censuses clean (parley-405-r2-focused-final.log and -final-0117.log). make lint0warnings/0errors in834files (parley-405-r2-lint.log). Native endpoint fake conformance and deliberately corrupt-identity negative control pass both versions; unchanged registry fake conformance and its negative control pass too (parley-405-editor-conformance-{preferred,0117}-r2.log and parley-405-registry-conformance-compat-r2.log). Atlas and general cancellation/identity lessons updated. Next: commit/push this correction, fresh recorded suite and M1 review round3 under the approved table.
 
+### 2026-10-22 — R3 cancellation verified; acknowledgment correction approved
+
+R3 on1b91aadf returned FIX-THEN-SHIP, disposing BR-1..BR-5 with executable counterfactual evidence. New BR-6 Important (validated-authority-outcomes) prevents finalization: a wrong canonical File acknowledgment leaves the model unconfirmed but is stored/reported as confirmed, suppressing the unavailable notice. Stopped and reported because it lies outside the startup table. TL81b7ba7a approved pure-owner normalization plus shell use of only the accepted outcome and authorized another milestone-close round. Canceled only own queued suite lease-537115140 on superseded1b91aadf; cancellation confirmed, no suite result claimed. Pure and dispatcher red sequences precede implementation; plan Revision records the class sweep.
+
+M2 preparation only: scratch native traces on both supported versions show checktime/autoread produces BufReadPre/Post, on_reload and FileChangedShellPost without on_detach/BufUnload; explicit edit/edit! or bunload/reopen produces on_detach, BufUnload, BufReadPre/Post. Managed session_sync.with_buffer_read(edit!) keeps the guard true through those events, so it preserves authority but must reinstall the observer. Traces are retained in parley-read-events.5Hsu87 under TestScratch. No M2 code or reload-policy change.
+
 ## Revisions
 
 ### 2026-10-22 — producer prerequisite and outside-pane discovery

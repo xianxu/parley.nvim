@@ -213,3 +213,108 @@ dispose:
    Add a `## Revisions` entry enumerating cancellation ownership across acquisition, reservation, native listen, and durable publication, with controlled detach tests at each asynchronous boundary. Keep the existing cancellation requirement; complete its implementation.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"3015590d-e175-4372-a526-3b622c7b7450","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/ddfef1796eb77f5c","reviewed_head":"a735c729fd37c90f6ef828eecaecad85286cbd31","slot":"parley.nvim:1","requested_at":"2026-10-22T13:30:25.684184Z"},"phase":"finished","pid":94209,"started_at":"2026-10-22T13:30:25.859369Z","finished_at":"2026-10-22T13:35:02.894578Z","session_id":"01a163ce-4b5f-7412-87ed-b730abb4194b","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T07:09:19-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 405 — remote-session: start a private RPC server when attached to a registered session file or side doc, and register its address with Couch |
+| repo | parley.nvim |
+| issue file | workshop/issues/000405-remote-session-start-a-private-rpc-server-when-attached-to-a-registered-session-file-or-side-doc-and-register-its-address-with-couch.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c..1b91aadf4c99449d99397c3a7a0cecc46ccd61c6 |
+| command | sdlc milestone-close --issue 405 --milestone M1 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T07:09:19-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+M1’s cancellation correction is verified, including meaningful counterfactual failures. The focused suite passes on both supported runtimes. One inexpensive API correction remains: an acknowledgment rejected by the attachment model can still reach callers as `confirmed`. Automatic attachment wiring and real-producer acceptance remain explicitly scoped to M2.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Exact listener handles are retained and canceled at remote_session.lua:43. Removing that call produced five dispatcher failures; reverting runtime finalization produced nine runtime failures. Pinned-head tests pass, including live-keeper continuity, reservation cleanup and slot reuse.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Acquisition carries ctx.deadline into resource.startup_deadline and the first listener transaction. Reservation/publication deadline regressions pass on both supported runtimes.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The pinned before/after diff corrects the Core concepts passage to RuntimeOwnershipRecord at lua/parley/remote_runtime_record.lua; that module implements the pure codec and cleanup decision.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Last-consumer draining reaches exact runtime close. The regression at remote_session_spec.lua:422 verifies removal of the final socket, marker and directory without closing the editor.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      README.md:208 documents --editor-endpoints --fake-only and the real-producer prerequisites. The documented command passes and rejects its deliberately corrupted reply.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: validated-authority-outcomes
+    title: |
+      A rejected canonical-file acknowledgment is still reported as confirmed
+    detail: |
+      At lua/parley/remote_session.lua:131-135, dispatch can reject a binding whose File differs from the attachment identity, yet the shell checks and reports the original confirmed result. remote_session_model.lua:285 also stores that rejected result unchanged. A disposable native probe returning File=/different-document.md observed callback=confirmed and phase=unconfirmed, without an unavailable notice. Normalize rejected confirmations through the model’s accepted outcome, use that outcome for callbacks and notices, and add a dispatcher regression. ARCH-SECURE, ARCH-ORDER.
+```
+
+1. **Strengths**
+
+   - Per-consumer cancellation now covers reservation, native listener creation, durable publication and delayed callback delivery.
+   - Cleanup uses exact ownership witnesses and preserves foreign replacements.
+   - Pure attachment transitions and marker validation have direct tests without IO mocks; integration tests control real IO completion ordering.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   The finding above affects the new internal API’s reliability. Preserve the model’s safe refusal to activate, and make callback results, stored results and notices agree with that decision.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - Focused mapping: **171 passed** on Neovim **0.12.5** and **0.11.7**; clean process censuses.
+   - Lint: **0 warnings, 0 errors** across 834 files.
+   - Endpoint fake conformance and corrupt-identity negative control passed.
+   - Counterfactuals confirmed the cancellation regressions detect removed fixes.
+   - The additional wrong-file probe failed as described above.
+   - Disposable checkout removed; reviewed checkout unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** existing registry queue and allocation lease reused.
+   - **ARCH-PURE — pass:** computational models remain separate from IO.
+   - **ARCH-PURPOSE — pass for M1:** deferred M2 work is explicitly documented.
+   - **ARCH-MOCK — pass for M1:** stateful fakes share production seams; real-producer qualification remains outstanding for M2.
+   - **ARCH-CONSTRAINTS — pass:** bounded admission, deadlines and counted scaling tests.
+   - **ARCH-SECURE — flag:** rejected external evidence still produces a confirmed public result.
+   - **ARCH-ORDER — flag:** phase and reported outcome disagree in that same finding.
+   - **ARCH-FUNERAL — pass:** cancellation joins cleanup; final consumers release resources.
+   - **ARCH-EVOLVE — pass:** marker tests cover nested unknown-field preservation and strict duplicate/known-field validation.
+
+7. **Plan revision recommendations**
+
+   None required; the remaining correction enforces the existing acknowledgment-validation contract.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"60178087-20d6-466e-8544-644f1b2bc26a","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/bf660ed24e2a3884","reviewed_head":"1b91aadf4c99449d99397c3a7a0cecc46ccd61c6","slot":"parley.nvim:1","requested_at":"2026-10-22T14:04:21.316156Z"},"phase":"finished","pid":38139,"started_at":"2026-10-22T14:04:21.488193Z","finished_at":"2026-10-22T14:09:18.857247Z","session_id":"01a163ed-5ac1-7c11-a18c-c6bd35b84cd8","outcome":"returned"}] -->
