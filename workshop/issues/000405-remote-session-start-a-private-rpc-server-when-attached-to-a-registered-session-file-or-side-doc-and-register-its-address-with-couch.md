@@ -88,6 +88,10 @@ BR-2: one acquire deadline carries through first-listener marker durability; con
 
 Final canonical focused mapping153pass/0fail/0errors on0.12.5 and0.11.7, clean process censuses; make lint0warnings/0errors in834files. Logs parley-405-r1-focused-final.log and -final-0117.log, parley-405-r1-lint.log under TestScratch. Endpoint fake conformance and wrong-identity negative control pass both versions after the owner changes; existing registry fake conformance still passes (parley-405-editor-conformance-{preferred,0117}-r1.log and parley-405-registry-conformance-compat-r1.log). No real-producer claim. Next fresh pushed-head suite and M1 review R2.
 
+### 2026-10-22 — R2 cancellation sweep re-plan
+
+M1 review R2 returned REWORK: BR-2/3/4/5 disposed, BR-1 not addressed at listener reservation/publication. Reviewer held reservation fsync, detached, then observed one later serverstart and zero cancellation calls. Canceled only superseded suite lease-1486643512 before admission, cancellation completed. TL a142bd29 approved the whole startup-cancellation table appended to the durable plan: exact per-consumer listener transaction/fs ownership, shared acquisition ownership, queued-vs-admitted Couch distinction and witnessed interrupted publication cleanup. Round3 finding outside that table must return to the TL. No M1 close or M2 code yet.
+
 ## Revisions
 
 ### 2026-10-22 — producer prerequisite and outside-pane discovery

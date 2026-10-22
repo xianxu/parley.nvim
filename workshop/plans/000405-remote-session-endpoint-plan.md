@@ -184,3 +184,21 @@ Reason: review BR-1/BR-2/BR-4 proved queued publication after detach, abandoned 
 | drain/cleanup unavailable | remote unavailable | reopen to retry | owned residue remains bounded; local content unchanged |
 
 Permanent red cases: occupied transport queue then detach; final held-startup detach without releasing the source; final ordinary detach removes runtime without global close; attach during exact old close waits and gets fresh directory; delayed acquire plus fsync cannot exceed the original startup deadline. Correct the authoritative concept location/integration inventory (BR-3) and document the runnable fake conformance flag plus deferred real prerequisites in README (BR-5). Real acceptance awaits pair#758 and pair#801.
+
+### 2026-10-22 — R2 whole startup cancellation table (TL a142bd29)
+
+Reason: BR-2..BR-5 are disposed, but BR-1 remains because the listener transaction handle was discarded after acquisition. Stop incremental cancellation patches: every startup stage belongs to the same runtime lifetime, with an exact handle or completed-effect witness. The pure attachment remains the sole authority owner; the IO dispatcher owns these lifetimes. No new retry/watcher or local editing change. If review round3 finds a gap outside this table, return to the TL before further implementation.
+
+| Startup/retirement stage | Owner and exact handle | Retirement rule | Completed/uncertain effect |
+|---|---|---|---|
+| acquisition/process inspection | shared runtime epoch's acquire operation, with joined process/fs child requests | last live consumer cancels and joins; retiring one of several does not cancel others | resource arriving after retirement drains before a fresh epoch |
+| queued per-buffer listen | runtime epoch IO queue entry and consumer witness | skip when retired; no marker reservation/serverstart | no effect to clean |
+| reservation marker IO | per-consumer runtime.listen transaction plus its current native fs request | cancel/join that transaction on consumer retirement; no later startup step | inspect exact owned temp/marker inode+bytes; clean only proven effects |
+| native listener creation | same transaction handle; serverstart's returned socket witness | cancellation during the synchronous call prevents later publication on return | stop only exact owned listener; replaced/unknown path stays untouched |
+| durable listening marker IO | same transaction handle plus fsync/rename/native request witnesses | cancel/join, then deliver one terminal result | adopt an interrupted intended marker only when its exact created inode and intended bytes match; otherwise retain/unavailable |
+| transaction finished, callback undelivered | retained consumer/listen handle and exact result witness | do not publish; retire result and finish exact cleanup once | drain completes before a new runtime epoch |
+| queued Couch register | typed registry handle | cancel_unstarted | no publication |
+| admitted Couch register | typed registry observer and pure request witness | retain bounded observer | returned owned generation is unregistered exactly; unknown stays unknown |
+| listener/registry cleanup | retained epoch consumer record and exact binding/socket witnesses | join/drain; release resource only when empty | cleanup refusal retains artifacts; explicit reopen may retry exact cleanup |
+
+Four controlled native red sequences hold reservation fsync, native listen return, listening-marker fsync and a finished-but-undelivered callback. Assert cancellation/join, no later startup effects, exactly-once completion and exact cleanup for known ownership, with replacement/foreign controls. Existing held acquisition, queued register, late acknowledgment and attach-during-drain cases remain mandatory. Interrupted publication inspection is a cleanup witness only, never a successful endpoint advertisement.

@@ -116,3 +116,100 @@ findings:
    Add a `## Revisions` entry correcting the ownership-record location and integration inventory. Record the shared absolute startup deadline and last-consumer cancellation/cleanup policy, including the new regression scenarios. Preserve the explicit M2 prerequisite for real-producer acceptance.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e58c4109-abfb-4384-a4ca-9adedec205f0","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":1,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/a27e8ac1eb8c1a81","reviewed_head":"2b4916d7d41bf19cfcc4774381096c5fe6460041","slot":"parley.nvim:1","requested_at":"2026-10-22T13:06:25.711744Z"},"phase":"finished","pid":38707,"started_at":"2026-10-22T13:06:25.954374Z","finished_at":"2026-10-22T13:12:15.940146Z","session_id":"01a163b8-51df-7480-bf15-578e3861a2f4","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T06:35:03-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 405 — remote-session: start a private RPC server when attached to a registered session file or side doc, and register its address with Couch |
+| repo | parley.nvim |
+| issue file | workshop/issues/000405-remote-session-start-a-private-rpc-server-when-attached-to-a-registered-session-file-or-side-doc-and-register-its-address-with-couch.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 4b8e61ed5f5b5b3ab969bc3df6314dac442e753c..a735c729fd37c90f6ef828eecaecad85286cbd31 |
+| command | sdlc milestone-close --issue 405 --milestone M1 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T06:35:03-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The M1 foundation has strong ownership validation, bounded transport, and meaningful native tests. BR-2 through BR-5 are addressed. BR-1 remains partially unresolved: detaching the final consumer during listener reservation allows startup to continue and create a socket afterward.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      Queued publication and acquisition cancellation are fixed, with regressions that fail against the previous dispatcher. However, remote_session.lua:229 discards runtime.listen's operation handle; release_consumer at lines 36–44 cancels only acquisition, whose handle is cleared at line 92. A controlled native probe held first-listener reservation fsync, detached the final consumer, then released completion: cancellation calls were 0 and serverstart calls after detach were 1. Retain and cancel/join listener startup operations too, prevent subsequent startup effects after retirement, and add controlled reservation/publication cancellation tests. This remains the existing retirement-cancels-unstarted-effects family finding (ARCH-ORDER, ARCH-PURPOSE).
+  - id: BR-2
+    disposition: addressed
+    note: |
+      remote_runtime.lua carries the acquisition deadline into first-listener publication and clears it only after durable success. Both reservation and publication regressions pass at head and fail with the previous runtime loaded: 22 passed, 2 failed, 0 errors.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The plan's authoritative table now locates RuntimeOwnershipRecord in remote_runtime_record.lua:22, matching its computational codec and cleanup decision. The integration inventory at line 34 also names remote_runtime.lua's ownership shell. Both PURE entities have direct tests without IO dependencies.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Final consumer drain now closes the exact runtime without global frontend.close. The ordinary-detach regression at remote_session_spec.lua:426 passes at head and fails against the previous dispatcher; terminal-resource and attach-during-drain regressions also fail against that dispatcher.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      README.md:208–213 documents --editor-endpoints --fake-only and the deferred producer/bridge prerequisites. This matches the script's options and the exercised fake/native probe, including its corrupt-reply negative control.
+```
+
+1. **Strengths**
+
+   - Exact ownership checks preserve foreign or replaced runtime artifacts and pre-existing Neovim listeners.
+   - Protocol validation preserves uncertain outcomes and fences acknowledgments by attachment identity.
+   - Deadline and final-detach regressions demonstrably fail against the pre-fix modules.
+   - Atlas, traceability, and README changes document the new M1 surface and its integration limits.
+
+2. **Critical findings**
+
+   **BR-1 remains open — `lua/parley/remote_session.lua:229`.** The listener operation escapes cancellation ownership after acquisition finishes. Retain its handle, cancel and join it when its consumer retires, and prevent further startup effects. Sweep acquisition, reservation, native listener creation, and durable publication under the same retirement rule; preserve exact cleanup for effects already completed.
+
+3. **Important findings**
+
+   None newly raised.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - `make test-spec SPEC=modes/remote_session`: passed all 153 cases; process census clean.
+   - Endpoint fake conformance and corrupt-reply negative control: passed.
+   - In-memory pre-fix runtime: two deadline regressions failed.
+   - In-memory pre-fix dispatcher: six lifecycle regressions failed.
+   - Missing coverage: detach during listener reservation/publication. The held-source regression exercises acquisition only.
+   - Repository files remain unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** existing transport and kernel lease are reused.
+   - **ARCH-PURE — pass:** attachment transitions and ownership-record decisions are directly testable without IO.
+   - **ARCH-PURPOSE — flag:** BR-1 leaves the promised cancellation contract incomplete.
+   - **ARCH-MOCK — pass for M1:** stateful fixtures share production seams; real-producer acceptance remains explicitly deferred.
+   - **ARCH-CONSTRAINTS — pass:** aggregate startup deadline is enforced and regression-tested.
+   - **ARCH-SECURE — pass:** malformed ownership evidence is retained conservatively; destructive cleanup requires exact witnesses.
+   - **ARCH-ORDER — flag:** BR-1 leaves listener startup outside the lifetime owner's cancellation path.
+   - **ARCH-FUNERAL — pass for normal teardown:** final detach and terminal attachments release their runtime resources.
+   - **ARCH-EVOLVE — pass:** marker tests verify nested unknown-field preservation and strict known-field/duplicate validation.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry enumerating cancellation ownership across acquisition, reservation, native listen, and durable publication, with controlled detach tests at each asynchronous boundary. Keep the existing cancellation requirement; complete its implementation.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"3015590d-e175-4372-a526-3b622c7b7450","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/ddfef1796eb77f5c","reviewed_head":"a735c729fd37c90f6ef828eecaecad85286cbd31","slot":"parley.nvim:1","requested_at":"2026-10-22T13:30:25.684184Z"},"phase":"finished","pid":94209,"started_at":"2026-10-22T13:30:25.859369Z","finished_at":"2026-10-22T13:35:02.894578Z","session_id":"01a163ce-4b5f-7412-87ed-b730abb4194b","outcome":"returned"}] -->
