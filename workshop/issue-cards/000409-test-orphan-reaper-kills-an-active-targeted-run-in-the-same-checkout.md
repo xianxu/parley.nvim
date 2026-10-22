@@ -1,6 +1,6 @@
 ---
 id: 000409
-status: codecomplete
+status: done
 created: 2026-10-21
 updated: 2026-10-22
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 92168f8e0df941de0c7ca17ea201071d3a9ace00
         evidence_commit: b903af963e4c694fb9fa321b016a72b96b15467d
+        landed_commit: 7f4100e3020dc597e37f1ed43126585ac2085d1b
 ---
 
 # Test orphan reaper kills an active targeted run in the same checkout
