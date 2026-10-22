@@ -1,6 +1,6 @@
 ---
 id: 000410
-status: working
+status: codecomplete
 created: 2026-10-21
 updated: 2026-10-22
 estimate_hours: 1.987
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 3.90
+tracker:
+    version: 1
+    completion:
+        token: close-59de69b7c8f8
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: bca7cf786a290f84c66037f358cd20b2475515da
+        evidence_commit: d0531a2f09f05a4f2a4138f2cd80243d4b9de918
 ---
 
 # Bound insert admission across pending registration lookup
