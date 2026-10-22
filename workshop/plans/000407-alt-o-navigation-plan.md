@@ -19,7 +19,7 @@ collaboration-mode: discussion
 | Navigation block metadata | lua/parley/reference_candidates.lua | modified | PURE |
 | Navigation range | lua/parley/entity_range.lua | modified | PURE |
 | Code fence memo | lua/parley/document/lexical.lua | modified | PURE |
-| Heading anchor lookup | lua/parley/markdown_heading.lua | new | PURE |
+| Parser-backed heading lookup | lua/parley/markdown_heading.lua | modified | INTEGRATION |
 | File destination plus fragment | lua/parley/issues.lua | modified | PURE |
 
 Navigation owns one transient range per invocation; nested items are bounded by their enclosing indentation. The memo is one boolean per input row; its private opener retains delimiter character and run length. Heading lookup owns a transient used-slug set so normalized duplicate headings get unique suffixes. No persisted formats change; all temporary values end with the call (ARCH-FUNERAL, ARCH-EVOLVE).
@@ -115,3 +115,17 @@ Proposed implementation, pending hub approval:
 - Run serial focused RED/GREEN and full mapped navigation tests, lint, fresh required recorded suite, then full re-close. If the next review finds another gap in this rule, return it to the hub instead of patching again, per the hub direction. No stage.
 
 Design evidence: /tmp/parley407-parser-design.log, make -k with a temporary design-probe map, exit0. Bundled Neovim0.11.7 markdown_inline parsed all four reviewer cases structurally; link_title excludes its parenthesis from the visible label and nested emphasis ownership is explicit. No production edits have been made for this revision.
+
+### 2026-10-21 — Parser/key plan approved with Unicode correction
+
+Hub delivery9b6945ae-2054-4378-80d9-ee793674c844 approves the structural parser replacement and direct-full-key-before-duplicate precedence. Replace the proposed ASCII-only key with lowercase Unicode letters/digits, removing everything else on both sides. Empty keys never match. CJK and accented headings are required tests. No new Unicode data artifact is assumed; use an available Unicode-aware editor API, checking its actual behavior rather than assuming POSIX classes are Unicode.
+
+The public parser-backed anchor lookup is now INTEGRATION, wrapping Neovim markdown_inline and Unicode normalization; outline/editing level remains PURE. Structural text extraction preserves source gaps between children, not nonexistent named text nodes; the destination/title/markup spans are omitted. Existing raw-text inline-normalizer tasks and exact-slug invariants are superseded by this revision. Real grammar tests run under the headless make harness; parser-unavailable behavior uses the single injected parse adapter. No persistent/editor-buffer state is introduced.
+
+RED evidence: /tmp/parley407-parser-rule-red.log, make -k temporary map, exit2,16 failures including reviewer8 and newly required key/fallback/Unicode cases. An additional design probe /tmp/parley407-unicode-design.log proves Vim POSIX alnum is ASCII-only and unsuitable; select a verified Unicode-aware primitive before production key code.
+
+### 2026-10-21 — Exact canonical rule simplified by the hub
+
+Deliveryee127634-4137-417c-9b63-998d982fe878 supersedes general Unicode-letter classification: lowercase/keep ASCII letters and digits, drop other ASCII characters and U+2000–U+206F/U+3000–U+303F, and preserve every other non-ASCII codepoint unchanged. Apply this same compact key on both sides. No category table, word-class approximation or private ABI is used. Non-ASCII case is deliberately unchanged; unusual symbols outside those two ranges participate in the key, and a GitHub fragment that strips them may miss with the existing top+notice. Codepoint decoding is the only editor primitive the key needs. The parser-backed public lookup remains INTEGRATION, with the existing PURE outline/editing dialect untouched.
+
+New rule RED: /tmp/parley407-parser-rule-red3.log, exit2,17 failures including reviewer8, required punctuation/Unicode/canonical behavior, direct numeric precedence, empty keys and parser fallback. Assertion adapters preserve explicit nil so RED shows missing/wrong rows rather than a luassert arity artifact. Proceed with this approved rule; do not patch a subsequent review gap without returning to the hub.

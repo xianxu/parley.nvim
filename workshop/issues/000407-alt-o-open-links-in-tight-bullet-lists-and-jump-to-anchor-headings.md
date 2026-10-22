@@ -110,3 +110,11 @@ Hub delivery8887bf7d-ec9d-40df-8c27-89b898c13b51 rejects full HTML5 decoding and
 ### 2026-10-21 — Round 3 REWORK; parser-backed canonical matching direction
 
 The full re-close returned REWORK before any codecomplete publication. BR-4, BR-2 and BR-3 are addressed; the HTML/entity exclusion is accepted, but BR-1 remains for eight in-scope emphasis/code/link-label and duplicate checks. Hub directs replacing the hand-written inline normalizer with bundled markdown_inline structure, canonical letter/digit matching for headings and fragments, numbered duplicates, and raw-text fallback when grammar is unavailable. Durable plan records that replacement architecture, actual grammar design probe and the two matching-rule details awaiting confirmation. No new production edits; no merge. Another gap in the next rule-level review goes back to the hub rather than another patch.
+
+### 2026-10-21 — Unicode canonical-key revision approved
+
+Hub delivery9b6945ae-2054-4378-80d9-ee793674c844 approves structural markdown_inline text extraction and canonical matching on both sides, with Unicode letters/digits retained rather than ASCII only. First occurrence uses the bare key, second -1, and full-fragment matching precedes duplicate-suffix fallback. Empty keys return the existing top+notice behavior. This supersedes exact GitHub slug reproduction; ATX1–6/fences and unsupported HTML/entity scope are unchanged. Reviewer8, Unicode/key/fallback controls are RED in /tmp/parley407-parser-rule-red.log before replacement. Durable plan records integration classification and Unicode API verification.
+
+### 2026-10-21 — Final canonical-key rule, no Unicode data artifact
+
+Hub deliveryee127634-4137-417c-9b63-998d982fe878 replaces the general Unicode-letter requirement: lowercase/keep ASCII letters and digits; remove other ASCII and U+2000–U+206F/U+3000–U+303F; preserve every other non-ASCII codepoint unchanged. Apply identically to heading text and fragment, retaining full-key-before-duplicate precedence. Non-ASCII case stays unchanged. Document this one-line rule and the exotic-symbol fragment miss fallback. No generated data/dependency or editor word classes. RED /tmp/parley407-parser-rule-red3.log exposes17 failures before implementation, including reviewer8 and CJK/accented/em-dash/curly-quote controls.
