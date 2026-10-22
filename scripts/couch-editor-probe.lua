@@ -6,7 +6,7 @@ local config=vim.json.decode(table.concat(vim.fn.readfile(assert(vim.env.PARLEY_
 local registry=require('parley.document_registry')
 local embedded=require('tests.helpers.embedded_nvim')
 local children={}
-local client_options={binary=config.binary,env=config.env,timeout_ms=3000}
+local client_options={binary=config.binary,env=config.env,clear_env=true,timeout_ms=3000}
 local function check(condition,message)
     if not condition then error('editor endpoint conformance: '..message,0) end
 end
@@ -47,21 +47,24 @@ local function binding_matches(left,right)
     end
     return true
 end
+local function attach_buffer(child,identity,key)
+    child:exec([[local identity,options,key=...;vim.o.swapfile=false
+        _G[key]=vim.fn.bufadd(identity.File);vim.fn.bufload(_G[key]);_G[key..'_reply']=nil
+        require('parley.remote_session').attach(_G[key],identity,function(value) _G[key..'_reply']=value end,options)
+    ]],identity,{runtime={parent=config.runtime_parent},client=client_options},key)
+    check(child:exec([[local key=...;return vim.wait(10000,function() return _G[key..'_reply']~=nil end,10)]],key),
+        'frontend attach timed out')
+    confirmed(child:exec('local key=...;return _G[key.."_reply"]',key),'native frontend attach')
+    local state=child:exec('return require("parley.remote_session").snapshot(_G[...])',key)
+    check(state.phase=='active','confirmed frontend did not activate')
+    check(child:exec('local buf=_G[...];return not vim.bo[buf].modified and vim.bo[buf].modifiable',key),
+        'endpoint publication altered local editing')
+    return state
+end
 local function attach(identity)
     local child=embedded.start({rtp='prepend'})
     children[#children+1]=child
-    child:exec([[local identity,options=...;vim.o.swapfile=false
-        _G.probe_buffer=vim.fn.bufadd(identity.File);vim.fn.bufload(_G.probe_buffer)
-        require('parley.remote_session').attach(_G.probe_buffer,identity,function(value) _G.probe_reply=value end,options)
-    ]],identity,{runtime={parent=config.runtime_parent},client=client_options})
-    check(child:exec([[return vim.wait(10000,function() return _G.probe_reply~=nil end,10)]]),'frontend attach timed out')
-    local reply=child:exec('return _G.probe_reply')
-    confirmed(reply,'native frontend attach')
-    local state=child:exec('return require("parley.remote_session").snapshot(_G.probe_buffer)')
-    check(state.phase=='active','confirmed frontend did not activate')
-    check(child:exec('return not vim.bo[_G.probe_buffer].modified and vim.bo[_G.probe_buffer].modifiable'),
-        'endpoint publication altered local editing')
-    return child,state
+    return child,attach_buffer(child,identity,'probe_buffer')
 end
 local function endpoint(child,context,published_socket)
     if not published_socket then
@@ -83,15 +86,39 @@ local function close_child(child)
     check(child:exec([[return vim.wait(10000,function() return _G.probe_closed==true end,10)]]),'frontend close timed out')
 end
 local function main()
-    local path=config.root..'/endpoint.md'
-    vim.fn.writefile({'# Disposable endpoint conformance'},path)
-    local registered=await(function(callback)
-        registry.request('register',{path,'pair:5'},{probe=true},callback,client_options)
-    end)
-    check(registered.kind=='registered','document registration failed: '..vim.inspect(registered))
-    local identity=registered.registration
+    local identities={}
+    if config.documents then
+        check(#config.documents==2,'bridge must supply parent and side document')
+        for _,document in ipairs(config.documents) do
+            local looked=await(function(callback)
+                registry.request('lookup',{document.File},{probe=true},callback,client_options)
+            end)
+            check(looked.kind=='registered','bridge document lookup failed: '..vim.inspect(looked))
+            local identity=looked.registration
+            check(identity.ID==document.ID and identity.File==document.File and identity.Namespace==config.namespace,
+                'bridge registration identity mismatch')
+            identities[#identities+1]=identity
+        end
+    else
+        check(config.fake,'real endpoint conformance requires the supported bridge Documents')
+        local parent=config.root..'/endpoint.md'
+        local side=config.root..'/endpoint.side/second.md'
+        vim.fn.mkdir(config.root..'/endpoint.side','p')
+        vim.fn.writefile({'# Disposable endpoint conformance'},parent)
+        vim.fn.writefile({'---','type: side-doc','parent: ../endpoint.md','---','# Disposable side doc'},side)
+        for _,path in ipairs({parent,side}) do
+            local registered=await(function(callback)
+                registry.request('register',{path,'pair:5'},{probe=true},callback,client_options)
+            end)
+            check(registered.kind=='registered','document registration failed: '..vim.inspect(registered))
+            identities[#identities+1]=registered.registration
+        end
+    end
+    local identity,side_identity=identities[1],identities[2]
+    local path=identity.File
+    local parent_before,side_before=vim.fn.readfile(path),vim.fn.readfile(side_identity.File)
     check(type(identity.Namespace)=='string' and identity.Namespace:sub(1,1)=='/','registration omitted canonical Namespace')
-    check(identity.File==path,'registered document path changed')
+    check(side_identity.Namespace==identity.Namespace and side_identity.ID~=identity.ID,'side doc identity not distinct in namespace')
     local lookup={Namespace=identity.Namespace,DocumentID=identity.ID}
     local first,old=attach(identity)
     local old_binding=confirmed(editor('lookup',lookup),'first authority lookup')
@@ -116,6 +143,36 @@ local function main()
         end,10)]]),'producer did not deliver the exact supersession notice')
         check(absent_endpoint(endpoint(first,old.context)),'superseded old attachment still answers its exact query')
     end
+    local side=attach_buffer(second,side_identity,'probe_side_buffer')
+    local side_lookup={Namespace=side_identity.Namespace,DocumentID=side_identity.ID}
+    local side_binding=confirmed(editor('lookup',side_lookup),'same-editor side doc authority')
+    check(binding_matches(side_binding,side.binding),'side binding differs from frontend')
+    check(side_binding.Socket~=successor.Socket and side_binding.PID==successor.PID,
+        'parent and side must have distinct per-file listeners in one editor')
+    local side_handshake=endpoint(second,side.context,side_binding.Socket)
+    check(type(side_handshake)=='table' and side_handshake.File==side_identity.File,'side private handshake mismatch')
+    second:exec([[local document_id=...
+        local client=require('parley.document_registry')
+        local original=client.editor
+        client.editor=function(operation,payload,witness,callback,options)
+            return original(operation,payload,witness,function(result)
+                callback(result)
+                if operation=='unregister' then
+                    for _,entry in ipairs(payload.Entries or {}) do
+                        if entry.DocumentID==document_id then _G.probe_side_cleanup=result.kind end
+                    end
+                end
+            end,options)
+        end
+        require('parley.remote_session').detach(_G.probe_side_buffer)
+    ]],side_identity.ID)
+    check(second:exec([[return vim.wait(10000,function() return _G.probe_side_cleanup~=nil end,10)]]),
+        'side unregister acknowledgment timed out')
+    check(second:exec('return _G.probe_side_cleanup')=='confirmed','side unregister was unconfirmed')
+    check(editor('lookup',side_lookup).kind=='absent','side detach did not retire its exact binding')
+    check(binding_matches(confirmed(editor('lookup',lookup),'parent after side detach'),successor),
+        'side detach retired the parent listener')
+
     local stale=editor('register',register_payload(old.context))
     check(stale.kind=='refused' and (stale.code=='superseded' or stale.code=='stale'),
         'old snapshot reclaimed authority: '..vim.inspect(stale))
@@ -134,15 +191,17 @@ local function main()
     check(absent_endpoint(endpoint(second,current.context)),'detached current attachment still answers')
     close_child(second)
     check(editor('lookup',lookup).kind=='absent','owned detach did not retire the current binding')
-    check(vim.deep_equal(vim.fn.readfile(path),{'# Disposable endpoint conformance'}),'endpoint flow changed document content')
-    print('PASS: native frontend/private-socket/register/same-attach-retry/desktop-takeover/stale-register/stale-unregister/detach/lookup-retirement'
+    check(vim.deep_equal(vim.fn.readfile(path),parent_before),'endpoint flow changed parent content')
+    check(vim.deep_equal(vim.fn.readfile(side_identity.File),side_before),'endpoint flow changed side content')
+    print('PASS: native frontend/private-socket/register/same-attach-retry/desktop-takeover/stale-register/stale-unregister/detach/lookup-retirement/side-doc/same-editor-distinct-listeners'
         ..(config.fake and ' (fake client/authority controls; producer native handshake and advisory notification unqualified)'
             or '/producer-native-handshake/exact-supersession-notice'))
 end
 local ok,err=pcall(main)
 for _,child in ipairs(children) do
     pcall(close_child,child)
-    child:stop()
+    local stopped,stop_error=child:stop()
+    if not stopped then ok,err=false,'editor cleanup unconfirmed: '..tostring(stop_error) end
 end
 registry.shutdown()
 if not ok then

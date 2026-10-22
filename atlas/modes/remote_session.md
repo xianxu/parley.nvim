@@ -127,3 +127,6 @@ Code: `lua/parley/remote_session*.lua`, `remote_runtime*.lua`,
 `remote_process.lua`, and `document_registry.lua`. Pure, process, runtime and
 transport specs live under `tests/unit/` and `tests/integration/`;
 `remote_session_native_spec.lua` exercises the Markdown, read and move lifecycle.
+
+
+Real endpoint conformance uses the supported Pair `couch-conformance-bridge` owner, not adopt-store or a Parley launcher. Run `python3 scripts/check-couch-registry-conformance.py --editor-endpoints --bridge /ABS/couch-conformance-bridge` with the desired native nvim first on the invocation PATH; `--couch /ABS/candidate/couch` optionally selects the Couch candidate. The bridge supplies the complete private environment and actual registered parent/side IDs. The consumer reads and verifies those registrations, qualifies two-editor takeover and per-file listeners in one editor, then closes its native clients before bridge EOF. `scripts/couch_bridge.py` continuously drains bounded pipe output and joins its owned probe/bridge under the fixed300/600/15s contract plus observation margin. Nonzero or unknown cleanup retains the exact parent paths and diagnostics; the driver never removes producer roots. Fake-only qualification and the deliberately corrupted identity control remain available without the bridge.
