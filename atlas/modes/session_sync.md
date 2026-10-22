@@ -84,6 +84,16 @@ controller, input event or buffer. The original background lookup is not
 cancelled by the input deadline. The private operator_admission owner below
 continues to own all baseline, token, proof and outcome transitions.
 
+Header-driven legacy controllers join that same S1 input scope before writing
+tokenless protection; pending unknown-period edits report their pre-edit baseline
+to the owner without creating a lock. Adoption consumes the scope on existing
+controllers as well as new ones. If this owner already holds exact tokenless
+proof, acquisition first emits an internal legacy-release effect. Its witnessed
+success removes only that proof and continues registered acquisition, retaining
+the original baseline/history and deadline. Failure refuses input with the old
+proof/history retained. There is no intermediate idle transition or writable
+completion; foreign or unknown protection cannot authorize removal.
+
 The pure `operator_admission.lua` owner retains the original baseline, token and
 proof through unavailable/refused retries, saved edits and status refreshes.
 A clean native reload carries its before/after hashes: an exact known baseline

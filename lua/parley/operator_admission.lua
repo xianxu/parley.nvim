@@ -44,12 +44,25 @@ function M.new()
             content = event.content
             local can_freshen = event.clean == true and (not history or not outstanding())
             if not history then baseline, history = event.baseline, true end
-            token = token or event.token
+            -- A tokenless owned turn must retire its exact legacy bytes before
+            -- the producer can acquire, without retiring the operator's history.
+            local legacy = proof ~= nil and token == nil
+            if not legacy then token = token or event.token end
             phase, message = 'acquiring', nil
-            local result = effect('acquire')
+            local result = effect(legacy and 'legacy_release' or 'acquire')
             operation.can_freshen = can_freshen
             operation.content = content
+            if legacy then operation.next_token = event.token end
             return result
+        elseif kind == 'released' and matches(event, 'legacy_release') then
+            local pending = operation
+            proof, token = nil, pending.next_token
+            local result = effect('acquire')
+            operation.can_freshen, operation.content = pending.can_freshen, pending.content
+            return result, nil, true
+        elseif kind == 'release_failed' and matches(event, 'legacy_release') then
+            accepted = true
+            phase, message, operation = 'refused', event.message, nil
         elseif kind == 'acquired' and matches(event, 'acquire') then
             accepted = true
             local can_freshen = operation.can_freshen and operation.content == content
@@ -107,7 +120,8 @@ function M.new()
             -- only an exact known preimage with no outstanding operator delta.
             if event.clean == true and baseline ~= nil and baseline == event.before and content == event.before then
                 baseline = event.after
-                if operation and operation.kind == 'acquire' and operation.can_freshen then
+                if operation and (operation.kind == 'acquire' or operation.kind == 'legacy_release')
+                    and operation.can_freshen then
                     operation.content = event.after
                 end
             end

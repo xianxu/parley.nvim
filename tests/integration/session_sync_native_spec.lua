@@ -140,10 +140,10 @@ describe("session-sync native edits", function()
 
     -- Hold a real fake-backed discovery reply, not a fabricated registration.
     -- The release runs inside native InsertEnter while queued input is waiting.
-    local function pending_lookup(delay, absent)
+    local function pending_lookup(delay, absent, preowned, standalone)
         open(false, false, true, true)
         exec([[
-            local root, delay, absent = ...
+            local root, delay, absent, preowned, standalone = ...
             require("parley.session_sync").detach(0)
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "scope-410", "tag-410"
             vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
@@ -185,17 +185,69 @@ describe("session-sync native edits", function()
                     if _G.lookup_action then lookup_action() else release_lookup() end
                 end,delay) end
             end})
+            -- Production installs the header-driven controller before S1.
+            -- Keep its earlier InsertEnter and on_lines consumers alive.
+            require("parley.session_sync").attach(vim.api.nvim_get_current_buf())
+            if standalone then require("parley.session_sync").detach(0) end
+            if preowned then
+                vim.api.nvim_buf_set_lines(0,7,8,false,{"owned legacy edit"})
+                vim.cmd("silent write")
+                _G.legacy_proof=table.concat(vim.fn.readfile(path..".lock","b"),"\n")
+            end
             require("parley.agentic_document").attach(vim.api.nvim_get_current_buf())
-        ]], root, delay, absent)
+        ]], root, delay, absent, preowned, standalone)
         wait_for("return type(release_lookup)=='function'")
     end
 
-    for _, kind in ipairs({"parent", "side"}) do
+    for _, outcome in ipairs({"confirmed","foreign","unavailable","refused"}) do
+        it("pending lookup retains pre-owned history through "..outcome.." (#410)",function()
+            pending_lookup(50,false,true)
+            if outcome=="foreign" then vim.fn.writefile({"holder: operator","operator: foreign"},file..".lock") end
+            exec([[
+                if ...=="unavailable" then vim.env.FAKE_COUCH_OPERATOR_DELAY="2"
+                elseif ...=="refused" then
+                    vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock";vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
+                end
+            ]],outcome)
+            local before=vim.fn.readfile(file..".lock","b")
+            keys("iX")
+            if outcome=="foreign" or outcome=="refused" then
+                wait_for("return not vim.bo.modifiable")
+                assert.equals(outcome=="foreign" and 0 or 1,exec("return acquire_calls"))
+                if outcome=="foreign" then assert.same(before,vim.fn.readfile(file..".lock","b")) end
+                assert.equals("owned legacy edit",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            else
+                wait_for("return _G.before_first_char ~= nil")
+                assert.equals(outcome=="confirmed",exec("return first_char_confirmed"))
+                assert.equals(1,exec("return acquire_calls"))
+                keys("<C-h>")
+            end
+            keys("<Esc>")
+            wait_for("return vim.fn.mode()=='n'")
+            if outcome=="unavailable" or outcome=="refused" then
+                if outcome=="refused" then assert.is_false(exists()) end
+                -- A timeout after producer effects can leave registered bytes
+                -- without acknowledgment; retry must use the same turn token.
+                if exists() then
+                    assert.is_true(exec("return require('parley.couch').operator_proof(table.concat(vim.fn.readfile(path..'.lock','b'),'\\n'))~=nil"))
+                end
+                exec("vim.env.FAKE_COUCH_OPERATOR_DELAY=nil;vim.env.FAKE_COUCH_OPERATOR_CODE=nil;vim.env.FAKE_COUCH_OPERATOR_EXIT=nil")
+                keys("i")
+                wait_for("return vim.fn.mode()=='i' and vim.bo.modifiable")
+                locked()
+                keys("<Esc>")
+                wait_for("return vim.fn.mode()=='n'")
+            end
+            assert.is_true(exists(),"handoff retired the original autosaved edit history")
+        end)
+    end
+
+    for _, kind in ipairs({"parent", "side", "standalone parent"}) do
         it("pending lookup protects queued first input in " .. kind .. " (#410)", function()
             if kind=="side" then
                 local lines=vim.fn.readfile(file);lines[2]="type: prose";vim.fn.writefile(lines,file)
             end
-            pending_lookup(50)
+            pending_lookup(50,false,false,kind=="standalone parent")
             local fresh=vim.fn.readfile(file);fresh[8]="fresh pending lookup"
             exec("vim.env.FAKE_COUCH_OPERATOR_ACQUIRE_WRITE=...",table.concat(fresh,"\n").."\n")
             keys("iX")
@@ -217,6 +269,7 @@ describe("session-sync native edits", function()
         assert.is_true(exec("return entry_elapsed<1500"),"pending input exceeded 500 ms plus scheduling allowance")
         assert.is_true(exec("return require('parley.agentic_document').identity(vim.api.nvim_get_current_buf())==nil"))
         assert.equals(0,exec("return acquire_calls"))
+        assert.is_false(exists(),"pending discovery created tokenless protection")
         exec("vim.cmd('silent write');release_lookup()")
         wait_for("return require('parley.agentic_document').identity(vim.api.nvim_get_current_buf()) ~= nil")
         assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
@@ -286,7 +339,16 @@ describe("session-sync native edits", function()
                 local change=...
                 _G.lookup_action=function()
                     if change=="detach" then require("parley.agentic_document").detach(vim.api.nvim_get_current_buf())
-                    else vim.api.nvim_buf_set_name(0,path..".renamed.md") end
+                    else
+                        -- Model a name changed outside migration admission.
+                        -- Unknown-document migration refusal is tested by #359;
+                        -- this oracle is the stale lookup's exact path witness.
+                        local ignored=vim.o.eventignore
+                        vim.o.eventignore="BufFilePre,BufFilePost"
+                        local ok,reason=pcall(vim.api.nvim_buf_set_name,0,path..".renamed.md")
+                        vim.o.eventignore=ignored
+                        if not ok then error(reason) end
+                    end
                     release_lookup()
                 end
             ]],change)

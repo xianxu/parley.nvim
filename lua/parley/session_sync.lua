@@ -464,12 +464,15 @@ dispatch_admission = function(buf, event, release_path, input_scope)
             else
                 outcome.type, outcome.message = "refused", refusal_message("freshness check failed: " .. tostring(reason or "buffer changed"))
             end
-        elseif effect.kind == "release" then
+        elseif effect.kind == "release" or effect.kind == "legacy_release" then
             local parsed = couch.operator_proof(effect.proof)
             local token = effect.token or parsed and parsed.Turn
             local path = release_path or file_of(buf)
             local ok, reason
-            if token then
+            if effect.kind == "legacy_release" and (token or not effect.proof
+                or effect.proof:find("\ndocument:", 1, true) or effect.proof:find("\nturn:", 1, true)) then
+                reason = "operator ownership evidence is not exact legacy protection"
+            elseif token then
                 local result = couch.operator_lock("release", { ID = s.identity.ID, File = path }, token)
                 ok, reason = result.kind == "confirmed", result.error
             else
@@ -479,6 +482,7 @@ dispatch_admission = function(buf, event, release_path, input_scope)
                 else reason = "operator protection changed" end
             end
             outcome.type = ok and "released" or "release_failed"
+            outcome.message = not ok and refusal_message(reason) or nil
             error_message = not ok and reason or nil
         else
             error("unknown operator admission effect: " .. tostring(effect.kind))
@@ -724,11 +728,12 @@ end
 M.attach = function(buf, identity, observed, restoring_move, input_scope)
     buf = buffer_id(buf)
     if state[buf] then
-        local current = state[buf].identity
+        local s = state[buf]
+        local current = s.identity
         if identity and identity.File == current.File and (not current.ID or current.ID == identity.ID) then
-            state[buf].identity = vim.deepcopy(identity)
+            s.identity = vim.deepcopy(identity)
         end
-        if observed then M.acquire_observed(buf, observed, input_scope) end
+        s.complete_attach(observed, restoring_move, input_scope)
         return
     end
     local h = header(buf)
@@ -789,6 +794,10 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
         if s.identity.ID then
             if not acquire_registered(baseline, false) then return end
         else
+            if require("parley.agentic_document").pending_lookup(buf) then
+                dispatch_admission(buf, { type = "observed", baseline = baseline, content = s.content })
+                return
+            end
             if not write_lock(buf, "operator", baseline) then return end
             refresh(buf)
         end
@@ -803,6 +812,16 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
         if state[buf] ~= s then return end
         s.inserting = true
         if s.moving then return end
+        if not s.identity.ID and require("parley.agentic_document").admit_insert(buf) then
+            -- Adoption already used this scope; a still-pending lookup remains
+            -- editable without tokenless writes. Absence resumes legacy policy.
+            if not s.identity.ID and not require("parley.agentic_document").pending_lookup(buf) then
+                local baseline = not vim.bo[buf].modified and content_hash(buf) or admission(s).baseline
+                take_turn(baseline)
+            end
+            restart_idle(buf)
+            return
+        end
         local baseline = not vim.bo[buf].modified and content_hash(buf) or admission(s).baseline
         local retried = s.retry_entry
         s.retry_entry = nil
@@ -812,6 +831,15 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
             else take_turn(baseline) end
         end
         restart_idle(buf)
+    end
+    s.complete_attach = function(edits, restoring, scope)
+        s.input_scope = scope
+        local observed_turn = edits and edits.outstanding
+        if observed_turn then M.acquire_observed(buf, edits, scope) end
+        -- Native InsertEnter still reports Normal mode during its callbacks.
+        if vim.api.nvim_get_current_buf() == buf and (scope or vim.fn.mode():match("^[iR]")) then
+            if restoring or observed_turn then s.inserting = true else insert_enter() end
+        end
     end
     vim.api.nvim_create_autocmd("InsertEnter", {group=group, buffer=buf, nested=true, callback=insert_enter})
     vim.api.nvim_buf_create_user_command(buf, "ParleySessionRetry", function() M.retry(buf) end,
@@ -956,12 +984,7 @@ M.attach = function(buf, identity, observed, restoring_move, input_scope)
     refresh(buf)
     restart_idle(buf)
     require("parley.edit_round").refresh(buf)
-    if observed then M.acquire_observed(buf, observed, input_scope) end
-    -- Native InsertEnter still reports Normal mode while its callbacks run.
-    -- The live scope is the insert intent when lookup completes inside them.
-    if vim.api.nvim_get_current_buf() == buf and (input_scope or vim.fn.mode():match("^[iR]")) then
-        if restoring_move then s.inserting = true else insert_enter() end
-    end
+    s.complete_attach(observed, restoring_move, input_scope)
 end
 
 -- S1 closes this exact input event; a stale cleanup cannot retire a new scope.
@@ -1007,12 +1030,10 @@ M.acquire_observed = function(buf, observed, input_scope)
     local s = state[buf]
     if not s or s.moving or not observed or not observed.outstanding then return false end
     if observed.loaded then s.loaded = observed.loaded end
-    if read_turn(buf) == "free" then
-        if s.identity.ID then
-            if not s.acquire_turn(observed.baseline, false, input_scope) then return false end
-        elseif not write_lock(buf, "operator", observed.baseline) then return false end
-    end
     dispatch_admission(buf, { type = "observed", baseline = observed.baseline, content = content_hash(buf) })
+    if s.identity.ID then
+        if not s.acquire_turn(observed.baseline, false, input_scope) then return false end
+    elseif read_turn(buf) == "free" and not write_lock(buf, "operator", observed.baseline) then return false end
     observe_content(buf, s, content_hash(buf))
     refresh(buf)
     restart_idle(buf)

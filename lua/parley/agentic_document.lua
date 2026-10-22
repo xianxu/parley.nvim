@@ -450,6 +450,40 @@ retry_loaded = function()
     if not remaining and retry_timer then retry_timer:stop(); retry_timer:close(); retry_timer = nil end
 end
 
+local function pending_input(buf)
+    local s = states[buf]
+    if not s or not valid(s) or s.reading or s.move or s.recovery_pending then return end
+    local snapshot = s.model.snapshot()
+    local operation = snapshot.operation
+    if snapshot.registration or not operation or operation.witness.operation ~= "lookup" then return end
+    return s, operation
+end
+
+-- Query only the exact controller's already-running lookup; never discover here.
+function M.pending_lookup(buf)
+    return pending_input(buf) ~= nil
+end
+
+function M.admit_insert(buf)
+    local s, operation = pending_input(buf)
+    if not s then return false end
+    if s.input_scope then return true end
+    local scope = { incarnation = s.incarnation, witness = operation.witness,
+        deadline_ms = uv.hrtime() / 1000000 + couch.OPERATOR_LOCK_TIMEOUT_MS }
+    s.input_scope = scope
+    local ok, err = pcall(vim.wait, couch.remaining_ms(scope.deadline_ms, uv.hrtime() / 1000000), function()
+        if uv.hrtime() / 1000000 >= scope.deadline_ms then return true end
+        if not valid(s) or s.incarnation ~= scope.incarnation then return true end
+        local current = s.model.snapshot().operation
+        return not current or not vim.deep_equal(current.witness, scope.witness)
+    end, 5)
+    scope.closed = true
+    if s.input_scope == scope then s.input_scope = nil end
+    require("parley.session_sync").finish_input_scope(buf, scope)
+    if not ok then error(err, 0) end
+    return true
+end
+
 function M.attach(buf)
     if states[buf] then
         if states[buf].reading then return true end
@@ -499,23 +533,7 @@ function M.attach(buf)
     attach_edits()
     s.group = vim.api.nvim_create_augroup("ParleyAgenticDocument" .. buf, { clear = true })
     vim.api.nvim_create_autocmd("InsertEnter", { group = s.group, buffer = buf, nested = true, callback = function()
-        local snapshot = s.model.snapshot()
-        local operation = snapshot.operation
-        if s.input_scope or not valid(s) or s.reading or s.move or s.recovery_pending
-            or snapshot.registration or not operation or operation.witness.operation ~= "lookup" then return end
-        local scope = { incarnation = s.incarnation, witness = operation.witness,
-            deadline_ms = uv.hrtime() / 1000000 + couch.OPERATOR_LOCK_TIMEOUT_MS }
-        s.input_scope = scope
-        local ok, err = pcall(vim.wait, couch.remaining_ms(scope.deadline_ms, uv.hrtime() / 1000000), function()
-            if uv.hrtime() / 1000000 >= scope.deadline_ms then return true end
-            if not valid(s) or s.incarnation ~= scope.incarnation then return true end
-            local current = s.model.snapshot().operation
-            return not current or not vim.deep_equal(current.witness, scope.witness)
-        end, 5)
-        scope.closed = true
-        if s.input_scope == scope then s.input_scope = nil end
-        require("parley.session_sync").finish_input_scope(buf, scope)
-        if not ok then error(err, 0) end
+        if not require("parley.session_sync").identity(buf) then M.admit_insert(buf) end
     end })
     vim.api.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, { group = s.group, buffer = buf, callback = function()
         -- A guarded mechanical move read checks its editor preimage and the IO
