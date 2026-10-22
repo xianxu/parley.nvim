@@ -12,6 +12,8 @@ collaboration-mode: discussion
 
 **Tech stack:** Lua, Neovim native input/autocmds, vim.system, existing filesystem-backed Couch fake, Python conformance runner.
 
+> **Active design:** the RETIRE revision at the end of `## Revisions` supersedes the earlier implementation tasks and compatibility mechanism. Earlier text is retained as design history; its tables are marked historical. No code is authorized until the TL agrees the existing-lock/journal rule and fresh plan-quality clears.
+
 ## Existing contract and alternatives
 
 #410's filed Spec is the requirements contract. #408 is landed; its private operator_admission module exclusively owns baseline, proof, token and outcome history. This work adds no alternate writer of those facts.
@@ -22,7 +24,7 @@ Recommended: carry one immutable absolute deadline through an ephemeral insert s
 
 ### Pure entities
 
-| Name | Lives in | Status |
+| Name | Lives in | Historical status |
 |------|----------|--------|
 | `remaining_ms` | `lua/parley/couch.lua` | new |
 | `dispatch` | `lua/parley/operator_admission.lua` | modified |
@@ -33,7 +35,7 @@ The document lifecycle's operation/witness model remains unchanged. The private 
 
 ### Integration points
 
-| Name | Lives in | Status | Wraps |
+| Name | Lives in | Historical status | Wraps |
 |------|----------|--------|-------|
 | `attach` | `lua/parley/agentic_document.lua` | modified | native InsertEnter, exact active lookup, bounded event-loop wait |
 | `adopt` | `lua/parley/agentic_document.lua` | modified | registration adoption and session-sync handoff |
@@ -184,3 +186,104 @@ Retiring tokenless admission outright for files the registered owner can admit w
 ### 2026-10-22 — BR-2; implementation stopped without another delta
 
 Plan-quality accepted the owner continuation (PQ-1/PQ-2 addressed, no new findings). R2 boundary review disposed BR-1 addressed but found Critical BR-2: background absent completion never settles a legacy turn whose lock write was deferred during discovery. Existing normal-mode legacy regression fails at the new head and passes with prior modules. This is the second finding in the existing-controller admission family. Do not implement another continuation under this plan; the TL/operator must decide the retire-legacy policy question above and authorize any subsequent design. The obsolete queued suite was cancelled; live acceptance and staging remain unrun. Review ledger and sidecar carry the evidence.
+
+
+### 2026-10-22 — RETIRE: one S1 admission route (active design, awaiting TL agreement)
+
+**Authority and delta.** TL delivery 8f18c995 reports the operator chose RETIRE. This revision supersedes the original scheduling/compatibility implementation tasks and the history-preserving legacy_release continuation. Keep the shared absolute-deadline seam and #408's owner; remove the dual-protocol handoff. PR #333 remains unlanded. The card's previous remaining-work estimate describes the superseded scope; derive the revised estimate only after fresh plan-quality accepts this design.
+
+**Requirement.** From file opening, a live S1 controller owns admission for that exact buffer/path/pane namespace, whether membership is confirmed, absent, pending or unavailable. It never creates a tokenless operator turn. Typed session-sync files without confirmed registration stay editable and visibly not protected; the first explicit submit registers through the existing path. Outside S1, standalone legacy behavior is unchanged. A confirmed registered identity uses #408 acquisition and freshness; joining an existing lookup still shares one original 500 ms deadline, one producer attempt and exact incarnation/witness cleanup.
+
+**Chosen alternative.** Turning legacy off only after discovery preserves the same handoff family; adding terminal legacy-restoration callbacks preserves two admission protocols. The operator instead chose retirement at S1 ownership from opening. This is a policy change for unregistered/unknown typed files, not a promise to retrofit registered proof onto old locks (ARCH-PURPOSE/DRY).
+
+#### Existing-lock and journal rule — requires TL agreement before code
+
+1. **No old proof:** S1 may track edits while unregistered but cannot create a tokenless sidecar. Upon confirmed registration, the ordinary #408 owner admits with its original observed pre-edit baseline, including autosaved edits. Absence, failure and scope expiry never restore a legacy writer; the not-protected indication remains until registration.
+2. **Proven live tokenless turn:** preserve its exact owned bytes, baseline and history. A registered acquisition request refuses locally without creating a registered token, deleting/replacing protection, or emitting an acquisition continuation. The existing explicit Alt+Return save/release/send path may finish this exact owned turn; it uses ordinary witnessed release and only then retires that turn's history. Registration/lookup completion and inside-S1 Esc/undo do not release the old turn automatically. A later input event can start an ordinary registered turn after explicit completion. Outside S1, existing baseline-release behavior remains unchanged.
+3. **Unproven/replaced/foreign old sidecar:** do not adopt it from disk or infer authority from its age, filename or header. Registered admission and submission retain refusal; Retry cannot unlock it. The message names the file and asks for the original owner to finish/release the turn. After restart without live proof or a validated journal there is no safe plugin unlock command: the operator must arrange an explicit release of that single identified lock with its owner. No new generic unlock command, bulk cleanup, guessed token or automatic conversion is included.
+4. **Existing v1/v2 move journal:** preserve the record and exact persisted protection. Leave Insert mode and reopen the destination, or use the existing displayed save/Alt+Return retry, to resume the same validated intent. Recovery continues under the existing ID lease and checks namespace, tuple, hashes, editor preimage, exact lock bytes and persisted finalization before each effect; journal removal remains last. A journal may reinstall/copy its already-authorized old proof to finish that existing move; this is not permission to begin a new tokenless turn. Failed validation leaves the record/protection interrupted, never swept. Normal admission waits for that recovery to finish.
+5. **New move:** an old tokenless sidecar is not authority to begin another move or mint a new journal. New moves use the same registered-owner admission/owned-proof check; old or unknown protection refuses with the same finish/release guidance. Existing journal recovery stays on its distinct validated restore/finalization seam.
+
+The explicit compatibility operations above finish an old resource; none silently replaces it with a new registered acquisition. No new phase, journal format, producer command or parallel history store is introduced. An unknown file remains editable; confirmed membership with refused protection retains #408's input gate. No claim that a stopped supervisor alone makes local Couch commands unavailable.
+
+#### Active core concepts
+
+Relationships: S1 owns one admission policy for one exact live controller; the temporary insert scope references that controller and its original lookup witness. Registered baseline/proof/token history remains exclusively in operator_admission. S1's existing pre-adoption observation is transferred once at adoption, never reconstructed from an autosaved snapshot. Old turn completion and journal restoration reuse the existing owner and exact-proof seams.
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `remaining_ms` | `lua/parley/couch.lua` | new |
+| `dispatch` | `lua/parley/operator_admission.lua` | modified |
+| `unprotected_view` | `lua/parley/document_session.lua` | new |
+
+`unprotected_view` is a pure projection of the lifecycle snapshot and typed-header classification into an optional not-protected label. It owns no state: pending/absent/unavailable typed files show `not protected · Alt+Return registers`, composed with pending/error feedback without losing the warning. Registered identity removes this pre-registration warning; #408 continues to own its acquired/unavailable/refused presentation. Ordinary unregistered prose keeps its current plain presentation. Header edits refresh the projection without changing S1 admission ownership (ARCH-PURE/STATE).
+
+The modified owner `dispatch` removes this branch's legacy_release stage. Acquire against a retained tokenless owned proof returns the existing refused phase without IO or token/history mutation. The ordinary explicit release and validated restore/reload behavior stays in that owner; no new state enum.
+
+| Name | Lives in | Status | Wraps |
+|------|----------|--------|-------|
+| `setup_markdown_keymaps` | `lua/parley/init.lua` | modified | S1-first attachment, standalone fallback |
+| `owns_admission` | `lua/parley/agentic_document.lua` | new | exact live S1 controller eligibility, independent of registration |
+| `attach` | `lua/parley/agentic_document.lua` | modified | initial ownership, old-controller retirement and journal precedence |
+| `admit_insert` | `lua/parley/agentic_document.lua` | new | S1's single pending-lookup input join |
+| `pending_lookup` | `lua/parley/agentic_document.lua` | deleted | remove the dual-consumer export; retain only the private exact-lookup selector |
+| `adopt` | `lua/parley/agentic_document.lua` | modified | confirmed attachment with observed baseline and exact live scope |
+| `attach` | `lua/parley/session_sync.lua` | modified | registered controller or retained old completion; no S1 legacy creation |
+| `acquire_observed` | `lua/parley/session_sync.lua` | modified | registered observed-edit acquisition only within S1 |
+| `release_if_baseline` | `lua/parley/session_sync.lua` | modified | preserve inside-S1 old tokenless proof until explicit completion |
+| `begin_move` | `lua/parley/session_sync.lua` | modified | reject new moves backed only by old/unproven tokenless protection |
+| `finish_input_scope` | `lua/parley/session_sync.lua` | new | exact-scope cleanup |
+| `operator_lock` | `lua/parley/couch.lua` | modified | residual process deadline |
+| stateful registry/operator fixtures | `tests/helpers/fake_couch.lua`, `tests/fixtures/fake_couch_registry.py`, `tests/fixtures/fake_couch_operator.py` | modified as needed | existing persisted membership, proof and outcome model |
+
+#### Executable integration sequence
+
+- Opening: setup_markdown_keymaps tries S1 attachment first; only a false result enables the existing standalone legacy attachment. S1 publishes its controller before any legacy attachment decision. `owns_admission` derives from that exact live controller, not header recognition, successful lookup or a cached boolean.
+- Structural guard: session-sync attachment without a registered identity cannot create a legacy controller while S1 owns admission. Its central tokenless `write_lock` seam also refuses new writes under S1, protecting pre-existing callbacks and non-init callers. An idle legacy attachment with no owner history may be retired; an existing turn keeps only the compatibility completion described above. No pending-lookup special case or deferred legacy write remains.
+- Recovery precedence: reuse the existing bounded journal check once at attachment, before cached-identity adoption can trigger ordinary acquisition. If recovery owns the document, its validated restoring_move attachment bypasses normal acquisition and finishes the persisted intent. On the no-journal branch, adopt a known identity and start normal discovery. No new journal scan on input or every edit.
+- Input: S1 invokes its own exact pending-lookup join regardless of a typed header or retained old controller. Session-sync no longer invokes that join or schedules a second wait. Confirmed adoption into an existing registered/compatible controller consumes the exact scope and observed baseline; registered fast-held proof still deduplicates ordinary entry. At most one producer acquire per scope; unavailable/refused does not permit another attempt in that scope. The absolute deadline predicate and residual Couch timeouts remain.
+- Unknown edits and first submit: S1 retains its existing pre-edit observation through pending, absent and unavailable outcomes until adoption/explicit submission lifecycle settles it; a plain-band update must not erase outstanding edits. Its save effect selects an actually attached controller through the identity accessor, not the header-aware is_session_sync predicate. Thus an unregistered typed file takes the ordinary S1 save/register path without accidentally attaching legacy. Explicit routing, inheritance and owner-prefix rules are unchanged.
+- UI: S1's existing band composes the pure not-protected projection with lifecycle/submit feedback on open, reply, edit, save and header refresh. It cannot disappear merely because lookup returns absent or auto-save clears modified. Once registered, the existing registered turn/refusal band takes over. No new overlay owner or watcher is added.
+- Cleanup: remove the legacy_release effect from model and IO dispatcher, remove SS-to-S1 join/deferred-write branches and replace their tests. Keep exact old-turn release only on explicit submission and keep validated journal restore/finalization. No automatic old-lock release in registered acquisition, registration completion, scope cleanup or new-move admission.
+
+#### State, actions and failure policy
+
+Actions: edit/save; submit (Alt+Return); retry registered admission; finish/release the original old turn with its owner; leave Insert and reopen the journal destination.
+
+| Internal state / failure mode | Visible state | Recovery action | Possible loss |
+|-------------------------------|---------------|-----------------|---------------|
+| S1 typed, no confirmed identity; lookup pending/absent/unavailable | Editable, not protected, registration hint; existing error detail retained | submit | No local lock; concurrent agent edits can conflict |
+| Confirmed registration, ordinary proof available | Existing acquired/freshened or editable unavailable presentation | edit/save | Existing #408 unavailable conflict risk |
+| Confirmed registration with old live tokenless proof | Existing refused input plus finish-old-turn guidance | submit to explicitly finish exact owned turn | No history/proof discarded on failure |
+| Confirmed registration with unproven/replaced sidecar | Existing refused input; exact path and owner-assisted release guidance | finish/release the original old turn with its owner | No guessed deletion; input keys remain unapplied |
+| Existing journal matches validated recovery | Existing moving/interrupted presentation | leave Insert and reopen destination | Existing forward-only partial progress retained |
+| Journal witness/lease/bytes invalid or unknown | Existing interrupted/refused recovery | restore/prove expected state with owner assistance, then reopen | Record and lock retained; no sweep |
+| Controller detached/superseded or scope expired | Current controller's ordinary policy; shared discovery retains its lifetime | edit/save or submit in current buffer | No stale acquire or warning from old incarnation |
+| No live S1 controller | Existing standalone legacy behavior | existing edit/submit workflow | Existing standalone semantics |
+
+#### Operating envelope and architecture
+
+This remains an input-event feature: a required total 500 ms blocking-wait budget spans only an already-running lookup and one registered acquire. Expiry never launches another child. No synchronous discovery is added. For N entries, new discovery launches remain zero and registered producer attempts are at most N; verify N=4/8 with effect/full-read counters. Ownership checks inspect one exact controller and add no B-buffer or document-content scan per poll. Existing freshness hashing is O(document size); the journal scan stays the existing bounded open/recovery operation. Scope cleanup retains the existing exact-reference/incarnation checks and independent request lifetime (ARCH-CONSTRAINTS/FUNERAL).
+
+One S1 owner gates every new tokenless writer, rather than proving absence at each callback (ARCH-DRY/PURPOSE). UI projection and old-proof acquisition refusal are pure, with native scheduling/IO in the existing seams (ARCH-PURE). Registry replies and sidecars retain typed validation; old proof and journal provenance never come from age or location (ARCH-SECURE/ORDER). Reuse the persisted fake and disposable real producer conformance (ARCH-MOCK). Existing journals, unknown fields, cache bounds and producer acknowledgments do not change format (ARCH-EVOLVE).
+
+#### Verification strategies (functions, adversarial inputs, mechanical guards)
+
+| Functions under test | Strategy and guard |
+|----------------------|--------------------|
+| lifecycle `unprotected_view`; S1 band integration | Drive actual lifecycle snapshots/header changes and feedback under controlled completion; assert typed unregistered warnings persist until confirmed registration, while registered/standalone views retain their policies. |
+| S1 `owns_admission`, `attach`; init `setup_markdown_keymaps`; SS `attach`/tokenless writer | Open through production setup, then drive edits and direct existing attachment callers across namespace/incarnation boundaries using the stateful fake; assert zero new tokenless sidecars throughout S1 and retained standalone locks outside it. Extend the existing owner architecture guard to reject ungated S1 legacy creation. |
+| S1 `admit_insert`, `adopt`; SS `acquire_observed`; Couch `operator_lock` | Control lookup completion, external file writes and process scheduling with queued native input; assert first-input proof/freshness, original saved baseline, one absolute deadline and 4/8 linear effect/read bounds on both runtimes. |
+| owner `dispatch`; SS explicit release and `release_if_baseline` | Pure event sequences and stateful exact-byte replacement: assert old-proof acquisition has no release/acquire effect or history/token mutation, ordinary S1 input cannot release it, and explicit completion removes only matching owned bytes. |
+| SS `begin_move`; S1 `move_path` and native rename entry | Present old/foreign proof before a new move and control metadata replies; assert no new tokenless journal/copy/cleanup is authorized, while current registered proof uses the existing move route. |
+| `recover_migration`, SS `restore_move`, existing finalization | Resume actual v1/v2 filesystem journals under controlled saved/dirty content, proof replacement and interrupted outcomes; assert only the persisted authorized effects occur, mismatches retain evidence, and journal removal is last. |
+| Existing standalone/refusal regression mappings | Run the full session-sync mapping serially; keep standalone assertions under no S1 namespace, and change inside-S1 fallback expectations only where the operator's retirement policy explicitly changes them. Never make the whole legacy suite pass by registering every fixture. |
+
+#### Tasks — one atomic implementation boundary
+
+1. **Admit the design.** Send this committed plan to the TL and agree the existing-lock/journal rules. Run fresh `sdlc change-code --issue 410 --flow full` without bypass; after plan-quality accepts, derive/reconcile the revised estimate. No product or test code before those gates.
+2. **Red, then clean retirement.** Using TDD, modify `tests/integration/session_sync_native_spec.lua`, `tests/integration/session_sync_spec.lua`, `tests/integration/agentic_document_lifetime_spec.lua`, `tests/integration/document_band_spec.lua`, `tests/unit/operator_admission_spec.lua`, existing lifecycle-unit and move/recovery mappings, and `tests/arch/operator_admission_owner_spec.lua` as required by the strategies above. Run `make test-spec SPEC=modes/session_sync` and preserve the intended policy reds. Then implement the listed seams in `lua/parley/init.lua`, `lua/parley/agentic_document.lua`, `lua/parley/session_sync.lua`, `lua/parley/operator_admission.lua`, `lua/parley/document_session.lua`. Remove the superseded handoff/deferred-restoration mechanism rather than adding its missing completion callback. Run targeted mappings serially, then commit the coherent replacement.
+3. **Verify the entire policy.** Run the session-sync and affected architecture mappings on preferred `/opt/homebrew/opt/neovim/bin/nvim` and operator `/opt/homebrew/bin/nvim` through environment PARLEY_TEST_NVIM; run `make lint`, fake-only and real registry conformance with the negative control. Preserve timing/count assertions and existing standalone/journal regressions. Coordinate the shared native file with #412; its refusal-only process-budget work must not widen #410's actual 500 ms deadline tests.
+4. **Document and accept.** Rewrite `README.md` and `atlas/modes/session_sync.md` around retirement, exact old-proof recovery and standalone compatibility; keep new symbols/tests mapped. Commit/push via `sdlc pr`, queue a new recorded suite on final code, and run fresh `sdlc close`. Only after both pass, run the already authorized copied-profile scratch-only live check; update that unrun fixture to assert S1-first setup and no new tokenless turn. Any :0 stage still requires another TL ask. Send results to the hub, await SHIP, then land through `sdlc merge --yes`. Unknown failures block; only the exact #412 exception has the prior limited rerun authorization until typed Lua registration is available.
+
+**Stop rule:** another gap in this single-route mechanism or an existing-lock/journal rule that cannot be implemented as agreed goes back to the TL before another mechanism delta. Do not claim prior green native runs or the cancelled suite verify this retirement revision.

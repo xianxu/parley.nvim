@@ -31,6 +31,8 @@ On InsertEnter, if S1 already has a lookup pending for that exact buffer/incarna
 
 The wait must not recursively admit another acquire with a fresh 500 ms budget: S1's completion callback adopts the identity, and session_sync.attach currently acquires immediately if already inserting. One deadline must cover both modules, attachment and acquisition, without changing ordinary background discovery or unregistered-file input.
 
+Operator-approved retirement revision (Couch 8f18c995): S1 owns admission from file opening and never starts a new tokenless turn, including on typed files with absent, pending or unavailable membership. Those typed files remain editable with a clear not-protected indication until registered; first submit registers. Outside S1, standalone legacy behavior stays unchanged. Existing old protection and move journals are finished/released explicitly through proven ownership or validated recovery, never swept or automatically converted. The active RETIRE plan supersedes the attempted dual-protocol handoff; its exact existing-lock/journal rule requires TL agreement before code and fresh plan-quality afterward.
+
 ## Done when
 
 - Native queued-input tests hold an existing lookup, complete it before the deadline, then race an external write against acquisition; first input follows confirmed protection and clean freshness.
@@ -38,12 +40,15 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 - A lookup that remains pending permits today's unknown-period input after the bound, and later completion reconciles outstanding edits safely.
 - A plain file with no pending lookup has no new blocking Couch request; stale buffer/incarnation completions cannot gate another buffer.
 - Both supported Neovim versions pass, with the existing stateful Couch fake and disposable real-command conformance where applicable.
+- S1 owns admission before legacy attachment: no new tokenless lock on opening, edits, absence/unavailability completion or expired input scopes. Typed unregistered/unknown files retain a visible not-protected indication and first submit registers normally.
+- Old live proof/history is preserved until explicit exact owned completion; unproven sidecars remain refused with owner-assisted recovery guidance. Existing v1/v2 journals retain validated forward recovery, and no new move uses tokenless protection as admission.
+- Standalone editors outside S1 retain legacy locks, submit, unchanged-exit and undo behavior; no automatic sweep or new generic unlock is introduced.
 
 ## Plan
 
-- [x] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
-- [x] Complete R1 production-order red/green through the revised one-owner handoff, including the exact owned legacy-proof exception; retain original deadline and history.
-- [ ] Resolve the R2 deferred-legacy settlement policy with the TL/operator before further implementation; reverify mapped regressions, recorded suite and post-review live acceptance before landing (Log).
+- [ ] Agree the active [RETIRE plan](../plans/000410-pending-lookup-admission-plan.md), especially old-lock/journal recovery, with the TL; clear fresh plan-quality before code.
+- [ ] Replace the superseded handoff/deferred-write mechanism with S1-first ownership, one admission route and the not-protected presentation; prove retirement and compatibility through red/green tests.
+- [ ] Verify both runtimes, full mapped regressions, counts/deadlines, guards, lint and conformance; recorded suite, fresh close review and authorized live acceptance remain required before landing.
 
 ## Estimate
 
@@ -120,6 +125,10 @@ Stopped without a product/test patch or another mechanism proposal, per TL c8405
 Cancelled obsolete queued suite lease-3241185062 through the supported exact-run command; runner exited context-cancelled and produced no suite result. No suite, review, stage or live profile is running. PR #333 is unlanded; issue remains working. Next action is TL/operator policy direction, not a third patch. Preserve the unrelated generated-workflow stash.
 
 ## Revisions
+
+### 2026-10-22 — operator selects retirement inside S1
+
+TL delivery 8f18c995 reports the operator's RETIRE choice. Extended Spec/Done-when and replaced the active checklist around that chosen policy; prior attempt/results remain in the Log. The durable plan appends an authoritative RETIRE revision, preserving the earlier design as historical text and marking its concept tables historical. No product/test code changed. Proposed compatibility: exact live old proof can finish via explicit Alt+Return; unproven old sidecars require owner-assisted explicit release and remain refused; validated v1/v2 journals use their existing reopen/save/Alt+Return continuation and retire last. New acquisition never deletes/converts old protection, and new moves cannot treat it as fresh admission. Waiting for TL agreement on that rule before fresh change-code/implementation. PR #333 remains unlanded; no suite, review, stage or profile probe is running.
 
 ### 2026-10-22 — distinguish implementation checklist from landing evidence
 
