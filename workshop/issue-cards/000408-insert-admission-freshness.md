@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 6.14
+actual_hours: 6.52
 tracker:
     version: 1
     completion:
-        token: close-edbdc74adb6c
+        token: close-d37a0280036d
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 4805170dcbd53e6d71529c75ac2a2881f76e2416
-        evidence_commit: 17e531284bf7121426456cb80b478ea4acbb2295
+        reviewed_head: 25674936013026ee64bbb2a366eb197658db07e3
+        evidence_commit: 8a492c25a6e13331c69273e31402474c168e9d79
 ---
 
 # session-sync: fence insert admission and reload after lock acquisition
