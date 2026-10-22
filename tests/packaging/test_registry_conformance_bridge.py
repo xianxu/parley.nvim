@@ -86,6 +86,8 @@ class BridgeConsumerTest(unittest.TestCase):
         self.assertEqual(str(self.bin / "couch"), instance.config["binary"])
         self.assertEqual(["/candidate/bridge", "--scratch-parent", instance.bridge_parent,
                           "--couch", "/candidate/couch"], instance.argv)
+        self.assertEqual(Path("/tmp").resolve(), Path(instance.bridge_parent).parent)
+        self.assertEqual(Path("/tmp").resolve(), Path(instance.runtime_parent).parent)
         self.assertFalse(Path(instance.bridge_parent).exists())
         self.assertFalse(Path(instance.runtime_parent).exists())
 
