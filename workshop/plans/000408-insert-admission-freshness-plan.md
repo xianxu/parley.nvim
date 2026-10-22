@@ -297,8 +297,8 @@ exact proof bytes; their established disk/submit policy is unchanged.
 
 - [x] Add native BR-1 red and no-refusal control; add independent pure sequence tests.
 - [x] Implement the encapsulated owner and dispatch effects; sweep every old history writer.
-- [ ] Guard the ownership boundary structurally, verify both runtimes and run the fresh recorded suite.
-- [ ] Close review approves; then repeat the authorized real-profile stage and clear before landing.
+- [x] Guard the ownership boundary structurally, verify both runtimes and queue the fresh recorded suite.
+Post-review acceptance: require the recorded suite to pass; after close review approves, repeat the authorized real-profile stage and clear before landing. A review code change requires a fresh suite on the new head.
 
 ### 2026-10-22 — native refusal recovery revision approved
 
@@ -316,3 +316,13 @@ buffer non-modifiable throughout refusal: no automatic retry, writable gap or
 input interception. The band names the holder/reason and says press i to retry;
 notification also names the command and says refused keys were not applied.
 This supersedes the earlier leave-and-reenter-only recovery rule.
+
+### 2026-10-22 — review overlaps the queued recorded suite
+
+The current tl-worker contract explicitly permits close review while the
+recorded suite is queued, provided a pass on the final code precedes landing
+and review code changes requeue it. Current code is pushed at a209c5b5;
+run lease-728916138 / attempt 27d86c85dcd7c03705a173153cfaeaf6 is FIFO
+position 1 behind ariadne's weight-two run. No runner was restarted. Targeted
+verification is green on both runtimes, including the focused legacy cases.
+The repeat live-profile stage still follows review approval, as the TL ordered.

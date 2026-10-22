@@ -365,3 +365,16 @@ replacing the original baseline. One IO and one pure regression were red, then
 legacy writer. No new watcher, journal, workflow or local-gates path changed.
 The current code now proceeds to the recorded suite and R2 close; the new
 real-profile refusal/retry check remains after review approval, as ordered.
+
+### 2026-10-22 — R2 review and suite checkpoint
+
+Pushed a209c5b5 through sdlc pr (PR #329). Recorded suite queued normally,
+lease-728916138, attempt 27d86c85dcd7c03705a173153cfaeaf6; FIFO position 1
+behind ariadne's weight-two run. Log lives under .git/sdlc/test-stats/inflight/
+27d86c85dcd7c03705a173153cfaeaf6/run.log. No stage is held.
+The final legacy IO/pure regression pass also succeeded on 0.11.7.
+Per current tl-worker's explicit permission, R2 close review may overlap this
+queued suite; green final-code recorded evidence remains mandatory for landing.
+The revised live-profile probe, including foreign-lock refusal followed by i
+retry and silent freshening, runs only after review approval and is cleared
+straight after.
