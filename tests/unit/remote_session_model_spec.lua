@@ -637,3 +637,114 @@ describe('remote attachment lifecycle', function()
         assert.equals(binding().BindingGeneration, effects[1].request.Entries[1].BindingGeneration)
     end)
 end)
+
+describe('exit unregister batch composition',function()
+    local function editor_identity()
+        return {EditorIncarnation=context().EditorIncarnation,PID=context().PID}
+    end
+    local function batches(values,identity)
+        assert.equals('function',type(Model.exit_batches),'exit batch composition is missing')
+        return Model.exit_batches(values,identity or editor_identity())
+    end
+    local function row(namespace,document,attach,generation)
+        local value=binding()
+        value.Namespace=namespace or value.Namespace
+        value.DocumentID=document or value.DocumentID
+        value.AttachID=attach or value.AttachID
+        value.BindingGeneration=generation or value.BindingGeneration
+        return value
+    end
+    it('returns an empty dense list when there are no confirmed bindings',function()
+        assert.same({},batches({}))
+    end)
+    it('builds one existing unregister payload for 256 exact owned bindings',function()
+        local values={}
+        for index=256,1,-1 do
+            values[#values+1]=row(nil,('%032x'):format(index),tostring(index),('%032x'):format(index+256))
+        end
+        local output=assert(batches(values))
+        assert.equals(1,#output)
+        assert.equals(256,#output[1].Entries)
+        assert.equals(1,output[1].Version)
+        assert.equals(context().Namespace,output[1].Namespace)
+        assert.equals(context().PID,output[1].PID)
+        assert.equals(context().EditorIncarnation,output[1].EditorIncarnation)
+        for index,entry in ipairs(output[1].Entries) do
+            assert.same({DocumentID=('%032x'):format(index),AttachID=tostring(index),
+                BindingGeneration=('%032x'):format(index+256)},entry)
+        end
+        assert.is_table(Model.prepare_request('unregister',output[1]))
+    end)
+    it('sorts namespaces and document IDs without combining namespace authority',function()
+        local output=assert(batches({row('/z',string.rep('f',32),'2'),row('/a',string.rep('f',32),'3'),
+            row('/a',string.rep('1',32),'4')}))
+        assert.equals(2,#output)
+        assert.equals('/a',output[1].Namespace);assert.equals('/z',output[2].Namespace)
+        assert.equals(2,#output[1].Entries);assert.equals(1,#output[2].Entries)
+        assert.equals(string.rep('1',32),output[1].Entries[1].DocumentID)
+        assert.equals(string.rep('f',32),output[1].Entries[2].DocumentID)
+    end)
+    it('selects the greatest attach ID and its exact generation for each document',function()
+        local older=row(nil,nil,'9',string.rep('d',32))
+        local newer=row(nil,nil,'10',string.rep('e',32))
+        for _,values in ipairs({{older,newer},{newer,older},{older,newer,newer}}) do
+            local output=assert(batches(values))
+            assert.equals(1,#output[1].Entries)
+            assert.equals('10',output[1].Entries[1].AttachID)
+            assert.equals(string.rep('e',32),output[1].Entries[1].BindingGeneration)
+        end
+    end)
+    it('compares canonical decimal attachment IDs beyond floating point precision',function()
+        local low=row(nil,nil,'9007199254740992',string.rep('d',32))
+        local high=row(nil,nil,'9007199254740993',string.rep('e',32))
+        local maximum=row(nil,nil,'18446744073709551615',string.rep('f',32))
+        assert.equals('9007199254740993',assert(batches({high,low}))[1].Entries[1].AttachID)
+        assert.equals('18446744073709551615',assert(batches({maximum,high,low}))[1].Entries[1].AttachID)
+    end)
+    it('refuses conflicting generations for the same exact attachment',function()
+        local result,err=batches({row(nil,nil,'10',string.rep('d',32)),row(nil,nil,'10',string.rep('e',32))})
+        assert.is_nil(result);assert.is_string(err)
+    end)
+    it('validates every binding even if an invalid older binding would be discarded',function()
+        local newer=row(nil,nil,'10')
+        for _,change in ipairs({
+            function(v) v.PID=99 end,
+            function(v) v.EditorIncarnation=string.rep('f',32) end,
+            function(v) v.BindingGeneration='missing' end,
+            function(v) v.AttachID='01' end,
+            function(v) v.Namespace='/a/../b' end,
+            function(v) v.Socket='relative' end,
+            function(v) v.File=false end,
+            function(v) v.ProcessIdentity=nil end,
+        }) do
+            local older=row(nil,nil,'1');change(older)
+            local result,err=batches({older,newer})
+            assert.is_nil(result);assert.is_string(err)
+        end
+    end)
+    it('rejects non-dense oversized and metatable input collections',function()
+        local oversized={}
+        for index=1,257 do oversized[index]=binding() end
+        for _,values in ipairs({false,{[2]=binding()},{unexpected=binding()},oversized,setmetatable({},{})}) do
+            local result,err=batches(values)
+            assert.is_nil(result);assert.is_string(err)
+        end
+    end)
+    it('requires one valid editor identity even for an empty binding list',function()
+        for _,identity in ipairs({false,{}, {PID=0,EditorIncarnation=context().EditorIncarnation},
+            {PID=42,EditorIncarnation='invalid'}, {PID=42,EditorIncarnation=context().EditorIncarnation,Extra=true}}) do
+            assert.equals('function',type(Model.exit_batches))
+            local result,err=Model.exit_batches({},identity)
+            assert.is_nil(result);assert.is_string(err)
+        end
+    end)
+    it('returns detached payloads without mutating the accepted bindings',function()
+        local values={binding()}
+        local before=vim.deepcopy(values)
+        local output=assert(batches(values))
+        output[1].Entries[1].AttachID='1'
+        output[1].Namespace='/changed'
+        assert.same(before,values)
+        assert.equals(context().AttachID,assert(batches(values))[1].Entries[1].AttachID)
+    end)
+end)

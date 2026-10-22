@@ -14,7 +14,8 @@ describe('zero-config setup', function()
 
     local function run(probe, cwd, extra_env)
         local command = {vim.v.progpath, '--headless', '-n', '-i', 'NONE', '-u', 'NONE',
-            '-c', 'lua vim.opt.runtimepath:prepend(' .. string.format('%q', runtime) .. ')',
+            '-c', 'lua local root=' .. string.format('%q', runtime) .. '; vim.opt.runtimepath:prepend(root); package.path=root.."/?.lua;"..package.path',
+            '-c', [[lua local fixture=require('tests.helpers.remote_runtime_fixture').install(); require('tests.helpers.exit_with_parent').install(nil,function() assert(fixture.cleanup()) end)]],
             '-c', 'lua local ok, err = pcall(function() ' .. probe .. ' end); if not ok then io.stderr:write(tostring(err)); vim.cmd("cquit 1") end',
             '-c', 'qa!'}
         local result = vim.system(command, {cwd = cwd or scratch .. '/work', text = true, clear_env = true, env = {
@@ -30,6 +31,9 @@ describe('zero-config setup', function()
 
     it('boots with setup({}) and no keys, without warnings, and creates a chat', function()
         run([[
+            local selected=require('parley.remote_runtime').default_parent()
+            local fixture=require('tests.helpers.remote_runtime_fixture').install()
+            assert(selected~=fixture.native_default_parent(),'clean bootstrap did not isolate the runtime')
             local notes = {}
             vim.notify = function(message, level)
                 if (level or 0) >= vim.log.levels.WARN then notes[#notes + 1] = tostring(message) end

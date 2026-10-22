@@ -56,7 +56,12 @@ local function enqueue(argv, witness, callback, options, classify, invalid, join
     options = options or {}
     witness = vim.deepcopy(witness or {})
     local uv = vim.uv or vim.loop
+    local absolute_deadline = options.absolute_deadline_ms
+    local join_child = joined or absolute_deadline ~= nil
     local item = { callback = callback, done = false, running = false, queued_at = uv.hrtime() }
+    local function absolute_expired()
+        return absolute_deadline ~= nil and uv.hrtime() / 1e6 >= absolute_deadline
+    end
     local function finish(result)
         if item.done then return end
         item.done = true
@@ -74,7 +79,7 @@ local function enqueue(argv, witness, callback, options, classify, invalid, join
     function item.cancel()
         if item.done then return end
         local result = unavailable("request canceled; mutation outcome may be unknown")
-        if joined and item.running then
+        if join_child and item.running then
             item.failure = result
             if item.child then pcall(item.child.kill, item.child, 9) end
         else
@@ -90,17 +95,43 @@ local function enqueue(argv, witness, callback, options, classify, invalid, join
         return true
     end
     if invalid then finish(unavailable(invalid)); return item end
-    -- The deadline bounds the child's lifetime, from spawn (#382), as the
+    if absolute_deadline ~= nil and (type(absolute_deadline) ~= 'number'
+        or absolute_deadline ~= absolute_deadline or math.abs(absolute_deadline) == math.huge) then
+        finish(unavailable('invalid absolute registry deadline')); return item
+    end
+    -- An absolute_deadline_ms is a shared uv.hrtime()/1e6 budget, including
+    -- queue time. Without it, the deadline bounds lifetime from spawn (#382), as the
     -- header says: time spent queued behind MAX_ACTIVE others is not Couch
     -- being slow, and a request that never started has no unknown outcome.
     -- The queue itself is bounded by MAX_QUEUE.
     local deadline_ms = options.timeout_ms
+    local function deadline_result()
+        return unavailable(absolute_deadline ~= nil
+            and 'Couch registry absolute deadline exceeded; mutation outcome may be unknown'
+            or ('Couch registry deadline exceeded after %d ms; mutation outcome may be unknown'):format(deadline_ms))
+    end
+    local function expire()
+        if item.done then return end
+        local result = deadline_result()
+        if join_child and item.running then
+            item.failure = result
+            if item.child then pcall(item.child.kill, item.child, 9) end
+        else
+            if item.child then pcall(item.child.kill, item.child, 15) end
+            finish(result)
+        end
+    end
+    local function arm_deadline(ms)
+        item.timer = uv.new_timer()
+        require('parley.helper').start_deadline(item.timer, ms, vim.schedule_wrap(expire))
+    end
     function item.start()
         if item.done then return end
+        if absolute_expired() then expire(); return end
         item.running = true
         item.started_at = uv.hrtime()
         active = active + 1
-        local process_options = { env = options.env, timeout = false, stdin = options.stdin }
+        local process_options = { env = options.env, clear_env = options.clear_env, timeout = false, stdin = options.stdin }
         if joined then
             item.output, item.output_size = {}, 0
             local function stream(error, chunk)
@@ -127,27 +158,21 @@ local function enqueue(argv, witness, callback, options, classify, invalid, join
         end
         item.child = couch.run(argv, function(obj)
             if item.done then return end
+            if absolute_expired() and not item.failure then item.failure = deadline_result() end
             local result = item.failure or classify(obj, item)
             finish(result)
         end, process_options)
         if item.done then return end
-        item.timer = uv.new_timer()
-        require("parley.helper").start_deadline(item.timer, deadline_ms, vim.schedule_wrap(function()
-            local result = unavailable(("Couch registry deadline exceeded after %d ms; mutation outcome may be unknown")
-                :format(deadline_ms))
-            if joined then
-                item.failure = result
-                if item.child then pcall(item.child.kill, item.child, 9) end
-            else
-                if item.child then pcall(item.child.kill, item.child, 15) end
-                finish(result)
-            end
-        end))
+        if absolute_deadline == nil then arm_deadline(deadline_ms) end
     end
     if #queue >= MAX_QUEUE and active >= MAX_ACTIVE then
         finish(unavailable("registry request queue full")); return item
     end
     handles[item] = true
+    if absolute_deadline ~= nil then
+        if absolute_expired() then expire(); return item end
+        arm_deadline(math.max(1, math.ceil(absolute_deadline - uv.hrtime() / 1e6)))
+    end
     queue[#queue + 1] = item
     pump()
     return item
@@ -192,6 +217,7 @@ M.EDITOR_REPLY_BYTES = 1024 * 1024
 
 --- Editor discovery/publication uses the same four-child/64-queued boundary.
 --- Cancellation and expiry deliver only after the owned child has been reaped.
+--- options.absolute_deadline_ms includes queue time and is never reset at spawn.
 function M.editor(operation, payload, witness, callback, options)
     options = vim.tbl_extend("force", {}, options or {})
     local protocol = require("parley.remote_session_model")

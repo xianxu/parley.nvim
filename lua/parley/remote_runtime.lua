@@ -339,15 +339,22 @@ local function resource_methods(resource)
             return {kind='closed'}
         end)
     end
-    function resource.close(callback)
-        callback=callback or function() end
+    -- Kernel-only retirement for exit. Marker/directory cleanup remains with
+    -- close's guarded transaction; this method creates no asynchronous work.
+    function resource.stop_listeners()
         -- Only listeners returned by our own serverstart belong to us. Ending
         -- their kernel lifetime is safe even if another editor holds admission.
         local stop_error
         for path in pairs(resource.listeners) do local ok,err=stop_owned(resource,path);if not ok then stop_error=err end end
         resource.closed=true
+        if stop_error then return nil,stop_error end
+        return true
+    end
+    function resource.close(callback)
+        callback=callback or function() end
+        local stopped,stop_error=resource.stop_listeners()
         return transaction(2000,callback,function(ctx)
-            need(not stop_error,stop_error)
+            need(stopped,stop_error)
             if resource.removed then return {kind='closed'} end
             ctx.lock(resource.parent)
             need(private(ctx.fs('fs_lstat',resource.parent)),'unsafe runtime parent')
@@ -379,6 +386,14 @@ local function resource_methods(resource)
     end
 end
 
+--- Physical system temporary parent, short enough for native Unix sockets.
+--- One physical private parent, short even when TMPDIR cannot fit Unix sockets.
+--- Test bootstrap replaces this IO selection without changing product policy.
+function M.default_parent()
+    local base=uv.fs_realpath('/tmp')
+    return base and base..'/parley-rpc-'..uid
+end
+
 --- Acquire a unique private runtime under one bounded allocation transaction.
 --- Callback receives ready/runtime or unavailable/error. Unknown residue counts
 --- toward 256; explicit native death alone permits exact marked reclamation.
@@ -389,10 +404,7 @@ function M.acquire(options,callback)
     local incarnation,source=options.incarnation,options.source
     local timeout=tonumber(options.timeout_ms) or 2000
     local parent=options.parent
-    if not parent then
-        local base=uv.fs_realpath(vim.fn.fnamemodify(vim.fn.stdpath('run'),':h'))
-        parent=base and base..'/parley-rpc'
-    end
+    if not parent then parent=M.default_parent() end
     return transaction(timeout,callback,function(ctx)
         need(type(incarnation)=='string' and #incarnation==32 and incarnation:match('^[0-9a-f]+$'),'invalid editor incarnation')
         need(type(parent)=='string' and parent:sub(1,1)=='/' and not parent:find('\0',1,true),'invalid runtime parent')

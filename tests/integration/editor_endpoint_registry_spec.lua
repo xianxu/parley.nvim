@@ -2,7 +2,7 @@ local uv = vim.uv or vim.loop
 local arrival = require('tests.helpers.arrival')
 
 describe('editor endpoint registry process boundary', function()
-    local root, saved, client, identity
+    local root, saved, client, identity, operations, gates, timers, pending
     local function request(operation, payload, options)
         assert.is_function(client.editor, 'typed editor endpoint request is missing')
         local result
@@ -23,11 +23,33 @@ describe('editor endpoint registry process boundary', function()
                 BindingGeneration = binding.BindingGeneration } } }
     end
 
+    local function async_editor(operation,payload,callback,options)
+        pending=pending+1
+        local handle=client.editor(operation,payload,{},function(result) pending=pending-1;callback(result) end,options)
+        operations[#operations+1]=handle
+        return handle
+    end
+    local function release_gate(path) vim.fn.writefile({},path) end
+    local function launches()
+        local path=root..'/registry.json.editor-launches'
+        return vim.fn.filereadable(path)==1 and #vim.fn.readfile(path) or 0
+    end
+    local function occupy_slots()
+        local gate=root..'/release';gates[#gates+1]=gate
+        for index=1,4 do
+            async_editor('register',intent(tostring(index),string.rep(tostring(index),32)),function() end,
+                {env={FAKE_COUCH_EDITOR_REPLY_GATE=gate},timeout_ms=arrival.MS})
+        end
+        assert(vim.wait(arrival.MS,function() return launches()==4 end,10))
+        return gate
+    end
     before_each(function()
+        operations,gates,timers,pending={},{},{},0
         root = vim.fn.tempname(); vim.fn.mkdir(root, 'p'); root = assert(uv.fs_realpath(root))
         require('tests.helpers.fake_couch').write(root, root .. '/sent', root .. '/argv')
         saved = { path = vim.env.PATH, registry = vim.env.FAKE_COUCH_REGISTRY,
-            mode = vim.env.FAKE_COUCH_EDITOR_MODE, delay = vim.env.FAKE_COUCH_EDITOR_DELAY }
+            mode = vim.env.FAKE_COUCH_EDITOR_MODE, delay = vim.env.FAKE_COUCH_EDITOR_DELAY,
+            run=require('parley.couch').run,deadline=require('parley.helper').start_deadline }
         vim.env.PATH = root .. '/bin:' .. vim.env.PATH
         vim.env.FAKE_COUCH_REGISTRY = root .. '/registry.json'
         vim.env.FAKE_COUCH_EDITOR_MODE, vim.env.FAKE_COUCH_EDITOR_DELAY = nil, nil
@@ -39,7 +61,13 @@ describe('editor endpoint registry process boundary', function()
         client = require('parley.document_registry')
     end)
     after_each(function()
+        require('parley.couch').run=saved.run
+        require('parley.helper').start_deadline=saved.deadline
+        for _,timer in ipairs(timers) do if not timer:is_closing() then timer:stop();timer:close() end end
+        for _,gate in ipairs(gates) do release_gate(gate) end
+        for _,operation in ipairs(operations) do operation.cancel() end
         if client then client.shutdown() end
+        assert(vim.wait(arrival.MS,function() return pending==0 end,10))
         vim.env.PATH, vim.env.FAKE_COUCH_REGISTRY = saved.path, saved.registry
         vim.env.FAKE_COUCH_EDITOR_MODE, vim.env.FAKE_COUCH_EDITOR_DELAY = saved.mode, saved.delay
         vim.fn.delete(root, 'rf')
@@ -126,5 +154,84 @@ describe('editor endpoint registry process boundary', function()
         local live, err = uv.kill(pid, 0)
         assert.is_nil(live)
         assert.matches('ESRCH', err)
+    end)
+
+    it('expires an absolute queued deadline before occupied transport slots open',function()
+        local gate=occupy_slots()
+        local released=false
+        timers[#timers+1]=vim.defer_fn(function() released=true;release_gate(gate) end,250)
+        local result
+        async_editor('lookup',{Namespace=root,DocumentID=identity.ID},function(value) result=value end,
+            {absolute_deadline_ms=uv.hrtime()/1e6+100})
+        assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+        assert.equals('unavailable',result.kind,vim.inspect(result))
+        assert.matches('deadline',result.error)
+        assert.is_false(released,'queued expiry waited for a child slot')
+        assert.equals(4,launches())
+    end)
+    it('refuses an expired queued request before spawn even when its timer is held',function()
+        local gate=occupy_slots()
+        require('parley.helper').start_deadline=function(timer,ms,callback)
+            if ms<=100 then return end
+            return saved.deadline(timer,ms,callback)
+        end
+        local deadline=uv.hrtime()/1e6+30
+        local result
+        async_editor('lookup',{Namespace=root,DocumentID=identity.ID},function(value) result=value end,
+            {absolute_deadline_ms=deadline})
+        assert(vim.wait(arrival.MS,function() return uv.hrtime()/1e6>=deadline end,10))
+        release_gate(gate)
+        assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+        require('parley.helper').start_deadline=saved.deadline
+        assert.equals('unavailable',result.kind,vim.inspect(result))
+        assert.matches('deadline',result.error)
+        assert.equals(4,launches(),'expired request spawned when a slot opened')
+    end)
+    it('joins an admitted absolute deadline while retaining a possibly published binding',function()
+        local gate=root..'/release';gates[#gates+1]=gate
+        timers[#timers+1]=vim.defer_fn(function() release_gate(gate) end,600)
+        local result
+        async_editor('register',intent(),function(value) result=value end,
+            {absolute_deadline_ms=uv.hrtime()/1e6+200,env={FAKE_COUCH_EDITOR_REPLY_GATE=gate}})
+        assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+        assert.equals('unavailable',result.kind,vim.inspect(result))
+        assert.matches('deadline',result.error)
+        local pid=tonumber(vim.fn.readfile(root..'/registry.json.editor-pid')[1])
+        local live,err=uv.kill(pid,0);assert.is_nil(live);assert.matches('ESRCH',err)
+        -- Publication precedes the held acknowledgment. Expiry is not absence.
+        assert.equals('confirmed',request('lookup',{Namespace=root,DocumentID=identity.ID}).kind)
+    end)
+    it('keeps the absolute-deadline observer until its native exit delivery joins',function()
+        local release,delivery
+        require('parley.couch').run=function(argv,callback,options)
+            return saved.run(argv,function(value) delivery=value;release=function() callback(value) end end,options)
+        end
+        local gate=root..'/release';gates[#gates+1]=gate
+        local result,calls=nil,0
+        async_editor('register',intent(),function(value) result=value;calls=calls+1 end,
+            {absolute_deadline_ms=uv.hrtime()/1e6+200,timeout_ms=1000,env={FAKE_COUCH_EDITOR_REPLY_GATE=gate}})
+        assert(vim.wait(arrival.MS,function() return release~=nil end,10))
+        assert.is_nil(result,'expiry reported before the owned native completion joined')
+        local pid=tonumber(vim.fn.readfile(root..'/registry.json.editor-pid')[1])
+        local live,err=uv.kill(pid,0);assert.is_nil(live);assert.matches('ESRCH',err)
+        assert.is_table(delivery)
+        release()
+        assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+        assert.equals('unavailable',result.kind);assert.matches('deadline',result.error)
+        assert.equals(1,calls)
+    end)
+    it('rejects a late admitted reply when the absolute timer callback is delayed',function()
+        require('parley.helper').start_deadline=function(timer,ms,callback)
+            if ms<=300 then return end
+            return saved.deadline(timer,ms,callback)
+        end
+        local gate=root..'/release';gates[#gates+1]=gate
+        timers[#timers+1]=vim.defer_fn(function() release_gate(gate) end,300)
+        local result
+        async_editor('register',intent(),function(value) result=value end,
+            {absolute_deadline_ms=uv.hrtime()/1e6+100,env={FAKE_COUCH_EDITOR_REPLY_GATE=gate}})
+        assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+        assert.equals('unavailable',result.kind,vim.inspect(result))
+        assert.matches('deadline',result.error)
     end)
 end)

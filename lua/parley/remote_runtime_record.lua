@@ -97,7 +97,8 @@ local function unique_members(bytes)
             if bytes:sub(offset, offset) == '}' then offset = offset + 1; return end
             while true do
                 whitespace()
-                local key = vim.json.decode(string_token())
+                local decoded, key = pcall(vim.json.decode, string_token())
+                if not decoded then error('invalid JSON member name') end
                 if seen[key] then error('duplicate JSON member') end
                 seen[key] = true
                 whitespace()

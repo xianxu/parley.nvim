@@ -242,7 +242,8 @@ describe('private editor attachment dispatcher', function()
                     end, options)
                 ]], root, bad, good, rejection)
                 local observed = child:exec([[
-                    local complete = vim.wait(..., function() return admission_probe.close_calls == 1 end, 10)
+                    local arrival_ms = ...
+                    local complete = vim.wait(arrival_ms, function() return admission_probe.close_calls == 1 end, 10)
                     return { complete = complete, probe = admission_probe }
                 ]], arrival.MS)
                 assert.is_true(observed.complete, 'rejected attachment stranded its completion or the shared queue')

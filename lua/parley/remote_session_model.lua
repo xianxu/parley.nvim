@@ -145,6 +145,55 @@ function M.prepare_request(operation, payload)
     return { args = args, stdin = encoded, expected = copy(payload) }
 end
 
+-- Compose existing unregister requests from already accepted owned bindings.
+-- This selects cleanup witnesses only; it does not establish new authority.
+function M.exit_batches(bindings, identity)
+    local function invalid(reason) return nil, 'invalid exit bindings: ' .. reason end
+    if not request_shape(identity, { 'EditorIncarnation', 'PID' })
+        or not hex_id(identity.EditorIncarnation) or not positive_integer(identity.PID) then
+        return invalid('editor identity')
+    end
+    local length = dense_length(bindings)
+    if not length or length > 256 or getmetatable(bindings) ~= nil then return invalid('batch size or shape') end
+    local groups = {}
+    for _, value in ipairs(bindings) do
+        if not valid_binding(value, identity) or getmetatable(value) ~= nil then return invalid('foreign or malformed binding') end
+        local group = groups[value.Namespace]
+        if not group then
+            group = { entries = {}, generations = {} }
+            groups[value.Namespace] = group
+        end
+        local key = value.DocumentID .. ':' .. value.AttachID
+        local generation = group.generations[key]
+        if generation and generation ~= value.BindingGeneration then return invalid('conflicting attachment generations') end
+        group.generations[key] = value.BindingGeneration
+        local previous = group.entries[value.DocumentID]
+        if not previous or #value.AttachID > #previous.AttachID
+            or (#value.AttachID == #previous.AttachID and value.AttachID > previous.AttachID) then
+            group.entries[value.DocumentID] = value
+        end
+    end
+    local namespaces, result = {}, {}
+    for namespace in pairs(groups) do namespaces[#namespaces + 1] = namespace end
+    table.sort(namespaces)
+    for _, namespace in ipairs(namespaces) do
+        local entries, documents = {}, {}
+        local group = groups[namespace]
+        for document in pairs(group.entries) do documents[#documents + 1] = document end
+        table.sort(documents)
+        for _, document in ipairs(documents) do
+            local selected = group.entries[document]
+            entries[#entries + 1] = { DocumentID = document, AttachID = selected.AttachID,
+                BindingGeneration = selected.BindingGeneration }
+        end
+        local prepared, err = M.prepare_request('unregister', { Version = 1, Namespace = namespace,
+            EditorIncarnation = identity.EditorIncarnation, PID = identity.PID, Entries = entries })
+        if not prepared then return invalid(err) end
+        result[#result + 1] = prepared.expected
+    end
+    return result
+end
+
 local function same_entry(left, right)
     return type(left) == 'table' and type(right) == 'table'
         and hex_id(left.DocumentID) and attach_id(left.AttachID) and hex_id(left.BindingGeneration)

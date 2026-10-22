@@ -32,6 +32,22 @@ couch-owner: ops:0
 | `<M-CR>` in a Couch pane | Save and register on first submit; confirm identity, release the operator lock and send `submitted: <absolute path>` on later submits. An unresolved pane agent or uncertain mutation keeps submission pending. |
 | `<M-CR>` outside a Couch pane | Existing [review behavior](review.md#altreturn-process-instruction-and-the-slot-send-316), including the typed legacy session-sync path. |
 
+**Private editor endpoints.** A confirmed registered parent or side document
+also supplies Namespace, stable ID and canonical File to the
+[endpoint lifecycle](remote_session.md). Session-sync reuses its registration
+and hands off later legacy identity upgrades; a legacy header alone is
+insufficient. Outside Couch, one read-only lookup per named Markdown incarnation
+can discover an endpoint identity without registering the file or changing its
+Alt+Return behavior. Unknown membership creates no listener.
+
+Passive checktime/autoread and guarded session-sync reads preserve endpoint
+authority, including superseded history. Explicit unguarded unload/reopen
+retires that attachment and permits a fresh AttachID. Endpoint bookkeeping never
+changes operator-turn ownership, local editability, saves or submit composition.
+Exit unregisters exact known generations in one batch per Namespace under a
+shared 500 ms budget, then stops only owned listeners. Missing acknowledgments
+remain uncertain; exit does not wait for asynchronous filesystem cleanup.
+
 **Offline membership.** Unknown/unavailable Couch membership stays editable,
 with the exact band `Couch unavailable: agentic state unknown`. Parley never
 makes an unknown file read-only because Couch is unreachable. A known attached
@@ -464,6 +480,11 @@ plain fallback: unresolved owner selection, pending admission and an active
 submit cannot be renamed past. The plain bypass needs positive absence that
 parley already holds (#359). While Couch is unavailable, a held identity still
 moves, and its journal recovers the rename on reopen; editing stays available.
+
+The mover pauses the endpoint before effects and resumes it only after confirmed
+finalization, keeping the document ID and allocating a fresh AttachID for its new
+canonical File. A pre-effect abort may resume the proven original identity;
+interrupted forward recovery advertises neither spelling.
 
 A true buffer unload retires its async incarnation and execution lease; reopen
 confirms registration and resumes any durable forward-only move journal.

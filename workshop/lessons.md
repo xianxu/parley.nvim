@@ -961,3 +961,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   satisfy a global-only oracle. Assert absence from ordinary contexts and
   presence on an actual attached buffer, using the existing executable fake
   for attachment's status/round queries; even a declaration check can spawn IO.
+
+- #405: A child RPC wait can inherit the correct arrival budget while hiding it behind a generic local or vararg. Keep its arrival-derived name inside the child and run the architecture guards with the targeted mapping; behavioral passes alone miss those contracts. Parser-wide protection likewise needs each external decode locally explicit to the JSON guard.

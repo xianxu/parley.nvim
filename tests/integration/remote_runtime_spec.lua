@@ -31,7 +31,8 @@ describe('private editor RPC runtime ownership', function()
         local scratch_base=uv.fs_stat('/Volumes/TestScratch') and '/Volumes/TestScratch' or (vim.env.TMPDIR or uv.os_tmpdir())
         root = assert(uv.fs_mkdtemp(scratch_base .. '/rr-XXXXXX'))
         resources, children = {}, {}
-        saved_io={fsync=uv.fs_fsync,rename=uv.fs_rename,open=uv.fs_open,mkdtemp=uv.fs_mkdtemp,lstat=uv.fs_lstat,serverstart=vim.fn.serverstart}
+        saved_io={fsync=uv.fs_fsync,rename=uv.fs_rename,open=uv.fs_open,mkdtemp=uv.fs_mkdtemp,lstat=uv.fs_lstat,
+            realpath=uv.fs_realpath,stdpath=vim.fn.stdpath,serverstart=vim.fn.serverstart}
         source = require('tests.helpers.fake_process_source').new({
             [uv.os_getpid()] = { started = 'Thu Oct 22 05:00:00 2026' },
         })
@@ -39,9 +40,12 @@ describe('private editor RPC runtime ownership', function()
         runtime = ok and module or { acquire = function()
             assert.is_true(false, 'private RPC runtime module is missing')
         end }
+        saved_io.default_parent=runtime.default_parent
     end)
     after_each(function()
         uv.fs_fsync,uv.fs_rename,uv.fs_open,uv.fs_mkdtemp,uv.fs_lstat,vim.fn.serverstart=saved_io.fsync,saved_io.rename,saved_io.open,saved_io.mkdtemp,saved_io.lstat,saved_io.serverstart
+        uv.fs_realpath,vim.fn.stdpath=saved_io.realpath,saved_io.stdpath
+        runtime.default_parent=saved_io.default_parent
         for _, child in ipairs(children) do child:stop() end
         for _, resource in ipairs(resources) do close(resource) end
         vim.fn.delete(root, 'rf')
@@ -89,6 +93,100 @@ describe('private editor RPC runtime ownership', function()
         assert.equals('unavailable', await_start({ parent = root .. '/public' }).kind)
         assert(uv.fs_symlink(root .. '/public', root .. '/alias'))
         assert.equals('unavailable', await_start({ parent = root .. '/alias' }).kind)
+    end)
+
+    local function isolate_default_parent()
+        local long_base=root..'/'..string.rep('long-run-',10)
+        assert(uv.fs_mkdir(long_base,448))
+        vim.fn.stdpath=function(kind)
+            if kind=='run' then return long_base..'/nvim-current' end
+            return saved_io.stdpath(kind)
+        end
+        -- Only the system temporary root is redirected. Every allocation,
+        -- lease, marker and socket operation still uses the native filesystem.
+        uv.fs_realpath=function(path,...)
+            if path=='/tmp' then return root end
+            return saved_io.realpath(path,...)
+        end
+        runtime.default_parent=require('tests.helpers.remote_runtime_fixture').install().native_default_parent
+        return root..'/parley-rpc-'..uv.os_get_passwd().uid,long_base
+    end
+    local function await_default()
+        local result
+        runtime.acquire({incarnation=string.rep('a',32),source=source},function(value) result=value end)
+        assert.is_true(vim.wait(arrival.MS,function() return result~=nil end,10))
+        if result.kind=='ready' then resources[#resources+1]=result.runtime end
+        return result
+    end
+    it('selects a physical short UID parent independent of a long Neovim run path',function()
+        local parent,long_base=isolate_default_parent()
+        assert.equals('function',type(runtime.default_parent))
+        assert.equals(parent,runtime.default_parent())
+        assert.is_true(#(long_base..'/parley-rpc/e-XXXXXX/s256')>103)
+        local result=await_default()
+        assert.equals('ready',result.kind,vim.inspect(result))
+        assert.equals(parent,result.runtime.parent)
+        assert.equals(16832,uv.fs_lstat(parent).mode)
+        local last=listen(result.runtime,'s256')
+        assert.equals('listening',last.kind,vim.inspect(last))
+        assert.is_true(#last.path<=103)
+        assert.equals('socket',uv.fs_lstat(last.path).type)
+        assert.is_nil(uv.fs_lstat(long_base..'/parley-rpc'))
+    end)
+    it('accepts an existing exact private UID parent without replacing it',function()
+        local parent=isolate_default_parent()
+        assert(uv.fs_mkdir(parent,448))
+        local before=assert(uv.fs_lstat(parent))
+        local result=await_default()
+        assert.equals('ready',result.kind,vim.inspect(result))
+        assert.equals(parent,result.runtime.parent)
+        assert.equals(before.ino,uv.fs_lstat(parent).ino)
+        assert.equals(before.mode,uv.fs_lstat(parent).mode)
+    end)
+    it('refuses an existing public default parent without changing its permissions',function()
+        local parent=isolate_default_parent()
+        assert(uv.fs_mkdir(parent,493))
+        local before=assert(uv.fs_lstat(parent))
+        assert.equals('unavailable',await_default().kind)
+        assert.equals(before.mode,uv.fs_lstat(parent).mode)
+        assert.equals(before.ino,uv.fs_lstat(parent).ino)
+        assert.is_nil(uv.fs_scandir_next(assert(uv.fs_scandir(parent))))
+    end)
+    it('refuses an existing symlink default parent without touching its target',function()
+        local parent=isolate_default_parent()
+        local target=root..'/private-target'
+        assert(uv.fs_mkdir(target,448))
+        assert(uv.fs_symlink(target,parent))
+        assert.equals('unavailable',await_default().kind)
+        assert.equals('link',uv.fs_lstat(parent).type)
+        assert.equals(target,uv.fs_readlink(parent))
+        assert.is_nil(uv.fs_scandir_next(assert(uv.fs_scandir(target))))
+    end)
+    it('refuses a foreign UID default parent based on read-only native inspection facts',function()
+        local parent=isolate_default_parent()
+        assert(uv.fs_mkdir(parent,448))
+        vim.fn.writefile({'foreign residue'},parent..'/sentinel')
+        local before=assert(uv.fs_lstat(parent))
+        local function foreign(stat)
+            if stat then stat=vim.deepcopy(stat);stat.uid=before.uid+1 end
+            return stat
+        end
+        uv.fs_lstat=function(path,callback)
+            if path~=parent then return saved_io.lstat(path,callback) end
+            if callback then
+                return saved_io.lstat(path,function(err,stat) callback(err,foreign(stat)) end)
+            end
+            return foreign(saved_io.lstat(path))
+        end
+        assert.equals('unavailable',await_default().kind)
+        local after=assert(saved_io.lstat(parent))
+        assert.equals(before.uid,after.uid)
+        assert.equals(before.mode,after.mode)
+        assert.equals(before.ino,after.ino)
+        assert.same({'foreign residue'},vim.fn.readfile(parent..'/sentinel'))
+        local scan=assert(uv.fs_scandir(parent))
+        assert.equals('sentinel',uv.fs_scandir_next(scan))
+        assert.is_nil(uv.fs_scandir_next(scan))
     end)
 
     it('bounds process-directory admission without deleting unknown residue', function()
@@ -559,5 +657,38 @@ describe('private editor RPC runtime ownership', function()
         assert.equals(before.ino,assert(uv.fs_lstat(temporary)).ino)
         local guard=assert(require('parley.document_lease').acquire('remote-session-runtime','allocation',{root=resource.parent}))
         guard.release()
+    end)
+
+    it('stops only owned kernel listeners without a lease or marker mutation',function()
+        local resource=assert(await_start().runtime)
+        local first,second=listen(resource,'s1'),listen(resource,'s2')
+        assert.equals('function',type(resource.stop_listeners))
+        local marker=resource.directory..'/owner.json'
+        local bytes,stat=vim.fn.readfile(marker),assert(uv.fs_lstat(marker))
+        local foreign=vim.fn.serverstart(root..'/foreign.sock')
+        local guard=assert(require('parley.document_lease').acquire('remote-session-runtime','allocation',{root=resource.parent}))
+        local stopped,err=resource.stop_listeners()
+        guard.release()
+        local preserved=vim.tbl_contains(vim.fn.serverlist(),foreign)
+        vim.fn.serverstop(foreign)
+        assert.is_true(stopped,err)
+        assert.is_true(preserved)
+        assert.is_nil(uv.fs_lstat(first.path));assert.is_nil(uv.fs_lstat(second.path))
+        assert.same(bytes,vim.fn.readfile(marker));assert.equals(stat.ino,assert(uv.fs_lstat(marker)).ino)
+        assert.is_true(resource.stop_listeners())
+        assert.equals('unavailable',listen(resource,'s3').kind)
+        close(resource);assert.is_nil(uv.fs_lstat(resource.directory))
+    end)
+    it('retains a replaced listener pathname during kernel-only stop',function()
+        local resource=assert(await_start().runtime)
+        local listener=listen(resource,'s1')
+        assert.equals('function',type(resource.stop_listeners))
+        local marker=vim.fn.readfile(resource.directory..'/owner.json')
+        assert(uv.fs_rename(listener.path,listener.path..'.original'))
+        vim.fn.writefile({'foreign'},listener.path)
+        local stopped,err=resource.stop_listeners()
+        assert.is_nil(stopped);assert.is_string(err)
+        assert.same({'foreign'},vim.fn.readfile(listener.path))
+        assert.same(marker,vim.fn.readfile(resource.directory..'/owner.json'))
     end)
 end)
