@@ -75,6 +75,14 @@ Pair:6's durable producer M1 contract is aa24764a339d7f001dba02c0ec1db5072788036
 
 Plan-quality R1 raised PQ-1 shared-resource-admission-serialization and PQ-2 external-process-boundary-contract (Important). TL396d2c15 approved reusing document_lease's kernel guard for runtime count/create/reclaim and the named remote_process seam/stateful fake,1s inspection/2s async startup budget. Plan revised with controlled concurrency, interruption and canceled-completion tests. No implementation yet; rerun plan-quality to dispose the two findings before estimating.
 
+### 2026-10-22 — M1 pure/process checkpoint
+
+change-code accepted design at89d9906f after plan-quality CLEAN (PQ-1/PQ-2 disposed), estimate5.41h derived from accepted scope. Estimate review INFO: runtime verification may be compressed; track actuals rather than back-fit. Runtime/process Lua item includes its stateful fixtures/native failure tests; CLI integration includes fake/conformance; lifecycle Lua item includes real-profile staging/cleanup; milestone items include suite admission/results and review handling. Pre-resolved design discount is applied; remaining allowance covers implementation-level boundary details and evidence-driven adjustments.
+
+Attachment model: RED22assertion failures/0errors, GREEN26cases on preferred and0.11.7 (parley-405-model.86eYnC logs). Native process seam: RED19failures/0errors, GREEN19cases both runtimes, including deadline/cancel child join; final preferred log parley-405-process-final.log. Runtime ownership codec: RED17failures/0errors, GREEN17cases both runtimes (parley-405-record.D0Yfh4 logs). All logs under TestScratch; process censuses clean. No real Couch endpoint conformance yet: producer implementation/landing remains in pair:6.
+
+File organization separates computational marker ownership in remote_runtime_record.lua and private filesystem/listener ownership in remote_runtime.lua from the attachment dispatcher; no new behavior or protocol. Runtime final pre-effect death confirmation may use a third native liveness observation after process seam's initial+confirmed-dead observations; counted bound is3P at8/16, still one batched ps start-time read and no host-table scan per endpoint. Native runtime allocation and CLI transport tests remain in progress; M1 is not closed.
+
 ## Estimate
 
 Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; source is marked stale by sdlc estimate-source, so calibration is provisional. Derived after plan-quality R2 CLEAN, before implementation.
