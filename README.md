@@ -205,6 +205,13 @@ CI builds weave from the exact Ariadne commit in `.sdlc/weave-compiler-ref`
 PR and require the operator’s `local-gates-verified` label. See the
 [CI compiler guide](atlas/infra/ci_compiler.md) for validation and recovery.
 
+Maintainers can exercise private editor endpoint publication with
+`python3 scripts/check-couch-registry-conformance.py --editor-endpoints --fake-only`.
+This runs two disposable native editors through the production client and checks
+a deliberately corrupted reply. Real-producer acceptance also requires the landed
+Couch endpoint producer (pair#758) and supported isolated harness bridge (pair#801);
+the fake check does not qualify that integration. See [endpoint ownership](atlas/modes/remote_session.md).
+
 Before sending pull request, you should file an issue first, focusing on the feature
 you want to create and getting alignment with maintainer first. All pull request without
 agreement won't be checked. After all, in the era of AI coding, it's easy to write 

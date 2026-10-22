@@ -19,7 +19,7 @@ collaboration-mode: discussion
 | Name | Lives in | Status |
 |------|----------|--------|
 | EndpointAttachment | lua/parley/remote_session_model.lua | new |
-| RuntimeOwnershipRecord | lua/parley/remote_session_model.lua | new |
+| RuntimeOwnershipRecord | lua/parley/remote_runtime_record.lua | new |
 
 EndpointAttachment owns one live buffer attachment's namespace/document ID, process incarnation, monotone AttachID, request witnesses, binding generation and phase. Its only mutation surface is dispatch(event); snapshot() returns copies. It validates endpoint envelopes and notification tuples without editor/process IO. Multiple endpoints belong to one nvim incarnation; a fresh explicit attach advances the process-wide decimal counter. Retry preserves AttachID. Counter exhaustion refuses remote publication rather than wrapping. This is the first occurrence of this ownership pattern; reuse the existing document-registration and request seams rather than embedding it in operator_admission (ARCH-PURE/DRY/ORDER).
 
@@ -30,7 +30,8 @@ EndpointAttachment owns one live buffer attachment's namespace/document ID, proc
 | Runtime process inspection | lua/parley/remote_process.lua | new | batched native ps/liveness observations with async deadline/cancellation |
 | Stateful process source | tests/helpers/fake_process_source.lua; tests/fixtures/fake_ps.py | new | retained process incarnations, controlled death/reuse/unknown/delayed completion |
 | Runtime allocation guard | lua/parley/document_lease.lua (existing acquire API; no protocol change) | reused | kernel flock over count/create/reclaim, descriptor lifetime releases on death |
-| Editor endpoint shell | lua/parley/remote_session.lua | new | private directory/listeners, native callbacks, lifecycle events |
+| Editor endpoint shell | lua/parley/remote_session.lua | new | runtime consumer lifetime, effect dispatch, native callbacks and lifecycle events |
+| Runtime ownership shell | lua/parley/remote_runtime.lua | new | guarded allocation, ownership marker IO and exact listener cleanup |
 | Endpoint CLI transport | lua/parley/document_registry.lua | modified | existing bounded Couch process queue, stdin JSON and typed replies |
 | Registered identity handoff | lua/parley/session_sync.lua | modified | attach/identity-upgrade, move pause/confirmation, detach |
 | Markdown/exit wiring | lua/parley/init.lua | modified | outside-pane open discovery and VimLeavePre |
@@ -112,7 +113,7 @@ The new lifecycle never changes modifiable, admission history, lock ownership, s
 
 ### M1 — endpoint model, private listener shell and producer conformance
 
-**Files:** new lua/parley/remote_session_model.lua, lua/parley/remote_session.lua; modify lua/parley/document_registry.lua, tests/fixtures/fake_couch_registry.py, tests/helpers/fake_couch.lua, scripts/check-couch-registry-conformance.py; new tests/unit/remote_session_model_spec.lua, tests/integration/remote_session_spec.lua, tests/integration/remote_process_spec.lua; update atlas and traceability.
+**Files:** new lua/parley/remote_session_model.lua, remote_runtime_record.lua, remote_process.lua, remote_runtime.lua and remote_session.lua; modify lua/parley/document_registry.lua; add the process and endpoint fixtures, pure/unit and native integration specs, and scripts/couch-editor-probe.lua; extend tests/helpers/fake_couch.lua, tests/fixtures/fake_couch_registry.py and scripts/check-couch-registry-conformance.py; update architecture declarations, README, indexed atlas and traceability.
 
 | Function / boundary | Verification strategy |
 |---|---|
@@ -171,3 +172,15 @@ Reason: executable conformance exposed Neovim serverstop unlinking a replaced so
 ### 2026-10-22 — TL-approved real acceptance moves after the bridge
 
 Reason: endpoint publication uses a private IPC observer, so the old in-process register/adopt-store conformance setup cannot exercise a running producer. TL77d91d23 approves M1 close on fake plus native evidence; real-producer acceptance waits for a separately filed pair bridge issue owned by pair:6, using the existing shared testcouch harness rather than a Parley launcher. The M1 real-conformance checkbox remains deferred to M2. The supported external readiness/environment and exact teardown contract must be pinned before adapting Parley's driver. Real acceptance requires both landed producer and bridge pins; no waiver of that M2 requirement.
+
+### 2026-10-22 — R1 runtime consumer lifetime and aggregate deadline
+
+Reason: review BR-1/BR-2/BR-4 proved queued publication after detach, abandoned startup, a reset first-listener budget and a retained empty runtime. TL23d2aca3 approves one runtime IO owner: live consumers are distinct from retired records retaining cleanup. The last live consumer cancels/joins startup and queued (not yet admitted) registry handles; admitted effects retain exact late-ack cleanup. Once drained, close the exact old resource automatically. A new attach during drain waits until that close completes and then allocates fresh; uncertain cleanup refuses remote availability without guessing ownership. Allocation through the first durable listener publication shares one absolute deadline. No automatic retry, watcher or local edit change.
+
+| Runtime IO state | Visible state | Action | Possible loss |
+|---|---|---|---|
+| idle/acquiring/ready | ordinary local editor; remote availability pending/current | continue editing | no availability claim before acknowledgment |
+| last-consumer drain, including queued new attach | ordinary local editor; new remote view pending | continue editing | old unconfirmed publication may remain until exact cleanup |
+| drain/cleanup unavailable | remote unavailable | reopen to retry | owned residue remains bounded; local content unchanged |
+
+Permanent red cases: occupied transport queue then detach; final held-startup detach without releasing the source; final ordinary detach removes runtime without global close; attach during exact old close waits and gets fresh directory; delayed acquire plus fsync cannot exceed the original startup deadline. Correct the authoritative concept location/integration inventory (BR-3) and document the runnable fake conformance flag plus deferred real prerequisites in README (BR-5). Real acceptance awaits pair#758 and pair#801.

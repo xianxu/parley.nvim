@@ -14,8 +14,8 @@ local function need(value,err) if not value then error(tostring(err or 'runtime 
 
 -- A transaction has one outstanding fs request or joined process observation.
 -- Cancellation drains it before descriptors and the kernel guard are released.
-local function transaction(timeout, callback, body)
-    local ctx = {deadline=now()+timeout, descriptors={}}
+local function transaction(timeout, callback, body, deadline)
+    local ctx = {deadline=deadline or now()+timeout, descriptors={}}
     local co, timer, finished
     local function check()
         if ctx.stopped then error(ctx.stopped,0) end
@@ -75,7 +75,7 @@ local function transaction(timeout, callback, body)
         elseif ctx.request then pcall(uv.cancel,ctx.request) end
     end
     timer=uv.new_timer()
-    timer:start(math.max(1,math.ceil(timeout)),0,vim.schedule_wrap(function() operation.cancel('runtime deadline') end))
+    timer:start(math.max(1,math.ceil(ctx.deadline-now())),0,vim.schedule_wrap(function() operation.cancel('runtime deadline') end))
     co=coroutine.create(function() check();return body(ctx) end)
     vim.schedule(function() resume() end)
     return operation
@@ -230,8 +230,12 @@ local function resource_methods(resource)
             local socket=record.Sockets[#record.Sockets]
             socket.State,socket.Device,socket.Inode='listening',stat.dev,stat.ino
             write_marker(ctx,resource,record)
+            ctx.check()
+            -- Acquisition and first durable listener share one startup budget.
+            -- Only a completed publication admits later per-operation budgets.
+            resource.startup_deadline=nil
             return {kind='listening',path=path}
-        end)
+        end,resource.startup_deadline)
     end
     function resource.stop(name,callback)
         callback=callback or function() end
@@ -365,7 +369,7 @@ function M.acquire(options,callback)
         local directory=need(ctx.fs('fs_mkdtemp',parent..'/e-XXXXXX'))
         local directory_stat=need(ctx.fs('fs_lstat',directory))
         need(private(directory_stat),'unsafe new runtime directory')
-        local resource={directory=directory,parent=parent,stat=directory_stat}
+        local resource={directory=directory,parent=parent,stat=directory_stat,startup_deadline=ctx.deadline}
         local record={Version=1,EditorIncarnation=incarnation,PID=pid,Started=own.started,
             Directory={Name=vim.fn.fnamemodify(directory,':t'),Device=directory_stat.dev,Inode=directory_stat.ino},Sockets={}}
         write_marker(ctx,resource,record)

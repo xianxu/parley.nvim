@@ -82,6 +82,13 @@ local function enqueue(argv, witness, callback, options, classify, invalid, join
             finish(result)
         end
     end
+    -- Retirement may cancel queued intent, but an admitted publication must
+    -- retain its observer so an exact late acknowledgment can be cleaned up.
+    function item.cancel_unstarted()
+        if item.done or item.running then return false end
+        item.cancel()
+        return true
+    end
     if invalid then finish(unavailable(invalid)); return item end
     -- The deadline bounds the child's lifetime, from spawn (#382), as the
     -- header says: time spent queued behind MAX_ACTIVE others is not Couch

@@ -3,7 +3,7 @@ local arrival = require('tests.helpers.arrival')
 local runtime
 
 describe('private editor RPC runtime ownership', function()
-    local root, source, resources, children
+    local root, source, resources, children, saved_io
     local function await_start(options)
         local result
         options = options or {}
@@ -31,6 +31,7 @@ describe('private editor RPC runtime ownership', function()
         local scratch_base=uv.fs_stat('/Volumes/TestScratch') and '/Volumes/TestScratch' or (vim.env.TMPDIR or uv.os_tmpdir())
         root = assert(uv.fs_mkdtemp(scratch_base .. '/rr-XXXXXX'))
         resources, children = {}, {}
+        saved_io={fsync=uv.fs_fsync,rename=uv.fs_rename,serverstart=vim.fn.serverstart}
         source = require('tests.helpers.fake_process_source').new({
             [uv.os_getpid()] = { started = 'Thu Oct 22 05:00:00 2026' },
         })
@@ -40,6 +41,7 @@ describe('private editor RPC runtime ownership', function()
         end }
     end)
     after_each(function()
+        uv.fs_fsync,uv.fs_rename,vim.fn.serverstart=saved_io.fsync,saved_io.rename,saved_io.serverstart
         for _, child in ipairs(children) do child:stop() end
         for _, resource in ipairs(resources) do close(resource) end
         vim.fn.delete(root, 'rf')
@@ -328,5 +330,74 @@ describe('private editor RPC runtime ownership', function()
         assert.equals('ready',result.kind,vim.inspect(result));resources[#resources+1]=result.runtime
         assert.is_not_nil(uv.fs_lstat(directory))
         assert.is_not_nil(uv.fs_lstat(directory..'.original'))
+    end)
+
+    local function delayed_acquire()
+        source.hold=true
+        local result
+        runtime.acquire({parent=root..'/runtime',incarnation=string.rep('a',32),source=source},function(value) result=value end)
+        assert(vim.wait(arrival.MS,function() return #source.reads==1 end,10))
+        vim.defer_fn(function() source.release(1) end,800)
+        assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+        assert.equals('ready',result.kind,vim.inspect(result))
+        resources[#resources+1]=result.runtime
+        return result.runtime
+    end
+    for _,stage in ipairs({'reservation','publication'}) do
+        it('shares the acquisition deadline through first-listener '..stage..' durability',function()
+            local resource=delayed_acquire()
+            local own_path=resource.directory..'/s1'
+            local foreign=vim.fn.serverstart(root..'/foreign.sock')
+            local calls,started,delivered,effects_after_delivery=0,0,false,0
+            uv.fs_fsync=function(fd,callback)
+                calls=calls+1
+                if calls==(stage=='reservation' and 1 or 3) then
+                    return saved_io.fsync(fd,function(err,value)
+                        vim.defer_fn(function() delivered=true;callback(err,value) end,1500)
+                    end)
+                end
+                return saved_io.fsync(fd,callback)
+            end
+            uv.fs_rename=function(...)
+                if delivered then effects_after_delivery=effects_after_delivery+1 end
+                return saved_io.rename(...)
+            end
+            vim.fn.serverstart=function(path)
+                if path==own_path then started=started+1 end
+                if delivered then effects_after_delivery=effects_after_delivery+1 end
+                return saved_io.serverstart(path)
+            end
+            local result=listen(resource,'s1')
+            -- Restore before teardown even when the assertions below fail.
+            uv.fs_fsync,uv.fs_rename,vim.fn.serverstart=saved_io.fsync,saved_io.rename,saved_io.serverstart
+            local foreign_preserved=vim.tbl_contains(vim.fn.serverlist(),foreign)
+            vim.fn.serverstop(foreign)
+            assert.equals('unavailable',result.kind,vim.inspect(result))
+            assert.matches('deadline',result.error)
+            assert.is_true(delivered,'completion must join the delayed fs request')
+            assert.equals(0,effects_after_delivery,'expired publication started another effect')
+            assert.equals(stage=='reservation' and 0 or 1,started)
+            assert.is_nil(uv.fs_lstat(own_path))
+            assert.is_false(vim.tbl_contains(vim.fn.serverlist(),own_path))
+            assert.is_true(foreign_preserved)
+        end)
+    end
+    it('gives later listeners a fresh operation budget after the first durable publication',function()
+        local resource=delayed_acquire()
+        assert.equals('listening',listen(resource,'s1').kind)
+        local delayed=false
+        uv.fs_fsync=function(fd,callback)
+            if not delayed then
+                delayed=true
+                return saved_io.fsync(fd,function(err,value)
+                    vim.defer_fn(function() callback(err,value) end,1500)
+                end)
+            end
+            return saved_io.fsync(fd,callback)
+        end
+        local result=listen(resource,'s2')
+        uv.fs_fsync=saved_io.fsync
+        assert.equals('listening',result.kind,vim.inspect(result))
+        assert.is_not_nil(uv.fs_lstat(result.path))
     end)
 end)

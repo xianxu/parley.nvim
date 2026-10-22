@@ -6,11 +6,11 @@ local model = require('parley.remote_session_model')
 local registry = require('parley.document_registry')
 local runtime_source = require('parley.remote_runtime')
 local incarnation = (uv.random(16):gsub('.', function(byte) return ('%02x'):format(byte:byte()) end))
-local counter, runtime, startup, closing
+local counter, runtime, epoch, closing
 local attachment_count = 0
-local by_buffer, by_attach, attachments, slots, waiters, io_queue, close_waiters = {}, {}, {}, {}, {}, {}, {}
-local io_busy, closing_runtime = false, false
-local dispatch, maybe_close
+local by_buffer, by_attach, attachments, slots, waiting, io_queue, close_waiters = {}, {}, {}, {}, {}, {}, {}
+local io_busy = false
+local dispatch, maybe_close, get_runtime
 
 local function notify(record, message)
     if record.notified then return end
@@ -31,7 +31,23 @@ end
 local function retired(record)
     return record.retired or closing or by_buffer[record.buf] ~= record
 end
+-- A buffer's pure authority history can outlive its runtime consumer. Retired
+-- IO remains associated with that exact epoch until all cleanup has completed.
+local function release_consumer(record)
+    local owned = record.epoch
+    if not owned or record.released then return end
+    record.released = true
+    owned.live = owned.live - 1
+    if owned.live == 0 then
+        owned.draining = true
+        if owned.operation then owned.operation.cancel() end
+    end
+end
 local function prune(record)
+    if record.epoch and record.released and not record.allocating and record.pending == 0 and not record.stopping then
+        record.epoch.retained = record.epoch.retained - 1
+        record.epoch = nil
+    end
     if attachments[record] and record.retired and not record.allocating and record.pending == 0 and not record.stopping then
         attachments[record] = nil
         by_attach[record.attach] = nil
@@ -55,24 +71,38 @@ local function io(job)
     io_queue[#io_queue + 1] = job
     pump_io()
 end
-local function get_runtime(options, callback)
-    if runtime then callback({ kind = 'ready', runtime = runtime }); return end
-    waiters[#waiters + 1] = callback
-    if startup then return end
+get_runtime = function(record, options, callback)
+    if epoch and epoch.draining then
+        waiting[record] = { options = options, callback = callback }
+        -- A later explicit attach may retry exact cleanup once. There is no
+        -- automatic loop after a busy or uncertain close.
+        epoch.blocked = nil
+        maybe_close()
+        return
+    end
+    if not epoch then epoch = { live = 0, retained = 0, waiters = {} } end
+    local owned = epoch
+    record.epoch, record.released = owned, false
+    owned.live, owned.retained = owned.live + 1, owned.retained + 1
+    if owned.resource then callback({ kind = 'ready', runtime = owned.resource }); return end
+    owned.waiters[record] = callback
+    if owned.operation then return end
     options = vim.tbl_extend('force', {}, options or {}, { incarnation = incarnation })
-    startup = runtime_source.acquire(options, function(result)
-        startup = nil
-        if result.kind == 'ready' then runtime = result.runtime end
-        local callbacks = waiters; waiters = {}
-        for _, ready in ipairs(callbacks) do ready(result) end
+    owned.operation = runtime_source.acquire(options, function(result)
+        owned.operation = nil
+        if result.kind == 'ready' then owned.resource, runtime = result.runtime, result.runtime end
+        local callbacks = owned.waiters; owned.waiters = {}
+        for _, ready in pairs(callbacks) do ready(result) end
         maybe_close()
     end)
 end
+
 local function stop_listener(record)
     if record.stopping or not record.slot then return end
     record.stopping = true
+    local resource = record.epoch.resource
     io(function(done)
-        runtime.stop('s' .. record.slot, function(result)
+        resource.stop('s' .. record.slot, function(result)
             if result.kind == 'closed' then slots[record.slot] = nil end
             record.stopping = false
             done(result)
@@ -88,7 +118,10 @@ local function effects(record, list)
             notify(record, 'Remote view moved to another editor; reopen the file to take it back')
         elseif effect.kind == 'register' or effect.kind == 'unregister' then
             record.pending = record.pending + 1
-            registry.editor(effect.kind, effect.request, { attachment = record.attach, request = effect.witness }, function(result)
+            local request = { kind = effect.kind }
+            record.requests[request] = true
+            request.handle = registry.editor(effect.kind, effect.request, { attachment = record.attach, request = effect.witness }, function(result)
+                record.requests[request] = nil
                 record.pending = record.pending - 1
                 if effect.kind == 'register' then
                     dispatch(record, { type = 'reply', witness = effect.witness, result = result })
@@ -103,20 +136,44 @@ local function effects(record, list)
     end
 end
 dispatch = function(record, event)
-    if record.owner then effects(record, record.owner:dispatch(event)) end
+    if not record.owner then return end
+    effects(record, record.owner:dispatch(event))
+    local phase = record.owner:snapshot().phase
+    if phase == 'superseded' or phase == 'unavailable' or phase == 'retired' then release_consumer(record) end
+end
+local function resume_waiters(result)
+    local callbacks = waiting; waiting = {}
+    for record, waiter in pairs(callbacks) do
+        if retired(record) then waiter.callback({ kind = 'unavailable', error = 'attachment retired' })
+        elseif result then waiter.callback(result)
+        else get_runtime(record, waiter.options, waiter.callback) end
+    end
 end
 maybe_close = function()
-    if not closing or startup or io_busy or #io_queue > 0 or closing_runtime then return end
-    if attachment_count > 0 then return end
-    local function finished()
-        runtime, closing_runtime = nil, false
+    local owned = epoch
+    if owned and owned.draining and not owned.operation and owned.retained == 0
+        and not io_busy and #io_queue == 0 and not owned.closing and not owned.blocked then
+        owned.closing = true
+        local function finished(result)
+            owned.closing = false
+            if result.kind == 'closed' then
+                epoch, runtime, slots = nil, nil, {}
+                resume_waiters()
+            else
+                owned.blocked = true
+                resume_waiters({ kind = 'unavailable', error = result.error or 'runtime cleanup unconfirmed' })
+            end
+            maybe_close()
+        end
+        if owned.resource then owned.resource.close(finished)
+        else finished({ kind = 'closed' }) end
+        return
+    end
+    if closing and attachment_count == 0 and not io_busy and #io_queue == 0
+        and (not epoch or epoch.blocked) then
         local callbacks = close_waiters; close_waiters = {}
         for _, callback in ipairs(callbacks) do callback() end
     end
-    if runtime then
-        closing_runtime = true
-        runtime.close(finished)
-    else finished() end
 end
 
 --- Explicit confirmed-identity attachment; repeated lifecycle events reuse it.
@@ -143,12 +200,13 @@ function M.attach(buf, identity, callback, options)
     if not next_id then callback({ kind = 'unavailable', error = err }); return end
     counter = next_id
     local record = { buf = buf, attach = counter, pending = 0, allocating = true,
-        options = options, callback = callback, identity = vim.deepcopy(identity) }
+        options = options, callback = callback, identity = vim.deepcopy(identity), requests = {} }
     attachments[record], by_buffer[buf], by_attach[record.attach] = true, record, record
     attachment_count = attachment_count + 1
-    get_runtime(options.runtime, function(result)
+    get_runtime(record, options.runtime, function(result)
         if result.kind ~= 'ready' or retired(record) then
             record.allocating = false
+            release_consumer(record)
             report(record, { kind = 'unavailable', error = result.error or 'attachment retired' })
             if not retired(record) then notify(record, 'Remote view unavailable; reopen the file to retry') end
             prune(record); return
@@ -157,6 +215,7 @@ function M.attach(buf, identity, callback, options)
         for index = 1, 256 do if not slots[index] then slot = index; break end end
         if not slot then
             record.allocating = false
+            release_consumer(record)
             report(record, { kind = 'unavailable', error = 'private listener capacity reached' })
             prune(record); return
         end
@@ -180,6 +239,7 @@ function M.attach(buf, identity, callback, options)
                 else
                     -- A partial listen may have durable marker residue. Keep
                     -- its slot reserved until explicit runtime teardown.
+                    release_consumer(record)
                     report(record, listening)
                     if not retired(record) then notify(record, 'Remote view unavailable; reopen the file to retry') end
                 end
@@ -214,6 +274,15 @@ function M.detach(buf)
     local record = by_buffer[buf]
     if not record then return end
     by_buffer[buf], record.retired = nil, true
+    release_consumer(record)
+    for request in pairs(record.requests) do
+        if request.kind == 'register' then request.handle.cancel_unstarted() end
+    end
+    if waiting[record] then
+        waiting[record] = nil
+        record.allocating = false
+        report(record, { kind = 'unavailable', error = 'attachment retired' })
+    end
     dispatch(record, { type = 'detach' })
     if not record.owner and not record.allocating then report(record, { kind = 'unavailable', error = 'attachment retired' }) end
     prune(record)
@@ -226,7 +295,6 @@ function M.close(callback)
     local buffers = {}
     for buf in pairs(by_buffer) do buffers[#buffers + 1] = buf end
     for _, buf in ipairs(buffers) do M.detach(buf) end
-    if startup then startup.cancel() end
     maybe_close()
 end
 

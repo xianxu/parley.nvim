@@ -26,6 +26,15 @@ qualifies retries, displacement, stale cleanup and uncertain replies. Real
 producer conformance remains a separate requirement, with isolated namespaces
 and actual editor listeners.
 
+One runtime IO epoch counts consumers separately from records awaiting cleanup.
+The last consumer cancels and joins startup and unstarted publication; an admitted
+publication retains its observer for exact late-ack cleanup. After that epoch
+drains, its runtime closes automatically. A new attachment waits for that exact
+close before allocating fresh. Superseded or refused attachment history remains
+available without retaining a listener; uncertain publication keeps its listener.
+Cleanup failure retains ownership evidence and refuses remote availability;
+an explicit reopen may retry cleanup, with no automatic loop.
+
 `remote_runtime` serializes parent allocation and cleanup through the existing
 `document_lease` kernel flock. One private parent holds at most 256 process
 directories, including unknown residue. Startup reads bounded ownership markers
@@ -33,7 +42,9 @@ and one batch of PID/start-time evidence through `remote_process`; only positive
 death permits cleanup of exact owned sockets and an empty directory. With 256
 distinct marked PIDs, the own PID plus 255 others fill the inspection batch; any
 uninspected marker stays unknown. Inspection gets one second and startup two
-seconds; expiry leaves uncertain artifacts untouched and may refuse allocation.
+seconds from allocation through the first durable listener publication, without
+resetting between those steps. Later listeners have their own operation budget.
+Expiry leaves uncertain artifacts untouched and may refuse allocation.
 
 A runtime marker records directory/socket identities before listener publication.
 Cleanup revalidates the marker bytes and inode. Before `serverstop`, Parley checks

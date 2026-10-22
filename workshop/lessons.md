@@ -2,6 +2,9 @@
 
 ## 2026-10-22 (#405 — native listener ownership)
 
+- A resource's live consumers and pending cleanup are different counts. The last consumer must cancel queued intent and join abandoned startup; retain admitted effects until exact cleanup, then close the resource before admitting a new epoch.
+- A deadline covering multiple stages is one absolute deadline, passed across each stage. Separate correct per-stage timers can still violate the total bound; test delayed acquisition plus delayed durable publication together.
+- Correct the authoritative concept table when a module moves; a later revision explaining the new location does not repair a contradictory table.
 - A native close can also unlink a pathname. Probe replacement behavior, then revalidate the exact owned socket identity immediately before serverstop; uncertain or replaced paths must never be passed to it.
 - Test retirement at each async resource boundary, including after the kernel listener exists but before its durable marker is finished. Ending the resource lifetime and reporting the caller's completion are separate obligations.
 

@@ -76,6 +76,18 @@ Canonical modes/remote_session mapping passes144 cases on both0.12.5 and0.11.7, 
 
 TL77d91d23 explicitly approved continuing M1 on fake/native evidence while real acceptance waits: the shared isolated hold-open Couch bridge is a separate pair issue (pair:6 filing), not a new launcher in Parley and not part of pair#758. Readiness/teardown interface will be pinned with pair:6 before consumer integration. No fake result is real-producer evidence. Real acceptance moves to M2 once both prerequisites land; automatic attachment lifecycle remains M2. Next: durable checkpoint, push, recorded suite and M1 boundary review.
 
+### 2026-10-22 — M1 review R1, approved correction
+
+PR330 at2b4916d7. M1 review returned REWORK with BR-1 queued publication/orphan startup, BR-2 reset aggregate deadline, BR-3 stale Core concepts location, BR-4 retained final runtime and BR-5 missing README invocation. Measured M1 candidate actual2.78h; no waiver. Canceled only superseded recorded suite lease-2667035583 before admission; cancellation completed, no suite result claimed. TL23d2aca3 approves the cohesive runtime lifetime correction and red cases recorded in the plan. Pair:6 filed bridge pair#801 separately, dependent on pair#758. No M1 close or M2 implementation yet.
+
+### 2026-10-22 — R1 corrections verified
+
+BR-1/BR-4: runtime epoch tracks live consumers separately from retained cleanup. Last consumer cancels/joins startup immediately and calls the typed handle's cancel_unstarted for queued register work; admitted publication observers remain for exact late-ack cleanup. Drain automatically closes the exact runtime before a waiting new attachment allocates. Terminal superseded/permanently refused history remains without resources; unconfirmed publication retains its listener. Controlled red cases observed14pass/4fail/0errors, then owner20 cases pass both versions. A refusal fixture required explicit empty JSON objects rather than Lua's empty-array encoding.
+
+BR-2: one acquire deadline carries through first-listener marker durability; controlled800ms source plus1500ms fsync red cases observed22pass/2fail, then runtime24 cases pass both versions. Later listeners retain their operation budget. BR-3 authoritative concepts/integration inventory corrected, including the separate pure codec and runtime shell. BR-5 README names the runnable fake conformance and real prerequisites. Added the general runtime-lifetime/deadline lessons and mapped the current atlas behavior.
+
+Final canonical focused mapping153pass/0fail/0errors on0.12.5 and0.11.7, clean process censuses; make lint0warnings/0errors in834files. Logs parley-405-r1-focused-final.log and -final-0117.log, parley-405-r1-lint.log under TestScratch. Endpoint fake conformance and wrong-identity negative control pass both versions after the owner changes; existing registry fake conformance still passes (parley-405-editor-conformance-{preferred,0117}-r1.log and parley-405-registry-conformance-compat-r1.log). No real-producer claim. Next fresh pushed-head suite and M1 review R2.
+
 ## Revisions
 
 ### 2026-10-22 — producer prerequisite and outside-pane discovery

@@ -2,7 +2,7 @@ local uv = vim.uv or vim.loop
 local arrival = require('tests.helpers.arrival')
 
 describe('private editor attachment dispatcher', function()
-    local root, saved, frontend, buffers, notices, options, gates
+    local root, saved, frontend, buffers, notices, options, gates, releases
     local function identity(name)
         local file = root .. '/' .. name .. '.md'
         vim.fn.writefile({ name }, file)
@@ -34,8 +34,8 @@ describe('private editor attachment dispatcher', function()
     end
     before_each(function()
         local base = uv.fs_stat('/Volumes/TestScratch') and '/Volumes/TestScratch' or (vim.env.TMPDIR or uv.os_tmpdir())
-        root = assert(uv.fs_mkdtemp(base .. '/rs-XXXXXX')); buffers, notices, gates = {}, {}, {}
-        saved = { serverstart = vim.fn.serverstart, editor = require('parley.document_registry').editor,
+        root = assert(uv.fs_mkdtemp(base .. '/rs-XXXXXX')); buffers, notices, gates, releases = {}, {}, {}, {}
+        saved = { fs_rmdir = uv.fs_rmdir, serverstart = vim.fn.serverstart, editor = require('parley.document_registry').editor,
             path = vim.env.PATH, registry = vim.env.FAKE_COUCH_REGISTRY,
             mode = vim.env.FAKE_COUCH_EDITOR_MODE, notify = vim.notify }
         require('tests.helpers.fake_couch').write(root, root .. '/sent', root .. '/argv')
@@ -51,6 +51,8 @@ describe('private editor attachment dispatcher', function()
     end)
     after_each(function()
         for _, gate in ipairs(gates) do vim.fn.writefile({}, gate) end
+        for _, release in ipairs(releases) do release() end
+        uv.fs_rmdir = saved.fs_rmdir
         if frontend.close then
             local done; frontend.close(function() done = true end)
             assert.is_true(vim.wait(arrival.MS, function() return done end, 10))
@@ -118,7 +120,10 @@ describe('private editor attachment dispatcher', function()
         local buf, registration = identity('unavailable')
         vim.env.FAKE_COUCH_EDITOR_MODE = 'malformed'
         assert.equals('unavailable', attach(buf, registration).kind)
-        assert.equals('unconfirmed', frontend.snapshot(buf).phase)
+        local unconfirmed = frontend.snapshot(buf)
+        assert.equals('unconfirmed', unconfirmed.phase)
+        assert.equals('socket', uv.fs_lstat(unconfirmed.context.Socket).type)
+        assert.equals(1, vim.fn.filereadable(vim.fn.fnamemodify(unconfirmed.context.Socket, ':h') .. '/owner.json'))
         assert.is_true(vim.bo[buf].modifiable)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'local edit' })
         assert.same({ 'local edit' }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
@@ -303,11 +308,15 @@ describe('private editor attachment dispatcher', function()
         frontend.detach(buf)
         assert.is_nil(frontend.endpoint(query(old)))
         options.client = nil
-        assert.equals('confirmed', attach(buf, registration).kind)
+        local successor_calls, successor_result = 0
+        frontend.attach(buf, registration, function(value)
+            successor_calls = successor_calls + 1; successor_result = value
+        end, options)
+        vim.fn.writefile({}, gate)
+        assert.is_true(vim.wait(arrival.MS, function() return calls == 1 and successor_calls == 1 end, 10))
+        assert.equals('confirmed', successor_result.kind)
         local successor = frontend.snapshot(buf)
         assert.is_not.equals(old.AttachID, successor.context.AttachID)
-        vim.fn.writefile({}, gate)
-        assert.is_true(vim.wait(arrival.MS, function() return calls == 1 end, 10))
         assert.equals('confirmed', old_result.kind)
         assert.is_true(vim.wait(arrival.MS, function() return cleaned == 1 end, 10))
         frontend.superseded(notice(old))
@@ -318,6 +327,158 @@ describe('private editor attachment dispatcher', function()
         assert.is_table(frontend.endpoint(query(successor.context)))
         assert.equals(1, calls)
         assert_local_edit(buf)
+    end)
+
+    it('closes the last superseded runtime without forgetting terminal attachment history', function()
+        local buf, registration = identity('terminal-superseded')
+        attach(buf, registration)
+        local old = frontend.snapshot(buf)
+        local directory = vim.fn.fnamemodify(old.context.Socket, ':h')
+        frontend.superseded(notice(old.binding))
+        assert.is_true(vim.wait(arrival.MS, function() return not uv.fs_lstat(directory) end, 10))
+        assert.equals('superseded', frontend.snapshot(buf).phase)
+        assert.is_nil(frontend.endpoint(query(old.context)))
+        attach(buf, registration)
+        local duplicate = frontend.snapshot(buf)
+        assert.equals('superseded', duplicate.phase)
+        assert.equals(old.context.AttachID, duplicate.context.AttachID)
+        local registrations = 0
+        for _, operation in ipairs(vim.fn.readfile(root .. '/registry.json.editor-launches')) do
+            if operation == 'register' then registrations = registrations + 1 end
+        end
+        assert.equals(1, registrations)
+        assert.is_nil(uv.fs_lstat(directory))
+    end)
+
+    it('closes permanently refused publication resources while preserving refusal history', function()
+        local buf, registration = identity('terminal-refused')
+        vim.fn.writefile({ vim.json.encode({ paths = vim.empty_dict(), moves = vim.empty_dict() }) }, root .. '/registry.json')
+        local result = attach(buf, registration)
+        assert.equals('refused', result.kind)
+        assert.equals('not-registered', result.code)
+        local old = frontend.snapshot(buf)
+        assert.equals('unavailable', old.phase)
+        local directory = vim.fn.fnamemodify(old.context.Socket, ':h')
+        assert.is_true(vim.wait(arrival.MS, function() return not uv.fs_lstat(directory) end, 10))
+        assert.equals('refused', attach(buf, registration).kind)
+        assert.equals(old.context.AttachID, frontend.snapshot(buf).context.AttachID)
+        assert.equals('unavailable', frontend.snapshot(buf).phase)
+        local registrations = 0
+        for _, operation in ipairs(vim.fn.readfile(root .. '/registry.json.editor-launches')) do
+            if operation == 'register' then registrations = registrations + 1 end
+        end
+        assert.equals(1, registrations)
+    end)
+
+    it('cancels its unstarted registry publication when four live children hold every transport slot', function()
+        local buf, registration = identity('queued-publication')
+        edit_locally(buf)
+        local registry = require('parley.document_registry')
+        local blockers, finished = {}, 0
+        for _ = 1, 4 do
+            blockers[#blockers + 1] = registry.editor('lookup', { Namespace = root, DocumentID = registration.ID }, {},
+                function() finished = finished + 1 end,
+                { env = { FAKE_COUCH_EDITOR_MODE = 'delay', FAKE_COUCH_EDITOR_DELAY = '10' } })
+        end
+        local launches = root .. '/registry.json.editor-launches'
+        assert.is_true(vim.wait(arrival.MS, function()
+            return vim.fn.filereadable(launches) == 1 and #vim.fn.readfile(launches) == 4
+        end, 10))
+        local calls = 0
+        frontend.attach(buf, registration, function() calls = calls + 1 end, options)
+        assert.is_true(vim.wait(arrival.MS, function()
+            local state = frontend.snapshot(buf)
+            return state and state.phase == 'publishing'
+        end, 10))
+        frontend.detach(buf)
+        for _, blocker in ipairs(blockers) do blocker.cancel() end
+        assert.is_true(vim.wait(arrival.MS, function() return finished == 4 and calls == 1 end, 10))
+        local registrations = 0
+        for _, operation in ipairs(vim.fn.readfile(launches)) do
+            if operation == 'register' then registrations = registrations + 1 end
+        end
+        assert.equals(0, registrations)
+        assert.is_nil(frontend.snapshot(buf))
+        assert_local_edit(buf)
+    end)
+
+    it('cancels and joins the last held startup directly on detach without releasing its source', function()
+        local buf, registration = identity('last-startup-consumer')
+        edit_locally(buf)
+        local source = options.runtime.source
+        source.hold = true
+        local calls = 0
+        frontend.attach(buf, registration, function() calls = calls + 1 end, options)
+        assert.is_true(vim.wait(arrival.MS, function() return #source.pending == 1 end, 10))
+        frontend.detach(buf)
+        -- Cancellation must originate from departure, before the independent
+        -- process-inspection deadline could eventually cancel the held source.
+        assert.is_true(source.pending[1].canceled)
+        assert.is_true(vim.wait(arrival.MS, function() return calls == 1 end, 10))
+        assert.is_false(source.pending[1].delivered == true)
+        source.release(1)
+        assert.equals(1, calls)
+        assert.equals(0, #vim.fn.glob(root .. '/runtime/e-*', false, true))
+        assert.equals(0, vim.fn.filereadable(root .. '/registry.json.editor-argv'))
+        assert_local_edit(buf)
+    end)
+
+    it('removes the final detached listener marker and directory without closing the editor', function()
+        local buf, registration = identity('final-runtime-consumer')
+        attach(buf, registration)
+        edit_locally(buf)
+        local context = frontend.snapshot(buf).context
+        local directory = vim.fn.fnamemodify(context.Socket, ':h')
+        assert.equals(1, vim.fn.filereadable(directory .. '/owner.json'))
+        frontend.detach(buf)
+        assert.is_true(vim.wait(arrival.MS, function() return not uv.fs_lstat(directory) end, 10))
+        assert.is_nil(uv.fs_lstat(context.Socket))
+        assert.is_nil(uv.fs_lstat(directory .. '/owner.json'))
+        assert.is_nil(frontend.endpoint(query(context)))
+        assert_local_edit(buf)
+    end)
+
+    it('waits for the exact old runtime close before allocating for an attachment arriving during drain', function()
+        local first, one = identity('draining-runtime')
+        local second, two = identity('fresh-runtime')
+        attach(first, one)
+        local old = frontend.snapshot(first).context
+        local old_directory = vim.fn.fnamemodify(old.Socket, ':h')
+        local original_rmdir = uv.fs_rmdir
+        local held, release_close = false
+        uv.fs_rmdir = function(path, callback)
+            if path == old_directory and type(callback) == 'function' and not held then
+                return original_rmdir(path, function(err, result)
+                    held = true
+                    local released = false
+                    release_close = function()
+                        if released then return end
+                        released = true
+                        callback(err, result)
+                    end
+                    releases[#releases + 1] = release_close
+                end)
+            end
+            return original_rmdir(path, callback)
+        end
+        frontend.detach(first)
+        assert.is_true(vim.wait(arrival.MS, function() return held end, 10))
+        assert.is_nil(uv.fs_lstat(old_directory))
+        local calls, result = 0
+        frontend.attach(second, two, function(value) calls = calls + 1; result = value end, options)
+        assert.equals(0, calls)
+        assert.is_nil(frontend.snapshot(second))
+        assert.equals(1, #options.runtime.source.reads)
+        release_close()
+        assert.is_true(vim.wait(arrival.MS, function() return calls == 1 end, 10))
+        assert.equals('confirmed', result.kind)
+        local fresh = frontend.snapshot(second)
+        assert.equals('active', fresh.phase)
+        assert.is_not.equals(old_directory, vim.fn.fnamemodify(fresh.context.Socket, ':h'))
+        assert.equals(2, #options.runtime.source.reads)
+        assert.is_table(frontend.endpoint(query(fresh.context)))
+        assert.is_nil(frontend.endpoint(query(old)))
+        assert.equals('socket', uv.fs_lstat(fresh.context.Socket).type)
     end)
 
     for _, count in ipairs({ 8, 16 }) do
