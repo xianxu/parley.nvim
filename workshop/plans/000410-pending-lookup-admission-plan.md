@@ -24,7 +24,7 @@ Recommended: carry one immutable absolute deadline through an ephemeral insert s
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `remaining_ms(deadline_ms, now_ms)` | `lua/parley/couch.lua` | new |
+| `remaining_ms` | `lua/parley/couch.lua` | new |
 
 `remaining_ms` is arithmetic only: `math.max(0, math.floor(deadline_ms - now_ms))`. It takes clock readings as data and cannot refresh a deadline. Test directly in `tests/unit/couch_spec.lua`: start, partially consumed, exact expiry, overrun, fractional remainder. Keep it beside the existing timeout owner rather than introducing a new module for arithmetic (ARCH-DRY/PURE).
 
@@ -34,11 +34,12 @@ Recommended: carry one immutable absolute deadline through an ephemeral insert s
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `M.attach` / insert-entry callback | `lua/parley/agentic_document.lua` | modified | native InsertEnter, exact active lookup, bounded event-loop wait |
+| `attach` | `lua/parley/agentic_document.lua` | modified | native InsertEnter, exact active lookup, bounded event-loop wait |
 | `adopt` | `lua/parley/agentic_document.lua` | modified | registration adoption and session-sync handoff |
-| `M.attach`, `M.acquire_observed`, `dispatch_admission` | `lua/parley/session_sync.lua` | modified | existing admission owner and nested late attachment |
-| `M.finish_input_scope` | `lua/parley/session_sync.lua` | new | exact-scope cleanup after native input wait |
-| `M.operator_lock` | `lua/parley/couch.lua` | modified | synchronous operator acquire process and wait |
+| `attach` | `lua/parley/session_sync.lua` | modified | existing admission owner and nested late attachment |
+| `acquire_observed` | `lua/parley/session_sync.lua` | modified | observed edit handoff into existing admission dispatcher |
+| `finish_input_scope` | `lua/parley/session_sync.lua` | new | exact-scope cleanup after native input wait |
+| `operator_lock` | `lua/parley/couch.lua` | modified | synchronous operator acquire process and wait |
 | stateful registry/operator fixtures | `tests/helpers/fake_couch.lua`, `tests/fixtures/fake_couch_registry.py`, `tests/fixtures/fake_couch_operator.py` | modified as needed | controlled request completion and persisted registration/lock state |
 
 Extend the internal attachment/observed-acquire handoff with an optional admission scope, preserving current callers. `M.operator_lock(verb, identity, token, deadline_ms)` defaults to its existing per-call 500 ms behavior when no enclosing scope exists. Release remains unchanged. No new producer protocol is required.
@@ -115,7 +116,7 @@ Files: native/integration tests above, `tests/unit/operator_admission_spec.lua` 
 
 ## Approval checkpoint
 
-Planning only. Send this committed plan to ops:0 and wait for approval before `sdlc change-code` or product/test implementation. The explicit dispatch asks for plan-before-code; no quick-flow self-approval substitutes for that checkpoint.
+TL approved via a1825097 before change-code and implementation. Recorded suite and SDLC review precede the separately authorized disposable operator-profile live check; ask TL before any :0 stage and preserve #411's stage ownership.
 
 ## Revisions
 
@@ -126,3 +127,9 @@ TL approval a1825097 accepted this design before implementation. The quick-flow 
 Native late attachment reports mode `n` during InsertEnter, so the exact live scope explicitly carries insert intent into attachment. Scope cleanup has its own small integration function, `M.finish_input_scope`, checking exact reference identity. The scope's attempted/result guard represents a single synchronous call; no additional history model or user-visible state was introduced.
 
 The timeout-only native input wait overran to the registry timeout (measured 14889 ms). An explicit monotonic deadline predicate, within the approved absolute-deadline mechanism, restored the bound (measured 500.25 ms) while leaving discovery outstanding. Focused native cases now cover confirmed freshness, bounded pending fallback and late saved-edit reconciliation, nested residual acquisition, held/invalid refusal, absence and stale detach/rename. The full native file and broader checks remain required. Test helpers use actual S1 buffer IDs; unlike session-sync, S1 does not normalize buffer 0.
+
+### 2026-10-22 — late autosaved baseline and architecture inventory
+
+Preferred native 153/0/0; operator 0.11.7 exposed late attachment acquiring a saved edited snapshot before the existing observed-edit handoff. Adoption now supplies observed edits through attach's existing observed argument before its automatic insert acquisition; the private owner and failure policy are unchanged. This directly fulfills the existing late-reconciliation acceptance criterion. Architecture checks require individual public-symbol table rows; normalized those names and retained direct synchronous spawn/wait expression for the existing spawn census.
+
+Both-runtime focused corrections pass 80/0/0, including the late saved-baseline cases, 4/8-entry counters and affected architecture guards. Broader map: 840 pass with only the three subsequently corrected inventory/classification failures. Isolated real/fake conformance and final lint pass. Independent #408 native o-retry timing is filed as #412, per TL; it is not a change to #410's scope or lock policy.

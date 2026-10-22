@@ -291,11 +291,14 @@ local function adopt(s, registration, witness)
     local scope = s.input_scope
     if scope and (scope.closed or scope.incarnation ~= s.incarnation
         or not witness or not vim.deep_equal(scope.witness, witness)) then scope = nil end
-    ss.attach(s.buf, registration, nil, nil, scope)
-    if feedback then ss.set_submission_feedback(s.buf, feedback.label, feedback.is_error) end
+    local observed
     if s.outstanding or vim.bo[s.buf].modified then
-        ss.acquire_observed(s.buf, { baseline = s.baseline or s.content, loaded = s.loaded, outstanding = true }, scope)
+        observed = { baseline = s.baseline or s.content, loaded = s.loaded, outstanding = true }
     end
+    -- Supply the pre-edit baseline before attach can acquire an already-active
+    -- insert turn; an auto-save must not make edited text the clean baseline.
+    ss.attach(s.buf, registration, observed, nil, scope)
+    if feedback then ss.set_submission_feedback(s.buf, feedback.label, feedback.is_error) end
     s.outstanding, s.baseline = false, nil
     cache(s, registration)
 end

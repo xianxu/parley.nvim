@@ -118,10 +118,9 @@ M.operator_lock = function(verb, identity, token, deadline_ms)
 	local argv = { "couch", "--session-sync", "operator-" .. verb, identity.File,
 		"--id", identity.ID, "--turn", token, "--json" }
 	local ok, result = pcall(function()
-		local child = vim.system(argv, { text = true, timeout = timeout })
 		-- Spawning may consume the last of an enclosing admission's budget.
 		-- Native wait(0) kills the child but may precede its exit delivery.
-		local waited = child:wait(budget())
+		local waited = vim.system(argv, { text = true, timeout = timeout }):wait(budget())
 		return waited or (deadline_ms and { code = 124 } or nil)
 	end)
 	if not ok then return { kind = "refused", error = tostring(result) } end

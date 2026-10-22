@@ -42,7 +42,7 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 ## Plan
 
 - [x] Review the [shared-deadline plan](../plans/000410-pending-lookup-admission-plan.md) with the TL before code.
-- [ ] Native red/green pending-lookup ordering, exact incarnation/witness scope, and residual acquisition deadline through late attachment.
+- [x] Native red/green pending-lookup ordering, exact incarnation/witness scope, and residual acquisition deadline through late attachment.
 - [ ] Both-runtime regressions, counted 4/8-entry costs, disposable Couch conformance, indexed docs, recorded suite and TL-directed live check; SDLC close owns fresh-context review.
 
 ## Log
@@ -60,3 +60,13 @@ Startup refreshed inherited tooling and produced an unrelated `.github/workflows
 Verified submitted TL approval a1825097; change-code passed quick flow. Couch deadline seam delegated as bounded work: red 20 pass/5 expected fail/0 errors, green 25 pass/0 fail/0 errors; logs `/Volumes/TestScratch/parley-410-couch-2qky079j/`. Native initial red 142 pass/3 expected fail/0 errors, clean process census (`/tmp/parley-410-native-red.log`). The first native implementation exposed Normal-mode reporting during InsertEnter and a timeout-only wait overrun to 14889 ms. Explicit scope insert intent and a monotonic predicate restore confirmed first-edit freshness and a measured 500.25 ms fallback. Focused diagnostic snapshot: 11 pass/0 fail/0 errors, clean census (`/tmp/parley-410-focus-deadline.log`); corrected test use of actual S1 buffer numbers. No operator history policy was changed.
 
 Current full native run `/tmp/parley-410-native-final.log` includes new 4/8-entry process/read counters; both count cases have passed, run still active. No recorded suite, PR or stage yet. Next: finish native verification, operator-runtime and mapped/architecture/lint checks, disposable conformance, then push and recorded suite/live acceptance through TL. Plan Revision records the native findings.
+
+### 2026-10-22 — corrections verified on both runtimes; suite next
+
+Preferred full native file completed 153/0/0. Operator 0.11.7 full native run was 151/2/0: one in-scope late-autosaved baseline defect and one independent #408 o-retry refusal assertion. Adoption now passes the observed baseline into attach before automatic insert acquisition. A new saved-normal-edit-before-insert case also pins the original baseline. Existing operator_admission transitions are unchanged.
+
+The broad map completed 58 files, 840 passing cases, three architecture failures: two plan-table inventories and one synchronous spawn classification. Corrected individual public-symbol rows and preserved the direct synchronous spawn/wait expression. Final focused corrections on EACH runtime pass 80 cases, zero failures/errors (`/tmp/parley-410-corrections-preferred.log`, `/tmp/parley-410-corrections-operator.log`), including new native cases, residual process unit tests and affected guards. All other broad checks passed. Final lint: zero warnings/errors in 822 files. Isolated real/fake registry/operator conformance and corrupted-fake negative control pass (`/tmp/parley-410-conformance-real.log`, `-fake.log`).
+
+TL 97e1636a instructed filing the unrelated retry case separately and not blocking #410 on it; filed unclaimed #412 with the failure, isolated 200 ms delayed-producer pass, command durations and explicitly missing failure-time load. Current sampled load was 20.35/33.58/39.16, not a retrospective failure measurement. Diagnostic assertion now records native mode/notifications on recurrence; oracle unchanged. Typed Lua registry support is ariadne#556. Only this exact failure has TL authorization for one evidenced recorded-suite rerun.
+
+PR #333 exists. TL 828e035c authorized a disposable copied operator-profile live check only AFTER review and suite pass. Any :0 stage must wait for #411's operator stage to clear and requires another TL ask before staging. No stage held. Next: commit/push corrections, recorded suite on that exact head, SDLC close review, then authorized live acceptance. Do not restart while the recorded check is queued/running.

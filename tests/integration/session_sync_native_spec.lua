@@ -240,6 +240,16 @@ describe("session-sync native edits", function()
         keys("<Esc>")
     end)
 
+    it("pending attachment keeps autosaved work from before insert intent (#410)",function()
+        pending_lookup(50)
+        exec("vim.api.nvim_buf_set_lines(0,7,8,false,{'saved normal edit'});vim.cmd('silent write')")
+        keys("iX<C-h><Esc>")
+        wait_for("return _G.before_first_char ~= nil and vim.fn.mode()=='n'")
+        assert.equals("saved normal edit",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        assert.equals(1,exec("return acquire_calls"))
+        assert.is_true(exists(),"attachment replaced the original saved-edit baseline")
+    end)
+
     for _, fault in ipairs({"held","invalid"}) do
         it("pending lookup keeps "..fault.." acquisition refusal before input (#410)",function()
             pending_lookup(50)
@@ -561,7 +571,7 @@ describe("session-sync native edits", function()
             vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
         ]])
         keys("I");wait_for("return vim.fn.mode()=='i'")
-        assert.is_false(exec("return vim.bo.modifiable"))
+        assert.is_false(exec("return vim.bo.modifiable"),vim.inspect(exec("return {mode=vim.fn.mode(),notifications=notifications}")))
         keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
     end
     local function settle_retry_input(value)

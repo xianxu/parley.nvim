@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-10-22 (#410 — one native admission budget)
+
+- Native InsertEnter can still report Normal mode during its callbacks. Carry the exact entry's insert intent through asynchronous adoption rather than infer it again from mode; test queued first input across the callback boundary.
+- Check an absolute monotonic deadline in a native event-loop wait's predicate as well as its timeout argument. A timeout-only pending-lookup wait reached the 15-second registry deadline; the explicit predicate restored the measured 500 ms input budget.
+- Supply outstanding edit observations before an attachment can automatically acquire an already-active insert turn. Auto-saved modified=false text is not its original baseline; exercise this ordering on every supported Neovim runtime.
+
 ## 2026-10-16 (#353 — displayed ancestry and native history)
 
 - A displayed trail and Back entries must commit together in the actual landing window, including reused splits. Reconstruct through one pure transition; changing only the label can send Back into an unrelated file.
