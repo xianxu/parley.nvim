@@ -1,6 +1,6 @@
 ---
 id: 000412
-status: working
+status: codecomplete
 created: 2026-10-22
 updated: 2026-10-22
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.18
+tracker:
+    version: 1
+    completion:
+        token: close-6b88edabc1c7
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 823e00427984579672757290ff6eefdf153be628
+        evidence_commit: 43aba7227b8ed7b217cc1410aa886382092ef3e0
 ---
 
 # Investigate native o-retry refusal flake on Neovim 0.11
