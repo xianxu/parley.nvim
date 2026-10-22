@@ -253,6 +253,13 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+disputes:
+    - id: BR-1
+      rationale: The remaining round-2 instances require HTML rendering and character-reference decoding. Hub delivery 8887bf7d-ec9d-40df-8c27-89b898c13b51 explicitly narrows the approved contract to Markdown ATX headings with inline Markdown formatting and excludes HTML/entity decoding; Spec, plan Revisions, README and atlas record that scope. Unsupported headings now define no anchor and use the existing file-top notice.
+      evidence: 'make -k test-spec with temporary MAP_FILE selecting tests/unit/markdown_heading_spec.lua: RED /tmp/parley407-narrow-red.log fails the unsupported-HTML assertion; GREEN /tmp/parley407-narrow-green.log passes 15/15, including quoted HTML, decimal/hex/named entity rejection, protected code literals, normalized Markdown duplicates and bounded malformed-angle scans. Native fallback cases are included for the next mapped run; original Markdown normalization remains tested.'
+      after: 2
+      timestamp: "2026-10-22T00:05:26Z"
+      by: Xian Xu on Xian’s MacBook Pro at parley.nvim:2 (/Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim)
 ---
 
 # Gate ledger — parley.nvim#407 (boundary-review)
@@ -283,6 +290,15 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - **BR-4** [Critical] `navigation-item-boundaries` (kind: defect) Bullet navigation still absorbs links after outside Markdown blocks
   lua/parley/entity_range.lua:425-430 uses the editing dialect's column-zero, level-1–3 heading predicate and otherwise requires a preceding blank. For {"- Chosen prose", "#### Outside", "[outside](outside.md)"}, navigation_range returns bullet rows 1–3 and reference_candidates.collect returns outside.md as its sole candidate. Empty ATX headings, one-space-indented outside headings, thematic breaks and block quotes also reproduce containment failures. A sweep of three bullet markers, six heading levels, zero/one-space indentation and empty/nonempty headings fails 63/72 cases. This is the 2nd finding in family `navigation-item-boundaries`. Earlier rounds fixed instances. Do NOT fix this instance alone: state and enforce the rule that an outside block opener ends the item, enumerate the supported block classes and indentation ownership, and sweep them with range and mapped negative tests. Reuse navigation block classification without changing editing textobjects. ARCH-PURPOSE, ARCH-DRY.
+
+## Disputes
+
+Findings the implementer declined (`sdlc finding dispute`), each answered by the
+next review round.
+
+- **BR-1** — after round 2 (2026-10-22T00:05:26Z, Xian Xu on Xian’s MacBook Pro at parley.nvim:2 (/Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim))
+  rationale: The remaining round-2 instances require HTML rendering and character-reference decoding. Hub delivery 8887bf7d-ec9d-40df-8c27-89b898c13b51 explicitly narrows the approved contract to Markdown ATX headings with inline Markdown formatting and excludes HTML/entity decoding; Spec, plan Revisions, README and atlas record that scope. Unsupported headings now define no anchor and use the existing file-top notice.
+  evidence: make -k test-spec with temporary MAP_FILE selecting tests/unit/markdown_heading_spec.lua: RED /tmp/parley407-narrow-red.log fails the unsupported-HTML assertion; GREEN /tmp/parley407-narrow-green.log passes 15/15, including quoted HTML, decimal/hex/named entity rejection, protected code literals, normalized Markdown duplicates and bounded malformed-angle scans. Native fallback cases are included for the next mapped run; original Markdown normalization remains tested.
 
 ## Open findings
 
