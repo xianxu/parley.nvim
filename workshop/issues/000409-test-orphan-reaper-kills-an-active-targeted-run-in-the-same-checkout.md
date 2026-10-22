@@ -1,13 +1,13 @@
 ---
 id: 000409
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-21
 updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'ef1f6596c3391a405cbd2c035a6eea062ca19731' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '5a3249cdce130c975c073b82d6aff90bad5a29c3' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T11:20:56-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.63
 ---
 
 # Test orphan reaper kills an active targeted run in the same checkout
