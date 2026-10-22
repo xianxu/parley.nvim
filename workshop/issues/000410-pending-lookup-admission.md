@@ -48,7 +48,7 @@ Operator-approved retirement revision (Couch 8f18c995): S1 owns admission from f
 
 - [x] Agree the active [RETIRE plan](../plans/000410-pending-lookup-admission-plan.md), especially old-lock/journal recovery, with the TL; clear fresh plan-quality before code.
 - [x] Replace the superseded handoff/deferred-write mechanism with S1-first ownership, one admission route and the not-protected presentation; prove retirement and compatibility through red/green tests.
-- [ ] Verify both runtimes, full mapped regressions, counts/deadlines, guards, lint and conformance; recorded suite, fresh close review and authorized live acceptance remain required before landing.
+- [x] Verify both runtimes, full mapped regressions, counts/deadlines, guards, lint and conformance; recorded suite, fresh close review and authorized live acceptance remain required before landing.
 
 ## Prior estimate (superseded by retirement)
 
@@ -179,3 +179,9 @@ First-submit diagnosis captured the raw failed producer reply: the fixture seria
 New-move old/unknown protection tests first failed 0/2; the retirement-band cleanup regression first failed while the ten existing lifetime tests passed. The existing finalization_lock reader now also supplies the new-move check: only ENOENT proves absence, old/foreign/unreadable protection cannot mint a fresh move; validated restore remains separate. A detached S1 renderer clears before header projection so a stale typed warning cannot survive retirement. These fixes implement the agreed rule; no new authority or recovery path.
 
 Operator 0.11.7 full mapping is now running serially in this checkout (/tmp/parley-410-retire-operator-mapped.log); its outcome is NOT yet known. Conformance, fresh recorded suite and boundary review remain required. The copied actual-profile fixture is statically updated for S1-first normal file opening, with exact not-protected warning, no session-sync controller/lock before adoption and original late-save baseline checks; it remains UNRUN. Next: publish this coherent head and queue its isolated recorded suite, finish operator/conformance verification, then fresh close review. Live profile only after review and suite pass; :0 still requires hub permission.
+
+### 2026-10-22 — targeted retirement acceptance complete; recorded suite queued
+
+Operator Neovim 0.11.7 full session-sync mapping passes 854/0/0, including all 165 native cases, standalone legacy, old-lock explicit finish/refusal, first registration, registered native/Parley moves and v1/v2 journal recovery. Operator extra single-source sweeps/Couch mapping passes 53/0/0. Preferred full mapping's four retired expectations were corrected and all passed in the recorded 64/0/0 repair focus; no unclassified failures or #412 reruns occurred. Real/fake registry conformance plus deliberately corrupted fake negative control pass; scratch stores removed. Logs /tmp/parley-410-retire-{operator-mapped,operator-extra,conformance}.log. Both-runtime required targeted verification is complete.
+
+Published coherent code head ff71df2b2f2fc69b57d3ccca4001de3d7dd47825 to PR333. Recorded isolated suite lease-3671644753, attempt89936e0b5bf67bf6d2774e7657dca8f1, is queued on that exact pushed head (last observed normal FIFO position15). No suite pass is claimed. The following docs-only evidence commit does not change tested code. Next: fresh close review during the allowed queue overlap. Retain this own queued run; no continuation/restart/cancellation while it waits. Copied-profile acceptance remains UNRUN until fresh review and recorded final-code suite pass; no :0 stage held.
