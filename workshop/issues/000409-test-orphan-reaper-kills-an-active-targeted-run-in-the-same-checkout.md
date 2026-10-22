@@ -1,13 +1,21 @@
 ---
 id: 000409
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '89c423affcee81bbaacb3483bbe71a16afa6efcb' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'ef1f6596c3391a405cbd2c035a6eea062ca19731' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-22T11:20:56-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Test orphan reaper kills an active targeted run in the same checkout
@@ -28,8 +36,46 @@ Reproduce with one deliberately gated targeted spec running, then start another 
 
 ## Plan
 
-- [ ]
+- [ ] Add a controlled-process regression: gate the first target after entry, start a second target with a different scratch root, and prove the second cannot reach preparation/census until the first finishes. Red-check against the current harness. Exercise before and after census, nested make, cancellation, and a separate-checkout control.
+- [ ] Add one Python checkout-lease wrapper using stdlib `fcntl.flock`, an inherited descriptor, and command argv. Route every harness target and standalone live reaper through that owner; acquire before scratch changes or census, retain through final checks. Preserve exit status and native signal behavior.
+- [ ] Extend existing recorded-table and native reaper tests for dead-owner leftovers, own leaks, unrelated path mentions, and unchanged cleanup identity checks. Add a Makefile coverage guard for every harness entry; map new tests into infra/test_harness.
+- [ ] Update TOOLING and atlas ownership/recovery guidance; run direct Python regressions, mapped infra/test_harness and architecture guards, then the recorded full suite before close. Let measured added code decide quick/full flow.
 
 ## Log
 
 Filed unclaimed as an independent harness defect discovered during #407 close rework. The #407 worker serializes its remaining targeted checks; its previous recorded full suite was green and this targeted interruption is infrastructure evidence only.
+
+### 2026-10-22 — claim and investigation
+
+- Claimed by parley.nvim:3 and entered planning on its own branch from main. No implementation yet; dispatch requested claim and plan.
+- Signal-free process-table reproduction: first run make=100, shell=101, healthy harness=102; second census=201 under make=200. Current ancestry excludes [1, 200, 201], while select_orphans selects healthy pid 102. The grace period proves persistence, not abandonment.
+- TOOLING explicitly prohibits overlapping runs, including distinct TEST_ENV_ROOT values, because the census is checkout-wide. Full runs also delete shared scratch before tests. Protect the whole run, not only the reaper's signal loop.
+- start-plan refreshed the ariadne dependency and generated an unrelated tracked merge-check workflow diff (quiet grep pipefail correction). Preserved separately in the named stash `pre-409 weave refresh generated merge-check workflow`; it is not part of this issue and must not be committed with it. Retrying start-plan succeeded.
+- Proposed lease design below awaits TL approval: it adds an ownership mechanism, so tl-worker's design-approval rule applies even if the implementation fits quick flow.
+
+## Revisions
+
+### 2026-10-22 — proposed implementation design
+
+Reason: investigation confirms that process persistence and checkout identity cannot distinguish an active sibling run. Delta: choose the existing Spec's serialization alternative; keep the original acceptance criteria.
+
+One kernel-held exclusive lease per physical checkout spans scratch preparation, before census, target execution and after census. A small Python command wrapper runs the command with an inherited locked descriptor; recursive make and reaper calls reuse only a descriptor validated against the same lock inode, never an environment boolean or a PID alone. The lock file is a fixed ignored file in the checkout, outside test-clean-env's removable leaves. Never unlink a live or idle lock pathname: stable inode identity prevents split locks. Its fixed one-file footprint ends with checkout removal (ARCH-FUNERAL).
+
+Makefile entry coverage includes test (before test-clean-env), test-unit, test-integration, test-compat, test-spec, test-changed, perf, perf-finder, goldens, fixtures, check-couch-actors-live, and standalone test-clean-env. Sweep PREP_TEST_ENV/ORPHANS consumers to catch any additional entries. A wrapper dispatches to the protected recipe; nested make must reuse the inherited lease without releasing it between targets. Standalone live reaper calls take the same lease; recorded --ps-from mode remains signal-free. The existing machine-wide full-suite admission remains separate and unchanged. No changes to inherited Makefile.workflow, local gates, or CI configuration (ARCH-DRY, ARCH-PURPOSE).
+
+Alternatives considered: exempt live ancestry from census (more process-identity heuristics and still races scratch deletion); keep the documentation warning (does not enforce the invariant). The shared full-suite helper is unsuitable for this lock: it is machine-wide admission, only wraps full suites, and is unavailable in standalone contributor archives. Use the same standard kernel primitive without copying its fleet queue machinery.
+
+Actions: run, wait, cancel, retry.
+
+| Internal state / failure mode | Visible state | Recovery action | Possible loss |
+|---|---|---|---|
+| Another command owns checkout lease | waiting; no scratch or census effects yet | wait or cancel waiting command | none |
+| Lease acquired, command running | normal test output | wait or cancel run | interrupted test progress |
+| Recursive make / reaper inherits valid lease | normal nested command output | wait | none |
+| Invalid inherited descriptor / lock IO failure | explicit failure before destructive work | retry after correcting the reported input | none |
+| Owner interrupted while child remains | checkout stays owned until protected command ends | wait for its shutdown, then retry | interrupted run; survivors checked next run |
+| All holders exit, leftovers remain | next run acquires lease and performs existing before census | retry run | abandoned test processes are reaped |
+
+Cancellation must not return a free lease while its protected command remains active. Test parent/wrapper death and nested-child exit ordering using disposable subprocesses; do not signal the live fleet. Standalone old commands started before this change are outside the new lease contract and must finish before rollout. Queue fairness and simultaneous tests sharing a physical checkout are not promised; different checkouts remain independent. Existing reaper process-shape validation and bounded resampling remain its signal authority (ARCH-ORDER, ARCH-SECURE).
+
+The wrapper is a thin IO owner over flock and subprocess argv; existing pure process-table parsing/selection stays separate. Tests use gated disposable commands plus the existing recorded-table seam, with real flock/process conformance every suite; no new service or external binary is introduced (ARCH-PURE, ARCH-MOCK). This is batch test infrastructure, not an editor hot path: one lease acquisition per outer run, constant descriptor/file footprint per checkout, no process-table scan added per spec. Waiting lasts until the holder finishes and remains cancellable; test ordering uses ready/release gates, not timing guesses (ARCH-CONSTRAINTS). No persisted record format changes (ARCH-EVOLVE).
