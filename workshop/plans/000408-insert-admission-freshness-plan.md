@@ -101,8 +101,10 @@ Files: `README.md`, `atlas/modes/session_sync.md`, this plan and issue Log.
 
 - [x] Document acquire/freshness/failure retry semantics and producer minimum capability; preserve existing lock lifecycle description.
 - [x] Run `make test-spec SPEC=modes/session_sync` on preferred runtime and with `PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim`; run Couch unit, architecture/docs guards and lint. Expected all green, bounded child/read counts.
-- [ ] Verify real producer conformance using disposable registered files after pair#777 lands; ask the hub before staging on live :0. No live store/document mutations without its authorization.
-- [ ] Push via sdlc pr, run the recorded suite, close through SDLC's one boundary review, resolve findings, land on SHIP and report the exact merge/PR to the hub.
+- [x] Verify real producer conformance using disposable registered files after pair#777 lands; ask the hub before staging on live :0. No live store/document mutations without its authorization.
+- [x] Push via sdlc pr and run the recorded suite on the final code/test head.
+
+After these acceptance checks, close through SDLC's one boundary review, resolve findings, land on SHIP and report the exact merge/PR to the hub. Those gate-owned actions are recorded as they happen in the issue Log.
 
 ## Protocol and implementation status
 
@@ -217,3 +219,13 @@ under the TL's explicit follow-up option. #408 starts its acquire/freshness
 guarantee when identity is known, including late attachment; it introduces no
 blocking registration lookup for every Markdown InsertEnter. README and atlas
 state this boundary. Unknown-period edits retain existing reconciliation.
+
+### 2026-10-22 — pre-close evidence complete
+
+Real conformance passed at pair#777 landing pin d16d027bd, and the approved
+brief stage passed in a disposable copy of the real 0.11.7 profile. Both
+registered parent/side checks prove fresh first input and lock/departure/save/
+Alt+Return release semantics; actual message delivery is unavailable by design
+in the isolated store. Every stage was cleared; final :0 equals origin/main.
+Pre-close acceptance checkboxes are complete. Separate future gate-owned review
+and landing from those checkboxes so they do not claim an unperformed action.

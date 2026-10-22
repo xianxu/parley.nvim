@@ -42,7 +42,7 @@ Held-lock refusal or malformed/mismatched acknowledgment blocks edits visibly; p
 
 - [x] Pin pair#777 acquire/ack ownership and failure contract through the hub; approve admission/failure design in [the durable plan](../plans/000408-insert-admission-freshness-plan.md).
 - [x] Red/green native queued-input races, shared bounded acquisition and completed freshness before editing; retain existing ownership/exit/move safety and counted 4/8-turn bounds.
-- [ ] Producer conformance, both runtimes, guards/lint/recorded suite, docs, close review and landing.
+- [x] Producer conformance, both runtimes, guards/lint/recorded suite and docs. SDLC owns the following close review and landing gates.
 
 
 ## Log
@@ -206,6 +206,49 @@ not the producer deployment needed for this check. Hold :0 staging until #777
 lands and the hub confirms its rebuild/deployment. Then run isolated real
 conformance on the merge pin, the authorized disposable live check/cleanup,
 and close/landing. Hub outcome report a8d34338-7bf2-433b-a4d8-73147ed5e902.
+
+### 2026-10-22 — producer conformance and staged real-profile acceptance
+
+Producer #777 landed as pair PR #533, landing pin
+d16d027bd5d85b392fceedbf3025503d296707e7. Built Couch from a Git archive at that
+exact pin in disposable scratch space (runtimebundle-generate, then go build).
+The existing isolated production-client conformance command passes against that
+binary: registration, rename/replay/conflicts/null/round, operator acquire,
+exact same-token retry, foreign-token refusal, owned and absent release. Fake
+conformance and its corrupted-fake negative control also pass. No daemon or
+live registry was used.
+
+TL approvals be38ac81 and 3bdecd71 authorize the fresh binary via per-process
+PATH and a brief Parley :0 stage at 4c650bfd. The real-profile fixture copies the
+operator's authored Neovim configuration, reuses installed plugin checkouts,
+starts a fresh installed 0.11.7, and confines HOME/config/data/state/cache,
+Couch authority and documents to disposable roots. It never touches the running
+editor. The first two setup attempts exposed fixture issues (plugin data-path
+symlink and non-serializable autocmd callbacks); a third driver run exceeded
+its outer deadline. All stages were immediately cleared. Off-:0 tracing then
+identified the probe's invalid undo assumption: one native undo includes the
+external reload plus typing. Restore only the fixture's own X instead of asking
+undo to stop at an assumed boundary. The controller's JIT is disabled only in
+its test process; the real-profile child retains Parley's normal runtime rule.
+No product code changed for these fixture corrections.
+
+The final brief :0 stage at 4c650bfd2c7db9514735034711d0a0e24a8908ee passes for
+both registered session.md and session.side/discussion.md: InsertCharPre sees
+the fresh snapshot and document/turn proof before the first queued character;
+no clobbered copy; changed Escape/Ctrl-C and explicit save retain ownership;
+restoring the fresh baseline and unchanged Escape/Ctrl-C release; the actual
+Alt+Return mapping saves and releases. Delivery is intentionally unavailable in
+the isolated store, so this is release acceptance, not a new live-send claim.
+Both registrations were forgotten and the final Registrations list is empty;
+all disposable profile documents/state were removed. Final profile evidence is
+live_profile-final.log under parley-408-producer.XQtnmQ in this slot's scratch.
+
+Clear completed using sdlc f6a8db3a (contains ariadne#537): Parley :0 is clean
+on main, HEAD and origin/main both
+7d4e9adb37d9ba16c29dad1180fdc2eceb9368fd, zero ahead/behind. Report
+ a142665c-c8d7-4de7-89fd-8cbe3621b42f sent to hub. Proceed to close review and
+landing from this slot; no stage is held. Recorded suite on 5d2d9768 still covers
+all code/tests, with subsequent changes limited to documentation.
 
 ## Revisions
 
