@@ -70,6 +70,8 @@ Cost: one existing handler per attached buffer/event, constant-time policy from 
 
 ## Log
 
+- 2026-10-22 live check: hub relayed operator PASS (delivery535c1b96-a6a3-4e2d-9284-0a81fae6cc11) on staged588c7cee88d7f2a7b36be295c5fe054be4f2760a. Unmodified buffer reloaded silently, no prompt, cursor kept. With an unsaved operator edit holding the lock, the TL write was refused and nvim showed no prompt; this live check exercised lock refusal, while dirty unconfirmed-lock copy preservation remains covered by native tests. Hub authorized landing. Cleared parley.nvim:0 stage successfully before merge.
+
 - 2026-10-22 final gates: required recorded suite PASSED on cfe4c2049db2f720ac7e9b34242208ac8a37fec4, attempt df937bebcb2b8bc55faf03874170bea4 (lease-970358608), exit0 in298.26s. Log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/cfe4c2049db2f720ac7e9b34242208ac8a37fec4/suite.log; SHA256 cc75bff8f43d54f35d76765971b861c86b3d922399ed8858b609bfac881ae5e4. This supersedes the pending-suite note in the close verification. Close round1 SHIP, no findings, evidence commit c1d26e080d49c26bc07d9f5f5a660c799c063e25; PR331 remains open. Holding for hub-owned combined live staging with #408 after pair#777; no independent stage, landing or live acceptance.
 
 
