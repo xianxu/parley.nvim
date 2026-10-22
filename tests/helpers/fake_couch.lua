@@ -12,7 +12,9 @@
 -- $FAKE_COUCH_REGISTRY, a `submitted: PATH` send also adds its ID to PATH's
 -- owed events in the registry, and `M.fold` removes one, as an agent's
 -- `write --fold` does (#354). `M.round` seeds a file's round sidecar, which
--- `round PATH --json` answers, cleared by a later submit (#383).
+-- `round PATH --json` answers, cleared by a later submit (#383). Operator
+-- acquire/release use fake_couch_operator.py, whose FAKE_COUCH_OPERATOR_* knobs
+-- expose explicit refusals, lost acknowledgments and the freshness race (#408).
 local M = {}
 
 --- Write the fake into `root/bin/couch`; the caller puts `root/bin` on PATH.
@@ -20,8 +22,12 @@ function M.write(root, log_file, argv_file)
     local bin = root .. "/bin/couch"
     vim.fn.mkdir(root .. "/bin", "p")
     local registry = vim.fn.fnamemodify("tests/fixtures/fake_couch_registry.py", ":p")
+    local operator = vim.fn.fnamemodify("tests/fixtures/fake_couch_operator.py", ":p")
     vim.fn.writefile({
         "#!/bin/sh",
+        'if [ "$1" = "--session-sync" ]; then',
+        '  case "$2" in operator-acquire|operator-release) exec python3 "' .. operator .. '" "$@";; esac',
+        'fi',
         'if [ "$1" = "--session-sync" ] && [ -n "$FAKE_COUCH_REGISTRY" ]; then',
         '  exec python3 "' .. registry .. '" "$@"',
         'fi',

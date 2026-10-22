@@ -808,6 +808,7 @@ atlas:
   modes/session_sync:
     code:
       - lua/parley/session_sync.lua
+      - lua/parley/operator_admission.lua
       - lua/parley/view_map.lua
       - lua/parley/window_views.lua
       - lua/parley/agentic_document.lua
@@ -827,9 +828,13 @@ atlas:
       - scripts/check-couch-registry-conformance.py
       - scripts/couch-registry-probe.lua
       - tests/fixtures/fake_couch_registry.py
+      - tests/fixtures/fake_couch_operator.py
     tests:
       - tests/integration/lock_leave_reminder_spec.lua
+      - tests/integration/keybinding_agreement_spec.lua
       - tests/unit/session_sync_spec.lua
+      - tests/unit/operator_admission_spec.lua
+      - tests/arch/operator_admission_owner_spec.lua
       - tests/unit/view_map_spec.lua
       - tests/integration/window_views_spec.lua
       - tests/unit/document_session_spec.lua
@@ -840,6 +845,7 @@ atlas:
       - tests/unit/helper_io_spec.lua
       - tests/integration/session_sync_spec.lua
       - tests/integration/session_sync_native_spec.lua
+      - tests/integration/fake_couch_operator_spec.lua
       - tests/integration/agentic_document_spec.lua
       - tests/integration/agentic_document_owned_move_spec.lua
       - tests/integration/agentic_document_lifetime_spec.lua

@@ -159,3 +159,129 @@ describe("couch.run deadline", function()
         assert.is_false(couch.timed_out({ code = 0, signal = 0 }))
     end)
 end)
+
+
+-- #408: the synchronous registry transaction admits input only on a proved ack.
+describe("couch operator transaction", function()
+    local identity = { ID = "doc-408", File = "/scratch/doc.md" }
+    local token = string.rep("a", 32)
+    local text = "holder: operator\ndocument: doc-408\nturn: " .. token .. "\ntime: now\n"
+    local function result(state)
+        return { code = 0, stdout = vim.json.encode({ Code = "ok", OperatorLock = {
+            ID = identity.ID, File = identity.File, Turn = token, Holder = "operator",
+            LockPath = identity.File .. ".lock", LockText = text, State = state or "acquired",
+        } }) }
+    end
+    local function decoded(obj) return vim.json.decode(obj.stdout) end
+    local function evaluate(data, verb)
+        return couch.operator_result({code = 0, stdout = vim.json.encode(data)}, verb or "acquire", identity, token)
+    end
+
+    it("accepts acquire and idempotent retry only with exact ownership proof", function()
+        for _, state in ipairs({"acquired", "already-held"}) do
+            local obj = result(state)
+            local answer = couch.operator_result(obj, "acquire", identity, token)
+            assert.equals("confirmed", answer.kind)
+            assert.same(decoded(obj).OperatorLock, answer.lock)
+        end
+    end)
+
+    it("accepts release and absent release without claiming acquire ownership", function()
+        for _, state in ipairs({"released", "already-released"}) do
+            assert.equals("confirmed", evaluate({Code = "ok", OperatorLock = {
+                ID = identity.ID, File = identity.File, Turn = token, State = state,
+            }}, "release").kind)
+        end
+    end)
+
+    it("parses only single exact proof fields with a lowercase 32-hex turn", function()
+        assert.same({ID = identity.ID, Turn = token}, couch.operator_proof(text))
+        for _, bad in ipairs({
+            text .. "document: doc-408\n", text .. "holder: operator\n", text .. "turn: " .. token .. "\n",
+            text:gsub("holder: operator", "holder: agent"), text:gsub("document: doc%-408", "document:"),
+            text:gsub(token, string.rep("A", 32)), text:gsub(token, "abc"),
+            text:gsub("turn:", "turn :"), text:gsub("document:", " document:"),
+        }) do assert.is_nil(couch.operator_proof(bad), bad) end
+        assert.is_nil(couch.operator_proof(nil))
+    end)
+
+    it("refuses malformed, foreign and mismatched acquire acknowledgments", function()
+        for _, change in ipairs({
+            {"ID", "other"}, {"File", "/other.md"}, {"Turn", string.rep("b", 32)},
+            {"Holder", "agent"}, {"LockPath", "/other.lock"}, {"State", "released"},
+            {"LockText", text:gsub("doc%-408", "other")}, {"LockText", text .. "turn: " .. token .. "\n"},
+            {"LockText", false},
+        }) do
+            local data = decoded(result())
+            data.OperatorLock[change[1]] = change[2]
+            assert.equals("refused", evaluate(data).kind, change[1])
+        end
+        for _, data in ipairs({{}, {Code = "ok"}, {Code = "ok", OperatorLock = "junk"}, {Code = "not-ok"}}) do
+            assert.equals("refused", evaluate(data).kind)
+        end
+        assert.equals("refused", couch.operator_result({code = 0, stdout = "bad json"}, "acquire", identity, token).kind)
+        assert.equals("refused", couch.operator_result(result(), "unknown", identity, token).kind)
+        assert.equals("refused", couch.operator_result(result(), "acquire", identity, "bad").kind)
+    end)
+
+    it("allows degradation only for timeout or the exact unavailable exit and code", function()
+        for _, case in ipairs({
+            {124, "", "unavailable"}, {7, "session-sync-unavailable", "unavailable"},
+            {1, "session-sync-unavailable", "refused"}, {7, "operator-lock", "refused"},
+            {3, "operator-lock", "refused"}, {1, "operator-lock-uncertain", "refused"},
+            {1, "operator-invalid", "refused"}, {2, "usage", "refused"},
+            {-1, "", "refused"}, {1, "ok", "refused"},
+        }) do
+            local answer = couch.operator_result({code = case[1], stdout = vim.json.encode({Code = case[2]})},
+                "acquire", identity, token)
+            assert.equals(case[3], answer.kind)
+            assert.equals("string", type(answer.error))
+        end
+    end)
+
+    it("passes the fixed child and wait budget with canonical identity and turn", function()
+        local original = vim.system
+        local argv, opts, waited
+        vim.system = function(a, o)
+            argv, opts = a, o
+            return {wait = function(_, timeout) waited = timeout; return result() end}
+        end
+        local ok, answer = pcall(couch.operator_lock, "acquire", identity, token)
+        vim.system = original
+        assert.is_true(ok)
+        assert.equals("confirmed", answer.kind)
+        assert.same({"couch", "--session-sync", "operator-acquire", identity.File,
+            "--id", identity.ID, "--turn", token, "--json"}, argv)
+        assert.equals(500, couch.OPERATOR_LOCK_TIMEOUT_MS)
+        assert.equals(500, opts.timeout)
+        assert.equals(500, waited)
+        assert.is_true(opts.text)
+    end)
+
+    it("refuses spawn failures instead of treating missing binaries as permission", function()
+        local original = vim.system
+        vim.system = function() error("missing couch executable") end
+        local ok, answer = pcall(couch.operator_lock, "acquire", identity, token)
+        vim.system = original
+        assert.is_true(ok)
+        assert.equals("refused", answer.kind)
+        assert.matches("missing couch", answer.error)
+    end)
+
+    it("kills and reaps a real hung child within the named input budget", function()
+        local original, child = vim.system
+        vim.system = function(_, opts)
+            child = original({"sleep", "30"}, opts)
+            return child
+        end
+        local started = vim.uv.hrtime()
+        local ok, answer = pcall(couch.operator_lock, "acquire", identity, token)
+        local elapsed = (vim.uv.hrtime() - started) / 1e6
+        vim.system = original
+        assert.is_true(ok)
+        assert.equals("unavailable", answer.kind)
+        assert.is_true(elapsed >= 400, tostring(elapsed))
+        assert.is_true(elapsed < 1500, tostring(elapsed))
+        assert.equals(124, child:wait().code)
+    end)
+end)

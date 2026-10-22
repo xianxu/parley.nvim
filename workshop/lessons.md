@@ -920,3 +920,31 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   destructive effect and before recovery attachment can acquire obsolete state.
   Test recovery before cleanup, between effects and after cleanup, with a new
   user intent as well as the ordinary idempotent replay controls.
+
+- #408: A native buffer observer without on_reload is detached by reload. A
+  first-edit ordering test must retain the observer through native rereads, or
+  it only measures a missing callback. Serialize make/test-spec within one
+  checkout: census cleanup from one run can interrupt another.
+
+## 2026-10-21 (#408 — release ownership evidence)
+
+- Two missing witnesses comparing equal prove nothing. A destructive operation
+  that accepts an exact local witness must require that witness to exist before
+  comparing bytes. Exercise an unreadable on-disk sidecar with no local witness,
+  in addition to ordinary foreign replacement cases.
+
+## 2026-10-22 (#408 — refusal is not history retirement)
+
+- Keep an edit turn's original baseline through unavailable and refused retries,
+  even after auto-save. Status observation cannot prove release; one private
+  transition owner must arbitrate acquisition, freshness, release and move
+  restoration. Test the complete failure/retry sequence, not each flag alone.
+- A non-modifiable buffer refuses native i before InsertEnter. A recovery action
+  attached only to InsertEnter is unreachable after refusal. Test recovery with
+  actual input and preserve the native action for every supported retry key.
+
+- #408 recorded suite: README command inventories must inspect real command
+  scopes. A buffer-local recovery command should not become global merely to
+  satisfy a global-only oracle. Assert absence from ordinary contexts and
+  presence on an actual attached buffer, using the existing executable fake
+  for attachment's status/round queries; even a declaration check can spawn IO.

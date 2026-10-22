@@ -58,7 +58,10 @@ store, Pair-data and identity roots, never uses live actors, and needs no
 network. Real and fake executables both run through production
 `document_registry.request` / `couch.run`: registration, stable-ID retries,
 filesystem plus metadata rename, old/new lookup, replay, owner/target conflicts
-and positive-null absence. Fake malformed, missing and unsupported replies must
+and positive-null absence. It also exercises synchronous operator acquire, exact
+same-token retry, foreign-token refusal, owned release and absent release without
+a running supervisor; the candidate must support the pair#777 commands.
+Fake malformed, missing and unsupported replies must
 retain uncertainty, and a deliberately corrupted fake must fail the probe.
 Fixtures are removed on exit. `python3 scripts/check-couch-registry-conformance.py
 --fake-only` exercises the probe and negative control without real Couch. This

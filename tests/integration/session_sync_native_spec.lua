@@ -193,17 +193,457 @@ describe("session-sync native edits", function()
         end)
     end
 
-    it("insert entry reconciles a write racing the loaded buffer without blocking (#404)", function()
-        open(false, false, true, true)
-        local foreign = vim.fn.readfile(file)
-        foreign[8] = "foreign before insert"
-        vim.fn.writefile(foreign, file)
-        keys("i")
-        wait_for("return vim.fn.mode() == 'i'")
-        assert.is_true(exists(), "insert entry did not protect the loaded buffer")
-        notified("session-sync violation")
-        assert.equals("foreign before insert", vim.fn.readfile(file .. '.clobbered')[8])
-        assert.equals("first bullet", exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+    for _, kind in ipairs({"parent", "side"}) do
+        it("confirmed insert reloads before queued first edit in " .. kind .. " (#408)", function()
+            if kind == "side" then
+                local lines=vim.fn.readfile(file); lines[2]="type: prose"
+                vim.fn.writefile(lines,file)
+            end
+            open(false,false,true,true)
+            local fresh=vim.fn.readfile(file);fresh[8]="fresh before acknowledgment"
+            exec([[
+                vim.env.FAKE_COUCH_OPERATOR_ACQUIRE_WRITE=...
+                vim.env.FAKE_COUCH_OPERATOR_DELAY="0.1"
+                _G.first_edit=nil
+                local couch=require("parley.couch"); local acquire=couch.operator_lock
+                couch.operator_lock=function(verb,...)
+                    local result=acquire(verb,...)
+                    if verb=="acquire" then _G.acquire_acknowledged=result.kind=="confirmed" end
+                    return result
+                end
+                vim.api.nvim_create_autocmd("InsertCharPre",{buffer=0,callback=function()
+                    _G.first_char_confirmed=acquire_acknowledged==true
+                    _G.before_first_char=vim.api.nvim_buf_get_lines(0,7,8,false)[1]
+                end})
+                vim.api.nvim_buf_attach(0,false,{on_reload=function() end, on_lines=function(_,buf)
+                    first_edit=first_edit or vim.api.nvim_buf_get_lines(buf,7,8,false)[1]
+                end})
+            ]],table.concat(fresh,"\n").."\n")
+            keys("iX")
+            wait_for("return _G.first_edit ~= nil")
+            assert.is_true(exec("return first_char_confirmed"),"first character preceded acquisition acknowledgment")
+            assert.equals("fresh before acknowledgment",exec("return before_first_char"))
+            assert.equals("Xfresh before acknowledgment",exec("return first_edit"))
+            assert.equals("Xfresh before acknowledgment",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            local text=table.concat(vim.fn.readfile(file..".lock"),"\n")
+            assert.truthy(text:find("document: doc-1",1,true))
+            assert.truthy(text:match("turn: [0-9a-f]+"))
+            assert.is_nil(vim.uv.fs_stat(file..".clobbered"))
+            assert.is_nil(vim.uv.fs_stat(sent_file))
+            keys("<Esc>")
+        end)
+    end
+
+    for _, fault in ipairs({
+        {name="held", code="operator-lock", exit="3"},
+        {name="uncertain", code="operator-lock-uncertain", exit="1"},
+        {name="malformed", ack="{}"},
+    }) do
+        it("blocks queued insert edits for "..fault.name.." acknowledgment (#408)",function()
+            open(false,false,true,true)
+            exec([[
+                local fault=...
+                vim.env.FAKE_COUCH_OPERATOR_CODE=fault.code
+                vim.env.FAKE_COUCH_OPERATOR_EXIT=fault.exit
+                vim.env.FAKE_COUCH_OPERATOR_ACK=fault.ack
+            ]],fault)
+            keys("iX")
+            wait_for("return vim.fn.mode() == 'i'")
+            assert.is_false(exec("return vim.bo.modifiable"))
+            assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            assert.is_true(exec([[return table.concat(notifications,"\n"):find("not applied",1,true)~=nil]]))
+            keys("<Esc>")
+        end)
+    end
+
+    for _, timeout in ipairs({false,true}) do
+        it("allows queued edits with an unconfirmed warning on "..(timeout and "500 ms timeout" or "store unavailable").." (#408)",function()
+            open(true,false,true,true)
+            exec([[
+                local timeout=...
+                require("parley.session_sync").set_submission_feedback(0,"previous submit accepted",false)
+                if timeout then vim.env.FAKE_COUCH_OPERATOR_DELAY="2"
+                else vim.env.FAKE_COUCH_OPERATOR_CODE="session-sync-unavailable";vim.env.FAKE_COUCH_OPERATOR_EXIT="7" end
+            ]],timeout)
+            local started=vim.uv.hrtime()
+            keys("iX")
+            wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1] == 'Xfirst bullet'")
+            local elapsed=(vim.uv.hrtime()-started)/1e6
+            if timeout then
+                assert.is_true(elapsed>=450,"timeout returned before its 500 ms budget")
+                assert.is_true(elapsed<500+arrival.MS,"timeout exceeded bounded arrival allowance")
+            end
+            assert.is_true(exec("return vim.bo.modifiable"))
+            assert.is_true(exec([[return vim.wo.winbar:find("not locked: Couch unreachable; edits may conflict",1,true)~=nil]]))
+            keys("<Esc>")
+            exec("vim.cmd('silent write')")
+            local foreign=vim.fn.readfile(file);foreign[8]="agent competing copy";vim.fn.writefile(foreign,file)
+            exec("vim.cmd('checktime')")
+            wait_for([[return vim.fn.filereadable(vim.api.nvim_buf_get_name(0)..'.clobbered')==1]])
+            assert.equals("agent competing copy",vim.fn.readfile(file..".clobbered")[8])
+            assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        end)
+    end
+
+    it("unavailable admission warning outranks a previous submit before typing (#408)",function()
+        open(false,false,true,true)
+        exec([[
+            require("parley.session_sync").set_submission_feedback(0,"previous submit accepted",false)
+            vim.env.FAKE_COUCH_OPERATOR_CODE="session-sync-unavailable"
+            vim.env.FAKE_COUCH_OPERATOR_EXIT="7"
+        ]])
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        assert.is_true(exec([[return vim.wo.winbar:find("not locked: Couch unreachable; edits may conflict",1,true)~=nil]]))
+        keys("<Esc>")
+    end)
+
+    for _, intervening_refusal in ipairs({false,true}) do
+        it("preserves saved unconfirmed edits through "..(intervening_refusal and "a refused then confirmed retry" or "a confirmed retry without refusal").." (#408 BR-1)",function()
+            open(false,false,true,true)
+            exec([[
+                _G.retry_insert_entries=0
+                vim.api.nvim_create_autocmd("InsertEnter",{buffer=0,callback=function() retry_insert_entries=retry_insert_entries+1 end})
+                vim.env.FAKE_COUCH_OPERATOR_CODE="session-sync-unavailable"
+                vim.env.FAKE_COUCH_OPERATOR_EXIT="7"
+            ]])
+            keys("iX")
+            wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='Xfirst bullet'")
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+            exec("vim.cmd('silent write')")
+            assert.equals("Xfirst bullet",vim.fn.readfile(file)[8])
+            assert.is_false(exists(),"unavailable acquire unexpectedly published a lock")
+            if intervening_refusal then
+                exec([[
+                    vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock"
+                    vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
+                ]])
+                keys("i");wait_for("return vim.fn.mode()=='i'")
+                assert.is_false(exec("return vim.bo.modifiable"))
+                assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"),"refused retry applied queued input")
+                assert.is_true(exec([[return table.concat(notifications,"\n"):find("not applied",1,true)~=nil]]))
+                keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+            end
+            exec([[
+                vim.env.FAKE_COUCH_OPERATOR_CODE=nil
+                vim.env.FAKE_COUCH_OPERATOR_EXIT=nil
+            ]])
+            keys("i")
+            exec("vim.schedule(function() _G.retry_entry_settled=true end)")
+            wait_for("return _G.retry_entry_settled==true")
+            local final_entry=exec("return {mode=vim.fn.mode(),entries=retry_insert_entries,error=vim.v.errmsg,modifiable=vim.bo.modifiable}")
+            assert.equals("i",final_entry.mode,"confirmed retry did not enter insert: "..vim.inspect(final_entry))
+            assert.is_true(final_entry.modifiable)
+            locked()
+            assert.equals("Xfirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+            exec("vim.schedule(function() _G.retry_exit_settled=true end)")
+            wait_for("return _G.retry_exit_settled==true")
+            assert.is_true(exists(),"confirmed unchanged exit retired the earlier outstanding edit")
+            assert.equals("Xfirst bullet",vim.fn.readfile(file)[8])
+            assert.is_nil(vim.uv.fs_stat(sent_file),"retry submitted an outstanding edit")
+        end)
+    end
+
+    it("an older release reply cannot retire a newly admitted turn (#408 retry)",function()
+        open(false,false,true,true)
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        locked()
+        exec([[
+            local couch=require('parley.couch')
+            local command=couch.operator_lock
+            couch.operator_lock=function(verb,...)
+                local result=command(verb,...)
+                if verb=='release' and result.kind=='confirmed' and not _G.reentered_release then
+                    _G.reentered_release=true
+                    assert(require('parley.session_sync').retry(0))
+                    _G.reentered_release_done=true
+                end
+                return result
+            end
+        ]])
+        keys("<Esc>")
+        wait_for("return vim.fn.mode()=='n' and reentered_release_done==true")
+        locked()
+        assert.is_nil(vim.uv.fs_stat(sent_file),"stale release submitted a newer turn")
+    end)
+
+    local function refuse_insert_entry()
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock"
+            vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
+        ]])
+        keys("I");wait_for("return vim.fn.mode()=='i'")
+        assert.is_false(exec("return vim.bo.modifiable"))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+    end
+    local function settle_retry_input(value)
+        keys(value)
+        exec("_G.retry_input_settled=false;vim.schedule(function() _G.retry_input_settled=true end)")
+        wait_for("return _G.retry_input_settled==true")
+    end
+
+    for _, entry in ipairs({"i","a","o","I","A","O"}) do
+        it("retries refused admission with native "..entry.." entry (#408 retry)",function()
+            open(false,false,true,true)
+            refuse_insert_entry()
+            exec("vim.env.FAKE_COUCH_OPERATOR_CODE=nil;vim.env.FAKE_COUCH_OPERATOR_EXIT=nil")
+            settle_retry_input(entry)
+            assert.equals("i",exec("return vim.fn.mode()"),"retry did not enter insert via "..entry)
+            assert.is_true(exec("return vim.bo.modifiable"))
+            locked()
+            local native={i={8,0,10},a={8,1,10},o={9,0,11},I={8,0,10},A={8,12,10},O={8,0,11}}
+            local position=exec("local at=vim.api.nvim_win_get_cursor(0);return {at[1],at[2],vim.api.nvim_buf_line_count(0)}")
+            assert.same(native[entry],position,"retry changed the native entry action")
+            assert.is_nil(vim.uv.fs_stat(sent_file),"retry submitted the document")
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        end)
+    end
+
+    it("refused retry freshens before its queued first edit (#408 retry)",function()
+        open(false,false,true,true)
+        refuse_insert_entry()
+        local fresh=vim.fn.readfile(file);fresh[8]="fresh before retry acknowledgment"
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE=nil
+            vim.env.FAKE_COUCH_OPERATOR_EXIT=nil
+            vim.env.FAKE_COUCH_OPERATOR_ACQUIRE_WRITE=...
+            vim.env.FAKE_COUCH_OPERATOR_DELAY="0.1"
+            _G.retry_first_edit=nil
+            local couch=require("parley.couch");local acquire=couch.operator_lock
+            couch.operator_lock=function(verb,...)
+                local result=acquire(verb,...)
+                if verb=="acquire" then _G.retry_acquire_confirmed=result.kind=="confirmed" end
+                return result
+            end
+            vim.api.nvim_create_autocmd("InsertCharPre",{buffer=0,callback=function()
+                local proof=couch.operator_proof(table.concat(vim.fn.readfile(path..".lock"),"\n").."\n")
+                _G.retry_first_char_protected=retry_acquire_confirmed==true and proof and proof.ID=="doc-1" and type(proof.Turn)=="string"
+                _G.retry_before_first_char=vim.api.nvim_buf_get_lines(0,7,8,false)[1]
+            end})
+            vim.api.nvim_buf_attach(0,false,{on_reload=function() end,on_lines=function(_,buf)
+                retry_first_edit=retry_first_edit or vim.api.nvim_buf_get_lines(buf,7,8,false)[1]
+            end})
+        ]],table.concat(fresh,"\n").."\n")
+        keys("iX")
+        wait_for("return _G.retry_first_edit~=nil")
+        assert.is_true(exec("return retry_first_char_protected"),"retry applied first character before confirmed protection")
+        assert.equals("fresh before retry acknowledgment",exec("return retry_before_first_char"))
+        assert.equals("Xfresh before retry acknowledgment",exec("return retry_first_edit"))
+        assert.equals("Xfresh before retry acknowledgment",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        locked()
+        assert.is_nil(vim.uv.fs_stat(file..".clobbered"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+    end)
+
+    it("repeated refusal keeps native retry entry blocked and available (#408 retry)",function()
+        open(false,false,true,true)
+        refuse_insert_entry()
+        for _,entry in ipairs({"i","a"}) do
+            settle_retry_input(entry)
+            assert.equals("n",exec("return vim.fn.mode()"),"refused retry entered insert")
+            assert.is_false(exec("return vim.bo.modifiable"))
+            assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            assert.equals(1,exec("return vim.fn.maparg(...,'n',false,true).buffer",entry),"refusal lost retry entry mapping")
+        end
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
+    it("unavailable retry admits native input with a visible warning (#408 retry)",function()
+        open(false,false,true,true)
+        refuse_insert_entry()
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE="session-sync-unavailable"
+            vim.env.FAKE_COUCH_OPERATOR_EXIT="7"
+        ]])
+        settle_retry_input("i")
+        assert.equals("i",exec("return vim.fn.mode()"))
+        assert.is_true(exec("return vim.bo.modifiable"))
+        keys("X");wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='Xfirst bullet'")
+        assert.is_true(exec([[return vim.wo.winbar:find("not locked: Couch unreachable; edits may conflict",1,true)~=nil]]))
+        assert.equals(0,exec("return vim.tbl_count(vim.fn.maparg('i','n',false,true))"),"editable admission kept refusal mapping")
+        keys("<Esc>")
+    end)
+
+    it("retry restores displaced buffer mappings and uncovers global mappings (#408 retry)",function()
+        open(false,false,true,true)
+        exec([[
+            vim.keymap.set('n','i',function() _G.local_i=true end,{buffer=0,desc='original local insert'})
+            vim.keymap.set('n','a',function() _G.global_a=true end,{desc='original global append'})
+        ]])
+        refuse_insert_entry()
+        assert.equals(1,exec("return vim.fn.maparg('a','n',false,true).buffer"),"refusal did not cover global entry mapping")
+        assert.is_false(exec("return vim.fn.maparg('i','n',false,true).desc=='original local insert'"))
+        exec("vim.env.FAKE_COUCH_OPERATOR_CODE=nil;vim.env.FAKE_COUCH_OPERATOR_EXIT=nil")
+        settle_retry_input("O")
+        assert.equals("i",exec("return vim.fn.mode()"))
+        assert.equals("original local insert",exec("return vim.fn.maparg('i','n',false,true).desc"))
+        assert.equals(1,exec("return vim.fn.maparg('i','n',false,true).buffer"))
+        assert.equals("original global append",exec("return vim.fn.maparg('a','n',false,true).desc"))
+        assert.equals(0,exec("return vim.fn.maparg('a','n',false,true).buffer"))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        keys("i");wait_for("return _G.local_i==true")
+        keys("a");wait_for("return _G.global_a==true")
+    end)
+
+    it("explicit retry acquires without entering insert or submitting (#408 retry)",function()
+        open(false,false,true,true)
+        refuse_insert_entry()
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE=nil
+            vim.env.FAKE_COUCH_OPERATOR_EXIT=nil
+            vim.cmd('ParleySessionRetry')
+        ]])
+        assert.equals("n",exec("return vim.fn.mode()"))
+        assert.is_true(exec("return vim.bo.modifiable"))
+        locked()
+        assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
+    it("detach removes refusal mappings and restores displaced mappings (#408 retry)",function()
+        open(false,false,true,true)
+        exec([[
+            vim.keymap.set('n','i',function() _G.detached_i=true end,{buffer=0,desc='detached original insert'})
+            vim.keymap.set('n','a',function() _G.detached_a=true end,{desc='detached global append'})
+        ]])
+        refuse_insert_entry()
+        exec("require('parley.session_sync').detach(0)")
+        assert.is_true(exec("return vim.bo.modifiable"))
+        assert.equals("detached original insert",exec("return vim.fn.maparg('i','n',false,true).desc"))
+        assert.equals(1,exec("return vim.fn.maparg('i','n',false,true).buffer"))
+        assert.equals("detached global append",exec("return vim.fn.maparg('a','n',false,true).desc"))
+        assert.equals(0,exec("return vim.fn.maparg('a','n',false,true).buffer"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
+    it("clean foreign reload after unavailable unchanged entry does not become operator work (#408 retry)",function()
+        open(false,false,false,true)
+        exec([[
+            vim.env.FAKE_COUCH_OPERATOR_CODE="session-sync-unavailable"
+            vim.env.FAKE_COUCH_OPERATOR_EXIT="7"
+        ]])
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        assert.is_false(exec("return vim.bo.modified"))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        assert.is_false(exists())
+        exec("vim.env.FAKE_COUCH_OPERATOR_CODE=nil;vim.env.FAKE_COUCH_OPERATOR_EXIT=nil")
+        local foreign=vim.fn.readfile(file);foreign[8]="foreign clean update";vim.fn.writefile(foreign,file)
+        wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='foreign clean update'")
+        assert.is_false(exec("return vim.bo.modified"),"watch reload made a dirty buffer")
+        assert.is_nil(vim.uv.fs_stat(file..".clobbered"))
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        locked()
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        exec("vim.schedule(function() _G.clean_reload_exit_settled=true end)")
+        wait_for("return _G.clean_reload_exit_settled==true")
+        assert.is_false(exists(),"clean foreign reload was retained as outstanding operator work")
+        assert.equals("foreign clean update",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
+    it("lost acquire acknowledgment retries the same turn without advancing baseline (#408)",function()
+        open(true,false,true,true)
+        exec('vim.env.FAKE_COUCH_OPERATOR_DELAY="2"')
+        keys("iX")
+        wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='Xfirst bullet'")
+        local original=vim.fn.readfile(file..".lock","b")
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        exec("vim.env.FAKE_COUCH_OPERATOR_DELAY=nil")
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        assert.same(original,vim.fn.readfile(file..".lock","b"),"retry changed token or acquisition time")
+        assert.is_false(exec([[return vim.wo.winbar:find("not locked",1,true)~=nil]]))
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        assert.is_true(exists(),"reacquisition advanced the saved edit baseline")
+        keys("u")
+        assert.is_true(vim.wait(arrival.MS,function() return not exists() end))
+    end)
+
+    for _, pairs in ipairs({4,8}) do
+        it("bounds operator calls and full reads across "..pairs.." confirmed turns (#408)",function()
+            open(false,false,true,true)
+            local trace=root.."/operator-trace"
+            exec([[
+                vim.env.FAKE_COUCH_OPERATOR_TRACE=...
+                _G.full_reads=0
+                _G.original_get_lines=vim.api.nvim_buf_get_lines
+                local target=vim.api.nvim_get_current_buf()
+                vim.api.nvim_buf_get_lines=function(buf,start,stop,strict)
+                    if (buf==target or buf==0 and vim.api.nvim_get_current_buf()==target) and start==0 and stop==-1 then full_reads=full_reads+1 end
+                    return original_get_lines(buf,start,stop,strict)
+                end
+            ]],trace)
+            for _=1,pairs do
+                keys("i");wait_for("return vim.fn.mode()=='i'")
+                assert.is_true(exists())
+                keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+                assert.is_true(vim.wait(arrival.MS,function() return not exists() end))
+            end
+            local reads=exec("vim.api.nvim_buf_get_lines=original_get_lines; return full_reads")
+            assert.equals(2*pairs,#vim.fn.readfile(trace),"one acquire/release pair per turn")
+            assert.is_true(reads>=2*pairs and reads<=8*pairs,"unexpected full-buffer work: "..reads)
+        end)
+    end
+
+    it("submit refuses replacement legacy protection on a registered turn (#408)",function()
+        open(false,false,true,true)
+        keys("iX")
+        wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='Xfirst bullet'")
+        keys("<Esc>")
+        wait_for("return vim.fn.mode()=='n'")
+        local foreign={"holder: operator","time: foreign"}
+        vim.fn.writefile(foreign,file..".lock")
+        local accepted=exec([[
+            local ss=require("parley.session_sync")
+            return ss.send_registered(0,ss.identity(0),function() end)
+        ]])
+        assert.is_false(accepted)
+        assert.same(foreign,vim.fn.readfile(file..".lock"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
+    it("submit preserves unreadable registered protection with no owned witness (#408)",function()
+        open(false,false,true,true)
+        local foreign={"holder: operator","time: foreign"}
+        vim.fn.writefile(foreign,file..".lock")
+        assert.is_true(vim.uv.fs_chmod(file..".lock",0))
+        local accepted=exec([[
+            local input=io.open(path..".lock","rb")
+            if input then input:close(); error("fixture sidecar remains readable") end
+            local ss=require("parley.session_sync")
+            return ss.send_registered(0,ss.identity(0),function() end)
+        ]])
+        vim.uv.fs_chmod(file..".lock",384)
+        assert.is_false(accepted)
+        assert.same(foreign,vim.fn.readfile(file..".lock"))
+        assert.is_nil(vim.uv.fs_stat(sent_file))
+    end)
+
+    it("observed registered edits acquire a producer turn before insert (#408)",function()
+        open(false,false,true,true)
+        exec([[
+            local ss=require("parley.session_sync")
+            local baseline=vim.fn.sha256(vim.json.encode(vim.api.nvim_buf_get_lines(0,0,-1,false)))
+            assert(ss.acquire_observed(0,{outstanding=true,baseline=baseline}))
+        ]])
+        assert.truthy(table.concat(vim.fn.readfile(file..".lock"),"\n"):match("turn: [0-9a-f]+"))
+        keys("iX")
+        wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='Xfirst bullet'")
+        assert.is_true(exec("return vim.bo.modifiable"))
+        keys("<Esc>")
+    end)
+
+    it("normal-mode edit and insert share one confirmed operator turn (#408)",function()
+        open(false,false,true,true)
+        keys("x")
+        wait_for("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='irst bullet'")
+        keys("iX")
+        wait_for("return vim.fn.mode()=='i'")
+        exec("vim.schedule(function() _G.normal_insert_settled=true end)")
+        wait_for("return normal_insert_settled==true")
+        assert.is_true(exec("return vim.bo.modifiable"))
+        assert.equals("Xirst bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+        assert.truthy(table.concat(vim.fn.readfile(file..".lock"),"\n"):match("turn: [0-9a-f]+"))
         keys("<Esc>")
     end)
 
@@ -538,6 +978,37 @@ describe("session-sync native edits", function()
         ]], root .. "/synchronized.md", held)
     end
 
+    it("restored move protection resumes insert without a new acquire (#408)",function()
+        rewritten_move(false)
+        local destination=root.."/synchronized.md"
+        local trace=root.."/restore-trace"
+        exec([[
+            local trace=...
+            local ss=require("parley.session_sync")
+            local ok,proof=ss.synchronize_move(0,sync_token,sync_before);assert(ok,proof)
+            _G.restore_proof,_G.restore_identity=proof,ss.identity(0)
+            ss.detach(0)
+            vim.env.FAKE_COUCH_OPERATOR_TRACE=trace
+        ]],trace)
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        exec([[
+            local destination=...
+            local ss=require("parley.session_sync")
+            local token=assert(ss.restore_move(0,restore_identity,destination,restore_proof))
+            assert(vim.bo.modifiable,"recovery attempted to acquire the already-witnessed turn")
+            local ok,intent=ss.move_finalization_snapshot(0,token);assert(ok,intent)
+            assert(intent.new_lock_after==intent.new_lock_before,"restoration lost live insert intent")
+            intent.stage="protection";assert(ss.prepare_move_finalization(0,token,intent))
+            restore_identity.File=destination
+            assert(ss.retire_move(0,token,restore_identity))
+        ]],destination)
+        assert.is_nil(vim.uv.fs_stat(trace),"restore must use its validated journal proof")
+        file=destination
+        keys("<Esc>")
+        assert.is_true(vim.wait(arrival.MS,function() return not exists() end))
+        assert.equals(1,#vim.fn.readfile(trace),"only the eventual owned release contacts Couch")
+    end)
+
     it("synchronizes a mechanical move rewrite and releases only its transformed baseline", function()
         local proof = rewritten_move(false)
         local destination = root .. "/synchronized.md"
@@ -776,13 +1247,13 @@ describe("session-sync native edits", function()
             assert(ss.synchronize_move(0,sync_token,sync_before))
             assert(type(ss.move_finalization_snapshot) == "function", "missing replayable finalization API")
             local ok,intent=ss.move_finalization_snapshot(0,sync_token);assert(ok,intent);intent.stage="protection"
-            local remove=os.remove
-            os.remove=function(path)
-                if path==destination .. ".lock" then return nil,"injected NEW cleanup failure" end
-                return remove(path)
-            end
+            vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock-uncertain"
+            vim.env.FAKE_COUCH_OPERATOR_EXIT="1"
+            vim.env.FAKE_COUCH_OPERATOR_OPS="operator-release"
             local called,finished,reason=pcall(ss.prepare_move_finalization,0,sync_token,intent)
-            os.remove=remove
+            vim.env.FAKE_COUCH_OPERATOR_CODE=nil
+            vim.env.FAKE_COUCH_OPERATOR_EXIT=nil
+            vim.env.FAKE_COUCH_OPERATOR_OPS=nil
             assert(called and finished==false and reason, "NEW failure must remain replayable")
             assert(vim.fn.filereadable(sync_token.old_path .. ".lock")==0)
             vim.fn.writefile({"foreign lock"},destination .. ".lock")

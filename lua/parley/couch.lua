@@ -36,6 +36,83 @@ M.run = function(argv, cb, options)
 	return child
 end
 
+-- Input admission is a registry transaction, not a scheduled query. Both the
+-- child deadline and synchronous wait are bounded by this operator-facing budget.
+M.OPERATOR_LOCK_TIMEOUT_MS = 500
+
+local function valid_turn(token)
+	return type(token) == "string" and #token == 32 and token:match("^[0-9a-f]+$") ~= nil
+end
+
+--- The sidecar's unambiguous ownership evidence; unknown fields (e.g. time)
+--- do not affect ownership. Recognized fields must each occur exactly once.
+M.operator_proof = function(text)
+	if type(text) ~= "string" then return nil end
+	local fields = {}
+	for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+		local key = line:match("^%s*([%w_-]+)%s*:")
+		if key == "holder" or key == "document" or key == "turn" then
+			local value = line:match("^" .. key .. ": ([^%s]+)$")
+			if not value or fields[key] then return nil end
+			fields[key] = value
+		end
+	end
+	if fields.holder ~= "operator" or not fields.document or not valid_turn(fields.turn) then return nil end
+	return { ID = fields.document, Turn = fields.turn }
+end
+
+local function operator_request_valid(verb, identity, token)
+	return (verb == "acquire" or verb == "release") and type(identity) == "table"
+		and type(identity.ID) == "string" and identity.ID ~= ""
+		and type(identity.File) == "string" and identity.File:sub(1, 1) == "/" and valid_turn(token)
+end
+
+--- Classify only the producer's explicit unavailable code as degraded. A
+--- malformed reply or uncertain publication never grants editing permission.
+M.operator_result = function(obj, verb, identity, token)
+	local function refused(reason) return { kind = "refused", error = reason } end
+	if not operator_request_valid(verb, identity, token) then return refused("invalid operator lock request") end
+	if type(obj) ~= "table" then return refused("missing operator lock reply") end
+	if M.timed_out(obj) then return { kind = "unavailable", error = "Couch operator lock timed out after 500 ms" } end
+	local ok, data = pcall(vim.json.decode, obj.stdout or "", { luanil = { object = true, array = true } })
+	if not ok or type(data) ~= "table" then return refused(obj.stderr or "malformed operator lock reply") end
+	if obj.code == 7 and data.Code == "session-sync-unavailable" then
+		return { kind = "unavailable", error = "session-sync-unavailable" }
+	end
+	if obj.code ~= 0 or data.Code ~= "ok" then
+		return refused(type(data.Code) == "string" and data.Code or "operator lock refused")
+	end
+	local lock = data.OperatorLock
+	if type(lock) ~= "table" or lock.ID ~= identity.ID or lock.File ~= identity.File or lock.Turn ~= token then
+		return refused("operator lock acknowledgment does not match document and turn")
+	end
+	if verb == "acquire" then
+		local proof = M.operator_proof(lock.LockText)
+		if (lock.State ~= "acquired" and lock.State ~= "already-held") or lock.Holder ~= "operator"
+			or lock.LockPath ~= identity.File .. ".lock" or not proof or proof.ID ~= identity.ID or proof.Turn ~= token then
+			return refused("operator lock acknowledgment has invalid ownership evidence")
+		end
+	elseif lock.State ~= "released" and lock.State ~= "already-released" then
+		return refused("operator release acknowledgment has invalid state")
+	end
+	return { kind = "confirmed", lock = lock }
+end
+
+--- Acquire/release before input can apply. Spawn exceptions are explicit
+--- failures, not evidence that Couch's registry transaction is unavailable.
+M.operator_lock = function(verb, identity, token)
+	if not operator_request_valid(verb, identity, token) then
+		return { kind = "refused", error = "invalid operator lock request" }
+	end
+	local argv = { "couch", "--session-sync", "operator-" .. verb, identity.File,
+		"--id", identity.ID, "--turn", token, "--json" }
+	local ok, result = pcall(function()
+		return vim.system(argv, { text = true, timeout = M.OPERATOR_LOCK_TIMEOUT_MS }):wait(M.OPERATOR_LOCK_TIMEOUT_MS)
+	end)
+	if not ok then return { kind = "refused", error = tostring(result) } end
+	return M.operator_result(result, verb, identity, token)
+end
+
 --- Whether a run result is its deadline's kill: vim.system reports code 124
 --- once its timer fired, whatever signal ended the child. The outcome is
 --- unknown; a send may already have been queued.
