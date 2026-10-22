@@ -950,3 +950,9 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   for attachment's status/round queries; even a declaration check can spawn IO.
 
 - #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
+
+- #412: A refusal/retry behavioral fixture must not assume its external producer
+  always beats the product UI deadline. A completed timeout legitimately admits
+  editing. Scope a test arrival budget to the behavioral fixture, retain separate
+  product-deadline controls, and assert the completed outcome before protection.
+  Failure diagnostics include outcome, elapsed time, mode, runtime and load.

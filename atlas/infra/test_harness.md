@@ -402,6 +402,15 @@ helper's parameter from a call site. Code that a spec writes for a child Neovim
 takes the budget by value, since the child has no `arrival` in scope. The cost:
 a broken case now takes up to 15 s to report its first failed wait.
 
+Behavioral fixtures that spawn a producer must separate its test arrival budget
+from the product latency contract (#412). The native refusal/retry helper uses
+`arrival.MS` only in its disposable child, then checks the completed admission
+outcome after `InsertEnter` handlers return. Its failure includes the outcome,
+elapsed time, mode, notification, runtime and load. Native timeout/refusal controls
+and `couch_spec` retain the production 500 ms policy: a completed timeout remains
+editable, whereas an explicit refusal blocks editing. Waiting for mode alone or
+longer for `modifiable=false` cannot distinguish those outcomes.
+
 ### Waiting on work that converges (#293)
 
 `tests/helpers/await.lua` `until_progress(predicate, progress, stall_ms, ceiling_ms)`
