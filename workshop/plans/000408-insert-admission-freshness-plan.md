@@ -75,27 +75,32 @@ For N new turns and B bytes per file: at most one bounded acquire child and one 
 
 ## Tasks (single close boundary)
 
-### 1. Pin producer and write red native/fake cases
+### 1. Pin producer and executable verification strategies
 
-Files: `tests/helpers/fake_couch.lua`, `tests/integration/session_sync_native_spec.lua`, `tests/integration/session_sync_spec.lua`, `tests/unit/couch_spec.lua`.
+Files: `tests/unit/operator_admission_spec.lua`, `tests/unit/couch_spec.lua`,
+`tests/integration/session_sync_native_spec.lua`, `tests/integration/session_sync_spec.lua`,
+`tests/helpers/fake_couch.lua`, `tests/arch/operator_admission_owner_spec.lua`.
 
-- [x] Obtain pair#777 command/ack contract before implementation (confirmed in Revisions); record its merge pin at real conformance before landing.
-- [x] Replace the old insert-entry clobber expectation where the buffer is clean. Fake acquire pauses, writes the external snapshot, then confirms. Queue `iX` together; assert first native edit sees the fresh text and exact lock proof before applying X, with no .clobbered/violation.
-- [x] Parent/side × both runtimes; unchanged exit, saved/changed reentry, dirty entry, early/late attach, foreign/pre-existing protection; Escape and Ctrl-C.
-- [x] Held refusal/malformed/mismatched ack: queued input cannot mutate and the notice says so. Unreachable/timeout: queued input applies after the bounded call, warning persists, concurrent disk write preserves both copies via the existing clobber effect, even after auto-save. Retry never guesses ownership; unrelated modifiable settings survive cleanup.
-- [x] Pin the named 500 ms process option and measure a fake hung acquire finishing at the deadline with harness arrival slack; use a terminating fake process (no orphan sleep/stdio holder).
-- [x] Retain genuine post-acquisition/dirty conflict tests and prior checktime/autocmd stall regression.
-- [x] Run focused red tests against main and record expected failures before production edits.
+| Function | Adversarial input strategy and mechanical guard |
+| --- | --- |
+| `operator_admission.new().dispatch` / `snapshot` | Compose event sequences across acquisition, native reload and release boundaries; assert original-baseline retention, exact clean-preimage translation, stale-outcome rejection and snapshot isolation independently of phase labels. |
+| `couch.operator_result` | Mutate receipt identity, path, ownership and failure envelopes through a table of accepted/refused/unavailable classifications; only structured exit 7 and local timeout degrade. |
+| `couch.operator_proof` | Vary missing, duplicate, malformed and unknown sidecar fields; strict identity/token fields cannot be inferred from equality of missing witnesses. |
+| `couch.operator_lock` | Run executable stateful fake transactions with controlled delay and pre-ack disk writes; measure the named process bound and require terminated children. Compare the same contract against pinned real Couch in an isolated store. |
+| `session_sync.attach` / admission dispatcher | Drive actual native input and controlled external writes, observing acknowledgment/read completion before the first edit. Exercise entry, refusal recovery and departure actions on each runtime; compare lock/buffer/disk witnesses, including the complete unavailable-save-refused-confirmed sequence. |
+| Ownership/lifecycle boundaries | Structurally reject raw history writes and reducer calls outside the dispatcher; count children/full reads at N and 2N turns and compare owned mappings/options before and after detach. |
 
-### 2. Implement minimal shared admission
+- [x] Pin the producer contract and record executable red evidence before implementation.
+- [x] Apply these strategies through the native/stateful-fake integration seams and independent pure tests; keep the genuine dirty-conflict oracle.
 
-Files: `lua/parley/couch.lua`, `lua/parley/session_sync.lua`.
+### 2. Implement the shared admission boundary
 
-- [x] Add bounded synchronous acquire through the shared process seam; pure ack validation has independent unit cases.
-- [x] Share one admission lifecycle across InsertEnter/late attach; known owned turn reentry preserves baseline. Explicit refusal/invalid ack gates changes until retry/detach; transport unavailability/500 ms timeout admits edits with the unconfirmed warning and existing conflict preservation. Restore only owned option state.
-- [x] Run unconditional post-ack native freshness; permit only clean acquisition reload; establish baseline after read completion before input admission.
-- [x] Run focused native/fake/ownership tests green, including 4/8 counted turns; inspect trace order acquire ack -> read completion -> first edit.
-- [x] Commit the implementation and evidence; no changes to old #404 review artifacts.
+Files: `lua/parley/couch.lua`, `lua/parley/operator_admission.lua`,
+`lua/parley/session_sync.lua`.
+
+- [x] Route bounded acquire/release through `couch.operator_lock`; pure validators classify outcomes.
+- [x] Let the private owner arbitrate history and return witnessed effects; the dispatcher owns native freshness, refusal gating/retry mappings and IO outcomes. Preserve existing observed-edit and move consumers through explicit events.
+- [x] Checkpoint implementation and verification evidence without changing #404 artifacts.
 
 ### 3. Verify, document, close and land
 
@@ -326,3 +331,32 @@ run lease-728916138 / attempt 27d86c85dcd7c03705a173153cfaeaf6 is FIFO
 position 1 behind ariadne's weight-two run. No runner was restarted. Targeted
 verification is green on both runtimes, including the focused legacy cases.
 The repeat live-profile stage still follows review approval, as the TL ordered.
+
+### 2026-10-22 — atomic reload row completes the approved owner
+
+Scratch native regression (parley-408-reload-probe-fre1qr6r/red.log) proves
+unavailable i/Esc with no edit, then a clean foreign reload, then confirmed
+i/Esc incorrectly retains the lock: generic observe mistakes foreign content
+for operator work. TL d2810569 approved one atomic reload event carrying
+before/after hashes and the clean fact. Advance baseline only when it equals
+the pre-reload content and no operator change existed; retain history, token
+and phase. Unknown/dirty/outstanding baselines cannot advance. A clean reload
+while acquire is pending preserves the obligation to freshen unconditionally
+after acknowledgment; an operator edit still prevents that clean reread.
+This completes the six-phase state table, with no new mechanism or watcher.
+
+R2 is reading the superseded 3a8c4552 head; ignore its verdict for landing.
+Own queued suite lease-728916138 was cancelled through sdlc, before code
+changed. Permanent native and pure red regressions precede implementation;
+then fresh verification, recorded suite and close. Repeat the authorized
+isolated live-profile stage only after the new close approves, then clear.
+
+### 2026-10-22 — plan-quality PQ-1 formatting refinement
+
+The post-close full-flow re-entry requested function-level test strategies,
+rather than historical prose case inventories. Tasks 1–2 now name the pure
+functions, process boundary and native dispatcher with their adversarial input
+classes and mechanical guards. This is a presentation refinement: the accepted
+state table, regression sequence, failure policy and verification obligations
+are unchanged. The issue originally entered quick flow; close promoted its
+review to full after implementation, so no retrospective estimate is invented.

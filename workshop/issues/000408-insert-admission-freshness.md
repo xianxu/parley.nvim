@@ -381,3 +381,15 @@ queued suite; green final-code recorded evidence remains mandatory for landing.
 The revised live-profile probe, including foreign-lock refusal followed by i
 retry and silent freshening, runs only after review approval and is cleared
 straight after.
+
+### 2026-10-22 — clean reload row approved; R2 superseded
+
+Scratch native unavailable/no-edit -> watcher clean reload -> confirmed
+unchanged exit fails because the foreign reload becomes operator work:
+/Volumes/TestScratch/parley-408-reload-probe-fre1qr6r/red.log, 1 expected
+failure/0 errors, census clean. TL d2810569 approved an atomic reload event
+with exact before/after/clean facts, baseline translation only without prior
+operator work, and unchanged history/token/phase. R2 on 3a8c4552 is superseded;
+its verdict cannot authorize landing. Own queued suite lease-728916138 was
+confirmed cancelled through sdlc; no other runner touched and no stage held.
+The durable plan records the completed reload row.
