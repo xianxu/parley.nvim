@@ -5,9 +5,9 @@ deps: [parley.nvim#408]
 github_issue:
 created: 2026-10-21
 updated: 2026-10-22
-estimate_hours: 1.752
+estimate_hours: 1.987
 collaboration-mode: collaboration
-card_mirror: 'ee380c1dd15e3f66ec0d9e1def52878a07689beb' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'edded94fe25fa518cd4dfabbf27fb0b183cb3cde' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T11:48:38-07:00
 claimant:
     operator: Xian Xu
@@ -66,6 +66,24 @@ item: milestone-review design=0.02 impl=0.2
 item: real-api-discovery design=0 impl=0.16
 design-buffer: 0.15
 total: 1.752
+```
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only; calibration source remains marked stale/provisional.*
+
+Prospective remaining RETIRE implementation and acceptance after fresh plan-quality round 4 accepted the design, not a backfill of earlier attempts. One focused Lua/Neovim feature covers the pure warning/refusal policy, native deadline/restart regressions and both-runtime verification: v2 design 2.0 × thorough-plan discount 0.2 = 0.4; impl 1.5 × v3.1 scale 0.4 = 0.6. One cross-cutting-refactor primitive covers S1-first wiring and removal of the dual-protocol consumers: design 0.6 × 0.2 = 0.12; impl 0.5 × 0.4 = 0.2. Docs use raw 0.2 design/0.2 impl, review raw 0.1/0.5, and disposable conformance/copied-profile acceptance raw 0/0.6. Existing controller, owner, fake, native harness and statically prepared profile fixture are reused; no novel library, producer protocol or generic unlock is being built. Familiarity is 1.0; thorough design buffer 15%. Verification execution is included; suite FIFO and operator turnaround are excluded. Whole-issue actuals include the superseded quick-flow/re-plan work and are not a matching window for this remaining-work estimate.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.6
+item: cross-cutting-refactor design=0.12 impl=0.2
+item: atlas-docs design=0.04 impl=0.08
+item: milestone-review design=0.02 impl=0.2
+item: real-api-discovery design=0 impl=0.24
+design-buffer: 0.15
+total: 1.987
 ```
 
 ## Log
