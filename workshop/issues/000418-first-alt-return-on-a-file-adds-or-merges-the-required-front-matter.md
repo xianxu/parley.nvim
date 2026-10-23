@@ -140,6 +140,13 @@ Authenticated peer delivery 76f8ce1c-b33f-4994-b60b-e50ce62b53a0 supersedes the 
 
 Focused reproduction confirmed the same two deterministic failures (11 pass, 2 fail, 0 errors). The fixture edit helper now finds its ## Needs you body heading before editing the following row, retaining both pending message-ID and breadcrumb assertions. The complete attention_record_spec then passed 13/13 on Neovim 0.12.5 and 0.11.7, with zero failures/errors and clean censuses. Its luacheck and diff whitespace checks pass. No runtime code changed. Commit/push this test correction and one fresh recorded suite; the earlier failed attempt stays immutable and is not mislabeled a flake. Live acceptance and close/landing remain outstanding.
 
+
+### 2026-10-23 — corrected attention head queued; retain this runner
+
+PR338 now includes test correction 22ee10d0470a94eda4b8d5abde5314b9d8bec684. One fresh recorded suite targets that exact pushed head: session 41223, lease-1073534691, checkout /Volumes/TestScratch/local-checks/sdlc-local-3999646298, raw log /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/inflight/3bf568b5469d463898dc0993c1acdcb9/run.log. Initially FIFO 7, then 6; retain it and collect its real terminal outcome rather than restarting/requeuing for a wait. Session 28887 is terminal failed and no longer active. Hub outcome receipt fec5cd67-199c-4173-a9fa-9f38e8fff49d is submitted and names the immutable earlier failure plus the verified correction. Runtime diff since staged 9a5967f4 is empty. Later Log-only commits preserve tested code/tests.
+
+Exact next step remains: collect session 41223's recorded-suite result (classify every failure, no blind retry), obtain relayed morning live acceptance, then finish separate #418/#322 acceptance and binary-owned closes/merge. Do not claim a full suite pass or SHIP yet. #419's corrected producer fixture is only a future handoff until pair#823 lands.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
