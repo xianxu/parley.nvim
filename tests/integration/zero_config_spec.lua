@@ -38,10 +38,15 @@ describe('zero-config setup', function()
             vim.notify = function(message, level)
                 if (level or 0) >= vim.log.levels.WARN then notes[#notes + 1] = tostring(message) end
             end
+            -- #422: a marked ancestor of the scratch would select repo mode and
+            -- write the chat into that tree. Fail on the precondition instead.
+            local marked = require('parley.repo_mode').detect_root(vim.fn.getcwd(), require('parley.config').repo_marker)
+            assert(marked == nil, 'scratch sits under a marked project: ' .. tostring(marked))
             local p = require('parley')
             p.setup({})
             vim.cmd('ParleyChatNew')
             local name = vim.api.nvim_buf_get_name(0)
+            assert(name:sub(1, #vim.env.HOME + 1) == vim.env.HOME .. '/', 'chat outside the scratch HOME: ' .. name)
             local chats = vim.fn.stdpath('data') .. '/parley/chats/'
             assert(name:sub(1, #chats) == chats, 'chat outside default dir: ' .. name)
             assert(p.not_chat(vim.api.nvim_get_current_buf(), name) == nil, 'new buffer is not a chat')

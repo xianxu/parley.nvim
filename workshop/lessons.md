@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-10-23 (#422 — scratch placement checked before the first write)
+
+- An invariant an environment can break (the scratch root sits outside every marked tree) is checked once, before the first write. A spec that checks it alongside other specs reports the problem only after they have already written into the tree.
+- A guard that restates a product predicate uses that predicate exactly. `[ -e ]` for the marker also matched a directory that `detect_root` ignores; the guard now uses `-f -r`, as `detect_root` does, and a case where they could diverge fails if they do.
+- Tests that build a disposable checkout by copying files (test_run_lease.py) must copy every script a copied recipe calls. A missing helper made their real make runs hang until timeout, with no error message.
+- Reproduce environment bugs at the real path length: a long $TMPDIR makes nvim's tempname() fall back to /tmp, so a repro under a long path can pass for the wrong reason (#423).
+
 ## 2026-10-22 (#405 — native listener ownership)
 
 - A resource's live consumers and pending cleanup are different counts. The last consumer must cancel queued intent and join abandoned startup; retain admitted effects until exact cleanup, then close the resource before admitting a new epoch.

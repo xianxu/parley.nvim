@@ -57,7 +57,16 @@ spec that needs the real behavior clears the variable for its case:
 `file_tracker_spec` exercises real persistence, and `tests/helpers/sidecars.lua`
 does one tracked open.
 
-`tests/arch/scratch_placement_spec.lua` is the guard: it asserts
+`scripts/test-placement.sh` checks the same rule first. It is the opening step of
+`PREP_TEST_ENV`, so it runs once per make target, before anything is created. It
+refuses when `TEST_ENV_ROOT` resolves inside the checkout, or when it or any
+ancestor carries the `.parley` marker (#422). An inside-checkout `sdlc` review
+put `TMPDIR` in the review clone. The zero-config spec then found the clone's
+marker and wrote a chat into the clone's `workshop/parley`. In-process, the
+spec-level guard would have reported the problem only after other specs had
+already written into the tree.
+
+`tests/arch/scratch_placement_spec.lua` is the in-process guard: it asserts
 `vim.fn.tempname()`, `'directory'`, `$HOME`, and the `$XDG_*` dirs all resolve
 outside `getcwd()`. It guards the *writer*, which — unlike a lint over spec
 traversal roots — has no false-positive problem. It asserts the produced paths
