@@ -1,6 +1,6 @@
 ---
 id: 000322
-status: working
+status: codecomplete
 created: 2026-10-14
 updated: 2026-10-23
 estimate_hours:
@@ -12,6 +12,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: N/A
+tracker:
+    version: 1
+    completion:
+        token: close-fa47e47dad27
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: b2a6e58e990199e9f29dfa4044f1940272726564
+        evidence_commit: 252d3dff07c1fd8fee61d7cdb49a3d5893ea198b
 ---
 
 # Alt+Return on a plain markdown file silently sends nothing after the process-instruction prompt (no 'sent' or error notice)
