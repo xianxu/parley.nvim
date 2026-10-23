@@ -1,6 +1,6 @@
 ---
 id: 000420
-status: working
+status: codecomplete
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.46
+tracker:
+    version: 1
+    completion:
+        token: close-8c2328e2d041
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 38ebb2a8e6629fa6a50c42c9c3a9fdeccba70a31
+        evidence_commit: b300258c5685f26730791bede628baa77132129e
 ---
 
 # Investigate embedded fold-retirement timeout under native suite load
