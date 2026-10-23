@@ -1,13 +1,21 @@
 ---
 id: 000420
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '4026f234f46ee01516018e7a2277c7f688190084' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a0c76520481242289cef71c26bc591ca08cc904a' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-23T09:28:51-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Investigate embedded fold-retirement timeout under native suite load
@@ -34,10 +42,24 @@ One bounded isolated reproduction on unchanged product code and installed0.11.7:
 
 ## Plan
 
-- [ ]
+- [ ] Preserve the exact single-request fixture order and instrument module/setup, repair, manual folds, suspension and OptionSet detach boundaries; capture runtime, machine load, counts and JIT profile. Separate a stalled native retirement from expensive fixture setup before selecting a fix.
+- [ ] Test the resulting hypothesis with a controlled reproducer and an unchanged-timeout comparison. Prefer the existing operation owner and jit_tuning policy over a new timeout or parallel lifecycle (ARCH-DRY, ARCH-ORDER).
+- [ ] Send the evidence-backed fix plan to the hub before code. Preserve the original foldenable/view assertions; the correction needs a deterministic regression and both supported runtime checks.
+
 
 ## Log
 
 ### 2026-10-22
 
 Filed unclaimed at hub direction be6c21ea-6e38-4fe8-9e3d-3a2481a5da1a after #410's integration suite completed. Related #412 and #414 concern native timing under load; no shared root cause is proven. No code change, blanket budget increase, or automatic flake registration made.
+
+## Revisions
+
+### 2026-10-23 — Dispatched investigation
+
+The hub lifted the shutdown freeze and explicitly assigned #420 to parley.nvim:2, superseding the filing-time instruction to keep it unclaimed. Investigation does not assume the #412/#414 cause and will not raise the request deadline. Start-plan completed on its own main-based branch; catch-up now defers the seeded workflow update rather than dirtying the checkout.
+
+### Investigation checkpoint
+
+- Original immutable failure excerpt confirms the only location is the single nvim_exec_lua at spec line10; no inner stage trace exists. Current installed runtime is Neovim0.11.7/LuaJIT2.1.1741730670; preferred0.12.5/LuaJIT2.1.1788856981. Machine load sampled09:29 local47.22/36.81/30.33, not original-failure load.
+- Read-only peer trace finds native deletion bounded128 operations and guarded detach ownership. Initial D.drain permits200000 synchronous steps; anonymous fixture loops are outside the module-level jit_tuning protections. Both are hypotheses until stage/profile evidence distinguishes them. Next: bounded temporary probe with stage witnesses inside the same RPC; no product/test changes yet.
