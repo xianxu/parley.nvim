@@ -46,6 +46,13 @@ Project `unified-editorial-interface`; follows the spec in ariadne (dependency).
 
 **Side-doc layout (decided 10-22):** `<doc>.side/YYYY-MM/YYYY-MM-DD-NN-slug.md`: a year-month subfolder, with the full date kept in the filename so a file still makes sense when linked, grepped or moved. **No migration:** existing flat names stay valid (readers accept both). Reason: `ops/session.side/` already holds about 270 entries, 261 from October alone. For this issue: make this repo's side-doc creator use the new layout and its readers accept both. Applies to the naming rule in the universal-review spec (`collaboration-modes.md` §4) and to every side-doc creator (parley, Couch, and tl-lead's side-doc helpers).
 
+
+**Scope addition (TL, 10-23):** #419 also owns parley's **round-consumer upgrade for mixed per-section presentation**:
+pair#823 adds an optional per-span presentation field to the `.round` JSON (for sections that differ, e.g. direct in
+one and highlight in another), with the document-level value kept as the fallback for old packets. #419 renders
+those spans; parley.nvim#418 covers only the whole-document canonical/legacy resolution. pair:9 shares the exact
+additive span contract.
+
 ## Done when
 
 - Typing `<!-- ` under a heading offers the three keys; `key: ` offers its values; `; ` offers only unused keys; the
