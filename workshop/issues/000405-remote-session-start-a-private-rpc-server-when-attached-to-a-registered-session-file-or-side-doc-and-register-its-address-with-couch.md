@@ -50,6 +50,8 @@ the file open, without the operator starting nvim with special flags.
 
 ## Log
 
+
+- 2026-10-23: closed — main-integration conflict in tests/helpers/embedded_nvim.lua resolved keeping #405 owned-child on_exit/fixture install and #416 detach/spec_jobs install; targeted infra/test_harness 224/0/0 and modes/remote_session 276/0/0 clean census (fixed-then-ship; full suite: sdlc-local/suite exit 0 in 5m56s on 09f68966, log sha256:702c9adea17d, clean census); review verdict: SHIP
 ### 2026-10-20
 
 ### 2026-10-22 — claimed and planned against producer prerequisite
