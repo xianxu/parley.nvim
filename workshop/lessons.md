@@ -982,3 +982,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #416 close BR-3: an atomic capacity reservation still needs retirement semantics. Enumerate allocation/allocation, allocation/retirement and retirement/reuse together. Only explicit ENOENT permits proceeding after a stale directory snapshot; unreadable entries remain unknown. Drive each ordering with a controlled barrier.
 
 - #416 close BR-4: canonicalize a shared fixture base before deriving path expectations or metadata-fake keys. Otherwise symlinked scratch makes the fake identify a different path from production. Run sensitive tests under an explicit scratch alias as part of the normal suite, rather than relying on machine-specific `/tmp` layout.
+
+- #416 first full suite: generated child Lua must receive the same arrival budget by value as parent predicates. Include the existing arrival architecture guard in the affected harness mapping; a narrow native map alone can miss static guard violations in generated source strings.

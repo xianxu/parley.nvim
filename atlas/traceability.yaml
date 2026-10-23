@@ -744,6 +744,7 @@ atlas:
       - tests/unit/golden_fixture_spec.lua
       - tests/integration/fresh_clone_spec.lua
       - tests/integration/portable_make_spec.lua
+      - tests/arch/arrival_budget_spec.lua
       - tests/arch/scratch_placement_spec.lua
       - tests/arch/destructive_recipe_spec.lua
       - tests/arch/superseded_comment_spec.lua

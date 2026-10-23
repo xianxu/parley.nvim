@@ -194,3 +194,10 @@ Enumerate every scope creator/collector: `M.scope` alone acquires current-run sl
 ### 2026-10-22 — BR-4: shared canonical fixture identity
 
 The third review disposes the complete capacity family, with sensitivity checks on both runtimes, but reproduces a separate portability defect under macOS's `/tmp` alias. Canonicalize the lease test's shared fixture base once so context expectations, inherited-context inputs, and metadata fakes use the same physical identity as the lease implementation. Add a normal-suite regression which reruns the sensitive context/ownership and legacy-census cases in a fresh Python process with TMPDIR pointing at an explicitly created symlink; do not depend on the machine having `/tmp` as a symlink. Verify the full lease suite with both physical and aliased scratch. Runtime identity/lease semantics remain unchanged.
+
+
+### 2026-10-22 — recorded-suite arrival guard correction and maintenance deferral
+
+The first admitted full suite rejects the spinner launcher's generated literal readiness timeout. Pass the existing `arrival.MS` budget into that child source by value, as required by the harness rule; do not label an ordinary readiness wait as a timing-bound exception. Sweep all waits added by this issue: ordinary readiness/death waits already derive from arrival, and the explicit forever-false wait is the intentional interrupted-publication seam. Add the existing arrival architecture guard to the infra/test_harness traceability mapping so targeted preflight catches this class too. Verify the guard plus native census cases on both runtimes and request the narrow fix review.
+
+Authenticated TL delivery 449567de-e97e-430a-bf38-92d7935a6287 authorizes this short test-only correction and review, then commit/push/checkpoint; it explicitly defers the new suite and landing until after the maintenance restart tomorrow. Stop the pre-notice queued merge attempt before changing its head. Do not retry merge or queue a replacement suite tonight. Let the running old-head suite finish and record its actual outcome. The next session must run one recorded suite on the corrected pushed head before resuming merge.

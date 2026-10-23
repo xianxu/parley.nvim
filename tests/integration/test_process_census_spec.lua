@@ -34,7 +34,7 @@ describe("retained embedded child census", function()
             'local child = require("tests.helpers.embedded_nvim").start({ detach = true })',
             'vim.fn.writefile({ tostring(child.pid), require("tests.helpers.process_identity").start_time(child.pid) }, ' .. vim.inspect(path) .. ')',
             'child:notify("nvim_exec_lua", ' .. vim.inspect('vim.fn.writefile({"ready"}, ' .. vim.inspect(ready) .. '); while true do end') .. ', {})',
-            'assert(vim.wait(10000, function() return vim.fn.filereadable(' .. vim.inspect(ready) .. ') == 1 end, 10))',
+            'assert(vim.wait(' .. arrival.MS .. ', function() return vim.fn.filereadable(' .. vim.inspect(ready) .. ') == 1 end, 10))',
         }
     end
 
