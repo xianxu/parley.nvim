@@ -37,6 +37,15 @@ describe("arch: harness scratch stays out of the repo tree", function()
         assert_outside_repo("vim.fn.tempname()", vim.fn.tempname())
     end)
 
+    it("nvim's temp directory is the harness TMPDIR, not a fallback (#423)", function()
+        -- A $TMPDIR nvim refuses (too long, unusable) silently becomes /tmp/nvim.<user>.
+        local tmp = canonical(vim.env.TMPDIR)
+        assert.is_not_nil(tmp, "$TMPDIR must be set")
+        local made = canonical(vim.fn.fnamemodify(vim.fn.tempname(), ":h"))
+        assert.is_true(made:sub(1, #tmp + 1) == tmp .. "/",
+            ("vim.fn.tempname() is under %s, not $TMPDIR %s"):format(made, tmp))
+    end)
+
     it("nvim's swap directory is outside the repo", function()
         for entry in vim.o.directory:gmatch("[^,]+") do
             assert_outside_repo("'directory' entry " .. entry, (entry:gsub("//$", "")))
@@ -214,6 +223,45 @@ describe("arch: the pre-write placement guard", function()
         assert.equals(0, guard(base .. "/scratch/not/yet").code)
         vim.fn.mkdir(base .. "/scratch/now", "p")
         assert.equals(0, guard(base .. "/scratch/now").code)
+    end)
+
+    -- A directory whose path is exactly n bytes, under base.
+    local function path_of(n)
+        local p = base .. "/"
+        p = p .. string.rep("a", n - #p)
+        assert(#p == n)
+        return p
+    end
+    local function limit()
+        for _, line in ipairs(vim.fn.readfile(script)) do
+            local n = line:match("^TMPDIR_MAX=(%d+)$")
+            if n then return tonumber(n) end
+        end
+    end
+
+    it("refuses a root whose TMPDIR Neovim would ignore, and creates nothing (#423)", function()
+        local max = limit()
+        assert.equals(0, guard(path_of(max - #"/tmp")).code)
+        local long = path_of(max + 1 - #"/tmp")
+        local result = guard(long)
+        assert.equals(1, result.code, result.stderr)
+        assert.matches(("is %d bytes; Neovim ignores a TMPDIR over %d bytes"):format(max + 1, max), result.stderr)
+        assert.equals(0, vim.fn.isdirectory(long))
+    end)
+
+    it("pins the TMPDIR limit to the running Neovim (#423)", function()
+        local max = limit()
+        local function used(n)
+            local dir = path_of(n)
+            vim.fn.mkdir(dir, "p")
+            local out = vim.system({ vim.v.progpath, "--clean", "--headless", "-i", "NONE",
+                "-c", "lua io.stdout:write(vim.fn.tempname())", "-c", "qa!" },
+                { text = true, env = { TMPDIR = dir } }):wait(10000)
+            assert.equals(0, out.code, out.stderr)
+            return out.stdout:sub(1, #dir + 1) == dir .. "/"
+        end
+        assert.is_true(used(max), "Neovim refused a TMPDIR of the guard's limit, " .. max .. " bytes")
+        assert.is_false(used(max + 1), "Neovim accepted a TMPDIR over the guard's limit, " .. max .. " bytes")
     end)
 
     it("is wired into PREP_TEST_ENV with the configured marker", function()

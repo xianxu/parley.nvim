@@ -10,7 +10,14 @@
 #
 # An inside-checkout `sdlc` review puts TMPDIR in the review clone, which is how
 # the zero-config spec once wrote a chat into the clone's workshop/parley.
+#
+# The harness's TMPDIR is ROOT/tmp. Neovim uses $TMPDIR only while the string is
+# at most TMPDIR_MAX bytes; past that, tempname() silently falls back to
+# /tmp/nvim.<user> (#423, measured on 0.11.7 and 0.12.5). Specs would then
+# write outside ROOT, away from the census and cleanup that assume it.
+# scratch_placement_spec pins the limit against the running nvim.
 set -eu
+TMPDIR_MAX=189
 [ "$#" -eq 3 ] || { echo 'usage: test-placement.sh ROOT CHECKOUT MARKER' >&2; exit 2; }
 root=$1 marker=$3
 checkout=$(cd "$2" && pwd -P)
@@ -20,6 +27,14 @@ checkout=$(cd "$2" && pwd -P)
 dir=$root
 while [ ! -d "$dir" ]; do dir=$(dirname "$dir"); done
 dir=$(cd "$dir" && pwd -P)
+
+tmp=$root/tmp
+if [ "${#tmp}" -gt "$TMPDIR_MAX" ]; then
+    echo "test-placement: the test TMPDIR $tmp is ${#tmp} bytes; Neovim ignores a TMPDIR over $TMPDIR_MAX bytes." >&2
+    echo "  Specs would write their scratch to /tmp/nvim.\$USER, outside the test root (#423)." >&2
+    echo "  Point TMPDIR (or TEST_ENV_ROOT) at a shorter path, or use a shorter checkout name." >&2
+    exit 1
+fi
 
 refuse() {
     echo "test-placement: the test scratch root $root $1." >&2
