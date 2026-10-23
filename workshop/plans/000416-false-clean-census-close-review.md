@@ -371,3 +371,61 @@ dispose:
 7. **Plan revision recommendations:** None. The BR-4 revision accurately describes the delivered correction and regression.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"7e1d058c-1028-440f-a110-b97f36d1b27b","repository":"github.com/xianxu/parley.nvim","issue_id":"000416","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/2d7132c9889e5802","reviewed_head":"8548f3b68b79592f013367172bc4340d66cfd6b7","slot":"parley.nvim:3","requested_at":"2026-10-23T00:26:52.014579Z"},"phase":"finished","pid":14375,"started_at":"2026-10-23T00:26:52.124904Z","finished_at":"2026-10-23T00:30:25.376961Z","session_id":"01a16627-469e-7a42-a4fc-ea0a0c63c5e6","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T18:45:28-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 416 — Test census reports clean while an orphaned embedded Neovim survives |
+| repo | parley.nvim |
+| issue file | workshop/issues/000416-false-clean-census.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 1676f595ca3dcfdcc14cd11fc60a576905dbb82f..e6fc10ea300bb089ac2cb1e9317179567cab9d13 |
+| command | sdlc close --issue 416 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T18:45:28-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The interdiff correctly applies the shared arrival budget to generated child code and adds the existing guard to the harness mapping. No new defects or scope changes were found. Previously disposed BR-1–BR-4 remain closed. This narrow approval does not replace the required corrected-head full-suite acceptance.
+
+```findings
+{}
+```
+
+1. **Strengths**
+   - Generated readiness code receives `arrival.MS` by value (`tests/integration/test_process_census_spec.lua:37`).
+   - The harness mapping now includes the architecture guard (`atlas/traceability.yaml:747`).
+   - The plan revision accurately records the correction and outstanding acceptance work.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - Neovim 0.12.5 and 0.11.7 each passed two arrival-guard cases and six native census cases; terminal censuses verified clean.
+   - Restoring the old timeout in a disposable copy made the guard fail specifically at line 37. The copy was removed.
+   - Changed-file luacheck and pinned-range whitespace checks passed.
+
+6. **Architectural notes**
+   - **ARCH-DRY — Pass:** Reuses the shared budget and existing guard.
+   - **ARCH-PURE — Pass:** Adds no business logic or IO coupling.
+   - **ARCH-PURPOSE — Pass:** Corrects the generated wait and makes targeted preflight enforce the rule.
+   - **ARCH-EVOLVE — Pass:** Changes no persisted format or rewrite behavior.
+   - No new user-facing surface requires a README update; atlas mapping is updated.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"9c18fbae-3e79-4c6a-83e2-9c6a9c346f88","repository":"github.com/xianxu/parley.nvim","issue_id":"000416","recipe":"fix-review","round":5,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/d5e2704bd6de090c","reviewed_head":"e6fc10ea300bb089ac2cb1e9317179567cab9d13","slot":"parley.nvim:3","requested_at":"2026-10-23T01:43:55.041689Z"},"phase":"finished","pid":84606,"started_at":"2026-10-23T01:43:55.131699Z","finished_at":"2026-10-23T01:45:28.188353Z","session_id":"01a1666d-d10b-79e1-abb5-15c69b8b51f8","outcome":"returned"}] -->
