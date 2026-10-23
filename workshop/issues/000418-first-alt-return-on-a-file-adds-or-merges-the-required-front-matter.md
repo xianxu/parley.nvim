@@ -28,7 +28,11 @@ missing keys, never overwriting or dropping the operator's existing keys or valu
 - The front-matter edit is a normal buffer edit (undoable), done before the submit, and saved with the submit.
 - Related: parley.nvim#410 (unregistered typed files show "not protected" until the first submit registers them).
 
+
+**Operator addition (10-22, night):** whenever front matter is filled in for a document (a new session file or side doc, or the first Alt+Return adding missing front matter), it lists **all three mode keys with their default values written out** (`collaboration-mode: discussion`, `presentation-mode: highlight`, `processing-mode: free-form`), as a visible reminder that they can be changed. Merging into existing front matter adds any missing ones the same way and never changes values already set.
+
 ## Done when
+- New or filled front matter lists all three mode keys with their defaults; existing values are untouched (test).
 
 - Alt+Return on a file with no front matter adds the required fields and submits (test).
 - Alt+Return on a file with partial front matter merges the missing fields, keeping existing keys and values exactly
