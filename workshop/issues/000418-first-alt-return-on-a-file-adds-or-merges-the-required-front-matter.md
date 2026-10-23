@@ -50,7 +50,7 @@ missing keys, never overwriting or dropping the operator's existing keys or valu
 
 ## Plan
 
-- [ ] Implement the approved shared [first-submit plan](../plans/000418-first-submit-frontmatter-plan.md), including canonical/legacy readers and additive undoable preparation before save/register/send.
+- [x] Implement the approved shared [first-submit plan](../plans/000418-first-submit-frontmatter-plan.md), including canonical/legacy readers and additive undoable preparation before save/register/send.
 - [ ] Prove this issue's Done-when and #322's separate visible-outcome acceptance on both runtimes, record the required check, obtain the binary-owned close review and complete live acceptance/landing after ariadne#562.
 
 ## Log
@@ -146,6 +146,13 @@ Focused reproduction confirmed the same two deterministic failures (11 pass, 2 f
 PR338 now includes test correction 22ee10d0470a94eda4b8d5abde5314b9d8bec684. One fresh recorded suite targets that exact pushed head: session 41223, lease-1073534691, checkout /Volumes/TestScratch/local-checks/sdlc-local-3999646298, raw log /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/inflight/3bf568b5469d463898dc0993c1acdcb9/run.log. Initially FIFO 7, then 6; retain it and collect its real terminal outcome rather than restarting/requeuing for a wait. Session 28887 is terminal failed and no longer active. Hub outcome receipt fec5cd67-199c-4173-a9fa-9f38e8fff49d is submitted and names the immutable earlier failure plus the verified correction. Runtime diff since staged 9a5967f4 is empty. Later Log-only commits preserve tested code/tests.
 
 Exact next step remains: collect session 41223's recorded-suite result (classify every failure, no blind retry), obtain relayed morning live acceptance, then finish separate #418/#322 acceptance and binary-owned closes/merge. Do not claim a full suite pass or SHIP yet. #419's corrected producer fixture is only a future handoff until pair#823 lands.
+
+
+### 2026-10-23 — required recorded suite passed; live acceptance pending
+
+Retained session 41223 completed successfully on tested code/test head 22ee10d0470a94eda4b8d5abde5314b9d8bec684: exit 0 in 5m9s, recorded as sdlc-local/suite, log SHA256 prefix 6519e5d88cfd. Full saved log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/22ee10d0470a94eda4b8d5abde5314b9d8bec684/suite.log. Both preferred Neovim and the explicit installed NVIM v0.11.7 compatibility pass completed, including attention_record_spec, with clean censuses. This supersedes the pending-run next steps above; no local recorded check remains active. Subsequent commits have only changed issue/plan documentation, so do not rerun solely for them.
+
+Authenticated TL dc2c735f confirms pair#823 landed as PR557 at 09:19 and its fixture is on producer main. Future #419 can verify/pin its landed main revision when dispatched; no #419 implementation starts under #418. The hub has been notified of this suite pass and that staged runtime still matches 9a5967f4. Exact next step: receive the scheduled operator live result for plain/partial/second press, record it on both cards, finish acceptance ticks, then execute the binary-owned closes and merge. Required live acceptance and close review remain outstanding; do not claim SHIP/landed.
 
 ## Revisions
 

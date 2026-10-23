@@ -31,7 +31,7 @@ Every Alt+Return ends with a visible outcome: confirmed sent owner/time, an expl
 
 ## Plan
 
-- [ ] Implement and verify the visible-outcome portion of the [shared #418 plan](../plans/000418-first-submit-frontmatter-plan.md), retaining the original incident as historical evidence.
+- [x] Implement and verify the visible-outcome portion of the [shared #418 plan](../plans/000418-first-submit-frontmatter-plan.md), retaining the original incident as historical evidence.
 - [ ] Complete this card's separate automated/live acceptance and binary-owned close/landing evidence with #418.
 
 ## Log
