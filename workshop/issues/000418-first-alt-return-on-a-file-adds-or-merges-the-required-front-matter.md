@@ -154,6 +154,11 @@ Retained session 41223 completed successfully on tested code/test head 22ee10d04
 
 Authenticated TL dc2c735f confirms pair#823 landed as PR557 at 09:19 and its fixture is on producer main. Future #419 can verify/pin its landed main revision when dispatched; no #419 implementation starts under #418. The hub has been notified of this suite pass and that staged runtime still matches 9a5967f4. Exact next step: receive the scheduled operator live result for plain/partial/second press, record it on both cards, finish acceptance ticks, then execute the binary-owned closes and merge. Required live acceptance and close review remain outstanding; do not claim SHIP/landed.
 
+
+### 2026-10-23 — exact landed fixture pin for future #419
+
+Authenticated peer 0c807306-0796-4026-ac26-d4d21d6f68e1 supplies landed pair#823 revision aba41239d6473e2da5d3f0ce00e82129a47a2ba3 (PR557), verified by Git as an ancestor of producer origin/main. Future #419 should pin cmd/internal/sessionsync/testdata/editorial-rounds/presentation.json from that revision, superseding the unlanded handoff hashes above. It contains the agreed mixed and legacy policies plus review-record/resume preservation. Semantic/operator end-to-end acceptance belongs to #419; no fixture copy or mixed-span runtime work is added to #418.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
