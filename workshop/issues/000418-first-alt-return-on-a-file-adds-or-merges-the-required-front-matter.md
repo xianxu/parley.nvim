@@ -26,6 +26,10 @@ actual_hours: 4.29
 
 ## Spec
 
+**Active contract (TL approval 49bad7d4, 2026-10-23):** this issue now delivers only the demonstrated legacy collaboration reader correction. An unrelated plain root instruction containing punctuation/quotes must not break reading collaboration-mode: chat or its existing map form. No frontmatter fill, scalar writer, canonical resolver, preparation state or mode consumer migration is delivered. Save/register/submit remains the ordinary main behavior. #322 separately owns mode-free outside-Couch submit; #419 owns the later spec-driven tag/link policy. Prior requirements below are historical and superseded by this active contract and the final Revisions entry.
+
+**Superseded original specification:**
+
 Operator request (10-22): the **first time** the operator presses **Alt+Return** on a file (submitting it to the agent
 in the same pair session), parley checks that the file has the front matter a submitted/registered document needs; if
 it has none, parley adds it; if it already has front matter, parley **merges** the required fields into it (adding
@@ -42,6 +46,13 @@ missing keys, never overwriting or dropping the operator's existing keys or valu
 **Operator addition (10-22, night):** whenever front matter is filled in for a document (a new session file or side doc, or the first Alt+Return adding missing front matter), it lists **all three mode keys with their default values written out** (`collaboration-mode: discussion`, `presentation-mode: highlight`, `processing-mode: free-form`), as a visible reminder that they can be changed. Merging into existing front matter adds any missing ones the same way and never changes values already set.
 
 ## Done when
+
+- [ ] Legacy chat scalar and existing flow/block maps read correctly with unrelated plain instruction text such as Keep commas, "please, including punctuation after comma, bracket and hyphen.
+- [ ] Actual malformed collaboration values still produce explicit errors; the supported grammar is not expanded.
+- [ ] Ordinary Couch submit of plain/partial/existing documents adds no mode or instruction keys and preserves metadata/body; normal cancellation and once-only delivery remain intact.
+- [ ] Counted N/2N parser work is linear; focused parser/native tests pass on both supported runtimes, followed by a fresh recorded suite and narrowed close review.
+
+**Superseded original acceptance checklist (retained as history):**
 - New or filled front matter lists all three mode keys with their defaults; existing values are untouched (test).
 
 - Alt+Return on a file with no front matter adds the required fields and submits (test).
@@ -50,6 +61,9 @@ missing keys, never overwriting or dropping the operator's existing keys or valu
 - A second Alt+Return makes no front-matter change (test).
 
 ## Plan
+
+**Active tasks:** execute the final operator-pivot revision of the [durable plan](../plans/000418-first-submit-frontmatter-plan.md): preserve the reviewed tip, discard the obsolete delivery diff, TDD the narrow parser correction, verify no-fill native submit and obtain new suite/review evidence. Earlier checked tasks below describe the superseded implementation, not current completion.
+
 
 - [x] Implement the approved shared [first-submit plan](../plans/000418-first-submit-frontmatter-plan.md), including canonical/legacy readers and additive undoable preparation before save/register/send.
 - [x] Prove this issue's Done-when and #322's separate visible-outcome acceptance on both runtimes, record the required check, and complete operator live acceptance after ariadne#562. Binary-owned close review and landing follow as workflow gates.
@@ -284,3 +298,8 @@ Authenticated TL delivery 790dfd6d replaces the three-axis contract with one col
 The alternative is abandonment with the binary's preserved archive ref, then porting the required reader correction into #419. It saves no implementation and defers a demonstrated legacy-read defect, so retaining the narrow fix is proposed. Full abandonment remains available if the approved #575 legacy reader makes the existing parser unnecessary.
 
 **Adjacent acceptance gap:** #322 is not delivered on main: outside Couch, review_send still prompts for and writes process-instruction, then may silently return when cancelled. The former acceptance-only close depended on #418 landing its old local-review rewrite; that path is now obsolete. Ask TL to assign the mode-free local-submit adapter and visible outcome under #322, or explicitly fold it into #419 before treating #322 as acceptance-only. No close or merge is authorized by this rescope proposal.
+
+
+### 2026-10-23 11:17 — scope approved; reviewed tip preserved
+
+Authenticated TL 49bad7d4 approves the narrow legacy-chat correction and assigns mode-free local submit to #322, after this item and before #419. #419 waits for ariadne#575 fixtures and reconciles old mixed-presentation scope with always-highlight/pair#838. The pre-pivot reviewed tip 4ffe7c9bd79295c66b676fd8d1d165b6d550ba51 is preserved locally and on origin as refs/ariadne/preserved/000418-mode-fill. No force push. #419's revisions were published to main from the resting branch; this checkout is back on #418. Next: change-code for the narrowed contract, then discard obsolete code and run test-first parser/native checks. No new runtime code yet.

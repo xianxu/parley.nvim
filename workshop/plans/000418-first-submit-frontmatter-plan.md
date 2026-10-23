@@ -301,3 +301,8 @@ No new integration entity, mutable state, cache, watcher or durable runtime arti
 **Operating envelope:** one linear scan over header bytes and existing legacy-map entries, no new input domain or durable storage. Use the existing header bound rather than expanding YAML support. Tests cover literal punctuation and existing map shape, not a new general YAML surface. ARCH-PURE keeps lexical rules in the pure parser; ARCH-EVOLVE leaves old metadata byte-identical and preserves the known map grammar.
 
 #419 remains a separate main-based branch after this item resolves, with no stacked development. Its implementation waits for ariadne#575's landed export v4 and fixtures. The mode-free local-submit adapter is an explicit ownership question for TL because it is necessary to #322 and no longer supplied by this narrowed #418.
+
+
+### 2026-10-23 11:17 — replacement approved
+
+TL 49bad7d4 approves the immediately preceding legacy-reader-only revision. It is now the active implementation plan; earlier fill tasks and completed markers are historical. #322 owns mode-free outside-Couch submission after #418, before #419. The reviewed tip is preserved on origin at refs/ariadne/preserved/000418-mode-fill; normal branch history remains forward-only. Root-plain quoted-value recognition is the sole runtime mechanism retained; no general scalar codec, new header budget, unsupported-header semantic refusal or mode behavior is introduced. Native no-fill tests use the existing submit fake and existing cancellation tests. The old estimate is the historical combined forecast and is not a request to re-charge completed work; actuals remain measured.
