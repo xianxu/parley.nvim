@@ -5146,7 +5146,11 @@ M.cmd.OpenFileUnderCursor = function()
 		if in_insert_mode then vim.cmd("stopinsert") end
 		if item then vim.api.nvim_win_set_cursor(win, {item.fallback_row or item.row, item.fallback_col}) end
 		local ok, err = pcall(M.cmd.ResolveRefOrGotoFile, {is_current = is_current, open = followed_open,
-            follow = function(open) return history.follow(follow_origin, open) end})
+            follow = function(open) return history.follow(follow_origin, open) end,
+            on_no_file = function()
+                require("parley.document_band").flash_notice(win, "No file to open")
+                restore_insert()
+            end})
 		if item then restore_cursor() end
 		if not ok then error(err) end
 	end
@@ -5294,7 +5298,13 @@ M.cmd.IssueGoto = function() issues_mod.cmd_issue_goto() end
 M.cmd.ResolveRefOrGotoFile = function(opts)
 	opts = opts or {}
 	opts.on_no_ref = function()
-        local open = function() vim.cmd("normal! gf") end
+        local open = function()
+            local ok, err = pcall(vim.cmd, "normal! gf")
+            if not ok then
+                if opts.on_no_file and tostring(err):match("E44[67]:") then opts.on_no_file()
+                else error(err) end
+            end
+        end
         if opts.follow then opts.follow(open) else open() end
     end
 	require("parley.artifact_ref").goto_ref_at_cursor(opts)

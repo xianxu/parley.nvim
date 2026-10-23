@@ -52,10 +52,22 @@ reports clearly.
 
 Root cause: ResolveRefOrGotoFile calls normal! gf without handling native E446/E447. OpenFileUnderCursor catches and rethrows that error, so a normal no-target gesture becomes E5108 and a prompt. Existing document_band owns pulse timers, window layers, restoration proofs and navigation cancellation; reuse that owner instead of an independent notification timer. Alt+o supplies the no-target callback; direct gf retains its native failure behavior. Hub plan posted, proceeding under the quick-flow rule unless objected.
 
-Actions: Alt+o, edit, navigate. | Internal state | Visible state | Recovery action | Possible loss |
+Actions: Alt+o, edit, navigate.
+
+| Internal state | Visible state | Recovery action | Possible loss |
 | --- | --- | --- | --- |
 | No resolvable target | Brief No file to open bar cue, then original bar | Edit or navigate to a target and retry Alt+o | None |
 | Window navigates/closes or bar overridden during pulse | Current window/bar survives; pulse retires | Continue editing/navigation | None |
 | Existing explicit reference fails | Existing clear diagnostic | Correct the reference and retry Alt+o | None |
 
 Creates nothing durable: a pulse owns one finite timer and window layer, removed by completion/navigation/window-close. Navigation remains one existing scan; no added per-byte work. The fixed six pulse frames are independent of document length. No storage, registration, fold, or editing behavior changes. ARCH-PURE: no new business model; this is the existing thin UI/command boundary.
+
+### Implementation checkpoint
+
+Native red run /tmp/parley425-red.log reproduced the actual hit-enter mode through the Normal/Insert Alt+o mappings on both missing words and empty text, with builtin notifications intact. A bare-path control initially overasserted that navigation paints nothing; corrected it to forbid only the no-target cue, since a successful navigation legitimately paints breadcrumbs.
+
+The native fallback now handles only E446/E447 when Alt+o supplies its callback. Other native failures still propagate; explicit link errors retain their existing diagnostic. The shared document_band pulse is factored into one owner used by the existing lock-leave reminder and a quiet same-buffer notice. It preserves the lock cell and its exact option-restoration proofs. No notification or independent timer family was introduced.
+
+A first shared run passed32 renderer and18 lock-leave tests, then the new fixture failed to complete: it replaced a live breadcrumb-owned bar and waited for that artificial override to restore. Set breadcrumb.enable=false explicitly for genuine no-bar/custom-bar cases, matching the documented option. The next focused run passed13/0/0; no product timeout change or flake claim. Added a separate state-owned lock-cell control.
+
+Queued-navigation control red: /Volumes/TestScratch/parley425.YDVqCr/navigation-race-red.log,13/1/0 with the buffer identity guard removed, specifically catching a notice painting after enew. Restored the guard; final context and shared targeted runs are in progress. Logs under /Volumes/TestScratch/parley425.YDVqCr. Initial lint found a shadowed pulse name; renamed the shared function start_pulse, final lint pending. Required recorded suite and boundary review remain pending. #428 remains queued; no styling change included here.

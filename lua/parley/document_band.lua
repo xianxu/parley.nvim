@@ -228,8 +228,8 @@ function M.new(buf, only_win, priority)
     return handle
 end
 
--- The lease coalesces native leave events and owns one finite window pulse.
-function M.flash(win, source, active)
+-- The lease coalesces native events and owns one finite window pulse.
+local function start_pulse(win, source, active, label, message, leaving)
     if pulses[win] and pulses[win].source == source then return end
     if pulses[win] then pulses[win].cancel() end
     local pulse = { source = source }
@@ -243,15 +243,13 @@ function M.flash(win, source, active)
     vim.schedule(function()
         if pulses[win] ~= pulse then return end
         if not vim.api.nvim_win_is_valid(win) or not active() then pulse.cancel(); return end
-        if vim.api.nvim_get_current_win() == win and vim.api.nvim_win_get_buf(win) == source then
+        if leaving and vim.api.nvim_get_current_win() == win and vim.api.nvim_win_get_buf(win) == source then
             pulse.cancel(); return
         end
         pulse.buf, pulse.expected, pulse.seen = vim.api.nvim_win_get_buf(win), read(win), {}
         for _, known in ipairs(vim.api.nvim_list_wins()) do pulse.seen[known] = true end
         pulse.owner = M.new(pulse.buf, win, true)
-        local message = ("unsubmitted: Alt+Return to submit — " .. vim.api.nvim_buf_get_name(source)):gsub("%c", " ")
-        local label = literal("unsubmitted: Alt+Return to submit — " .. vim.fn.fnamemodify(vim.api.nvim_buf_get_name(source), ":t"))
-        vim.notify(message, vim.log.levels.WARN)
+        if message then vim.notify(message, vim.log.levels.WARN) end
         local step = 0
         pulse.timer = vim.uv.new_timer()
         pulse.timer:start(0, M.PULSE_MS, vim.schedule_wrap(function()
@@ -270,6 +268,21 @@ function M.flash(win, source, active)
             if step == 6 then pulse.cancel() end
         end))
     end)
+end
+
+function M.flash(win, source, active)
+    local name = vim.api.nvim_buf_get_name(source)
+    start_pulse(win, source, active,
+        literal("unsubmitted: Alt+Return to submit — " .. vim.fn.fnamemodify(name, ":t")),
+        ("unsubmitted: Alt+Return to submit — " .. name):gsub("%c", " "), true)
+end
+
+-- Quiet, window-local feedback also owns a transient bar when none exists.
+function M.flash_notice(win, label)
+    local buf = vim.api.nvim_win_get_buf(win)
+    start_pulse(win, buf, function()
+        return vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf
+    end, literal(label))
 end
 
 return M
