@@ -27,6 +27,8 @@ A complete recorded #410 integration suite passed its preferred runtime but fail
 
 ## Spec
 
+Current deliverable: bounded evidence capture in both native retirement fixtures, preserving their single RPC, callback order, request deadline and original fold/view assertions. The historical timeout could not be reproduced on demand. Its unresolved root cause and active flake registration are tracked by unclaimed #424; see the scope revision below.
+
 Failing file: tests/integration/document_fold_uncertainty_retirement_spec.lua, line10. Exact case: native suspended fold retirement restores the operator preference and view when detach interrupts suspended uncertainty.
 
 Recorded full suite on d74f24b15ae4fa9d9393e4bf1b5b166335887eb1: attempt c2c4dbbdbfc2dc8a8b8a35131c503fb2; suite make exit2 after5m34s, outer command exit1. Installed0.11.7 child did not answer nvim_exec_lua within27862ms; embedded helper killed child PID5505. This was the only failed file. Preferred runtime and both session_sync_native runs passed; every process census was clean. Immutable failure log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/c2c4dbbdbfc2dc8a8b8a35131c503fb2.log, SHA256 e285308fc37374072ff54fbc702679242ce1531654f8c600095dfaa61eb20068, failure lines1718–1735. No per-case load or elapsed stage trace was captured;27862ms is the helper's load-scaled request bound, not a diagnosis.
@@ -37,15 +39,18 @@ One bounded isolated reproduction on unchanged product code and installed0.11.7:
 
 ## Done when
 
-- Identify the cause of the embedded fold-retirement timeout with evidence, including runtime and load where relevant.
-- Add a deterministic regression or justified harness correction while preserving the fold/view retirement behavior assertion.
-- Verify the correction on both supported test runtimes; retain fail/pass evidence.
+- Both native retirement fixtures report bounded last-stage, runtime, load, elapsed wall/CPU and counted-work evidence; reuse the existing JIT profile reporter.
+- Capture evidence before teardown on a failed RPC, preserving original errors when the snapshot is missing or malformed; clean the owned scratch folder afterward.
+- Preserve one RPC, operation/event order, request deadlines and the original fold preference/view assertions.
+- Verify bounded progress writes, actual child-kill capture and cleanup, and both supported runtimes. Record the completed bounded replay without claiming a root-cause fix.
+- File the unresolved root cause as an unclaimed follow-up and keep the exact timeout case registered as a flake there.
 
 ## Plan
 
-- [x] Preserve the exact single-request fixture order and instrument module/setup, repair, manual folds, suspension and OptionSet detach boundaries; capture runtime, machine load, counts and JIT profile. Separate a stalled native retirement from expensive fixture setup before selecting a fix.
-- [ ] Test the resulting hypothesis with a controlled reproducer and an unchanged-timeout comparison. Prefer the existing operation owner and jit_tuning policy over a new timeout or parallel lifecycle (ARCH-DRY, ARCH-ORDER).
-- [ ] Send the evidence-backed fix plan to the hub before code. Preserve the original foldenable/view assertions; the correction needs a deterministic regression and both supported runtime checks.
+- [x] Instrument both original single-request fixtures through one shared test-only reporter, reusing existing lifecycle and profile owners (ARCH-DRY, ARCH-ORDER).
+- [x] Verify evidence survival, unusable-snapshot error preservation, cleanup and logarithmic progress writes with deterministic controls.
+- [x] Complete one bounded nine-file/eight-worker replay on each runtime and classify the historical cause as unknown when it does not reproduce.
+- [x] Revise the deliverable at hub direction; file unclaimed #424 and register the exact unresolved flake there. Preserve historical investigation evidence below.
 
 
 ## Log
@@ -100,3 +105,14 @@ Proposed next plan to hub, before code:
 3. Only after a mechanism is established, write its deterministic reproducer/negative control and fix the owning code or fixture. Preserve both native retirement assertions and both runtime checks. If the instrumented replay still does not reproduce, keep #420 open and send the evidence to the hub for a decision; no guessed fix or SHIP claim.
 
 No correction has been selected; stage diagnostics are the proposed investigation work, not completion of the root-cause contract. ARCH-DRY: retain embedded_nvim and existing fold/document owners. ARCH-ORDER: avoid event-loop turns between stages and retain OptionSet reentrancy. No operator state, storage format or production hot path change is proposed. Diagnostics are bounded per test case and removed after evidence is reported; no new durable production artifact family.
+
+
+### 2026-10-23 — Scope revised to land bounded evidence capture
+
+Hub decision ff4e7f1b-f39a-4575-8ccf-0f9ef5f8b6a6 supersedes the original root-cause completion contract: land the diagnostics, with no more reproduction reruns. The original Done-when required an established cause, a deterministic regression/correction and verification of that correction; those requirements now belong to unclaimed #424. The original uncompleted hypothesis/fix plan steps are superseded by the active evidence-capture Plan above. Historical Log entries remain unchanged.
+
+The deliverable is bounded evidence capture in both native retirement fixtures. No product correction, timeout increase or claim of reproducibility is included. Both completed replay cohorts passed63/63; final controls passed17/17 on each runtime and lint passed853 files. The next recurrence must use the captured last-stage evidence to guide #424; no additional blind replay is planned.
+
+### 2026-10-23 — Follow-up and registration
+
+Filed unclaimed #424, fold retirement timeout: root cause from captured evidence. The registry initially listed only #421 identities, so the target identity was not actually registered. Registered it on #424 through sdlc flake register with explicit historical evidence, without asserting a typed exact-head pass: lua:tests/integration/document_fold_uncertainty_retirement_spec.lua#native suspended fold retirement restores the operator preference and view when detach interrupts suspended uncertainty. The historical immutable failure and unchanged-fixture targeted pass are recorded in both issue bodies. The follow-up remains open and the flake remains registered. Required recorded suite and close review are pending for this diagnostics landing.

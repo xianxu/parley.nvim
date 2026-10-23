@@ -474,7 +474,8 @@ and counted work. Repair progress snapshots occur at powers of two, at most
 18 under the fixture's 200,000-step cap. This is diagnostic instrumentation;
 no request deadline or compiler policy changes. `fold_retirement_trace_spec`
 checks that evidence survives a killed child and is then cleaned, and counts
-writes for 4/8 repair events. The historical timeout's cause remains unproven.
+writes for 4/8 repair events. The historical timeout's cause remains unproven;
+#424 owns recurrence analysis and the active flake registration.
 
 ### Waiting on work that converges (#293)
 
