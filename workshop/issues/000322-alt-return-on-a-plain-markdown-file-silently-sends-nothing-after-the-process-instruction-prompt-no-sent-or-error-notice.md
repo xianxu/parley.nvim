@@ -79,6 +79,10 @@ A documentation sweep corrected standing-instruction descriptions and links to t
 
 TL-worker explicitly permits the binary-owned close review alongside a queued recorded suite, provided a final-code pass precedes landing and any review code fix requeues verification. Enter close on the complete tested candidate; suite lease-2691705198 and operator acceptance are still pending. Plan ticks record review admission and completed stage coordination, not those pending landing conditions. This issue has its own new implementation interval under the revised dispatch, so use measured actual adoption; the historical acceptance-only no-actual proposal was superseded by TL49bad7d4. Never infer a full-suite pass or live result from codecomplete.
 
+### 2026-10-23 — contaminated actual rejected before finalization
+
+The first close proposed4.59h and a dominant203.5m interval11:18–14:42; this includes #418's post-close classification/verification/landing tail through14:30 under the concurrent #322 claim. Authenticated TL35643b0f explicitly says do not adopt it: close with --no-actual and cite the contamination, no typed hours; file the classifier defect unclaimed in Ariadne. Interrupted only the in-flight close review through its terminal; it returned context-cancelled with no verdict or completion. Fresh issue observation confirms working, no completion, no actual adopted. Suite terminal81302/lease-2691705198 remains retained and unchanged. Re-enter close with the precise --no-actual waiver and required reason; no measurement-source repair.
+
 ## Revisions
 
 ### 2026-10-15 — Superseded by #332 at operator request
