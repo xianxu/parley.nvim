@@ -329,6 +329,23 @@ describe("agentic markdown admission", function()
         end)
     end)
 
+    for name, lines in pairs({
+        plain = { "# Question", "edited question", "tail" },
+        partial = { "---", "title: Partial", "---", "# Question", "edited question" },
+        existing = { "---", "collaboration-mode: chat", "process-instruction: Keep commas, \"please",
+            "unknown: retain me", "---", "# Question", "edited question" },
+    }) do
+        it("submits " .. name .. " content without adding mode or instruction metadata", function()
+            await(function() return document.status(buf).phase == "plain" end)
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+            submit()
+            await_submitted()
+            assert.same(lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+            assert.same(lines, vim.fn.readfile(file))
+            assert.equals("ops:0", document.identity(buf).Owner)
+        end)
+    end
+
     it("opens plain, then saves registers and submits without changing frontmatter", function()
         await(function() return document.status(buf).phase == "plain" end)
         assert.equals(0, vim.fn.filereadable(file .. ".lock"))

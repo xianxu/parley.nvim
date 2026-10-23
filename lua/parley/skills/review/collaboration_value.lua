@@ -11,11 +11,12 @@ end
 local function fail(message) error(message, 0) end
 
 -- Comments start only outside quotes and after separation whitespace.
-local function uncomment(s)
+local function uncomment(s, root_scalar)
     local i, previous = 1, nil
     while i <= #s do
         local c = s:sub(i, i)
-        if (c == '"' or c == "'") and (not previous or previous:match("[%[{,:%-]")) then
+        if (c == '"' or c == "'") and (root_scalar and i == 1
+            or not root_scalar and (not previous or previous:match("[%[{,:%-]"))) then
             local span = frontmatter.quoted_span(s, i)
             if not span then fail("unclosed quoted value") end
             i = i + #span
@@ -185,7 +186,11 @@ local function root_fields(lines, close)
         local prefix = line:match("^(%s*)") or ""
         if prefix:find("\t", 1, true) then fail("tabs in root indentation are unsupported") end
         local literal = current and base and #prefix > base and current.value:match('^[|>]')
-        local content = literal and trim(line) or uncomment(line)
+        -- Split a root field before scanning its value: punctuation inside
+        -- an already-started plain scalar cannot open a quoted YAML node.
+        local root = #stack == 0 and (not base or #prefix == base)
+        local content = (literal or root) and trim(line) or uncomment(line)
+        if not literal and content:sub(1, 1) == "#" then content = "" end
         if content ~= "" then
             local indent = #prefix
             base = base or indent
@@ -194,7 +199,8 @@ local function root_fields(lines, close)
                 current.children[#current.children + 1] = { indent = indent - base, text = content }
                 flow_balance(content, stack)
             elseif indent == base then
-                local key, value = field_line(content)
+                local key, raw = field_line(content)
+                local value = uncomment(raw, not raw:match("^[%[{]"))
                 current = { key = key, value = value, children = {} }
                 entries[#entries + 1] = current
                 if value:match("^[%[{]") then flow_balance(value, stack) end

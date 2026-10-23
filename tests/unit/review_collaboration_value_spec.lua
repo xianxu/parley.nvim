@@ -13,6 +13,23 @@ local function bad(body)
 end
 
 describe("collaboration-mode value", function()
+    it("reads legacy chat despite literal quotes in unrelated plain root values", function()
+        for _, text in ipairs({ [[Keep commas, "please]], [[Keep ["asides] intact]], [[Keep -"voice intact]],
+            [[Keep commas, 'please]], [[Keep commas, "please # trailing comment]] }) do
+            for _, key in ipairs({ "process-instruction", "processing-instruction", "notes" }) do
+                for _, declaration in ipairs({ "collaboration-mode: chat", "collaboration-mode: {chat: [Notes]}",
+                    "collaboration-mode:\n  chat:\n    - Notes" }) do
+                    for _, first in ipairs({ true, false }) do
+                        local unrelated = key .. ": " .. text
+                        local value, err = read(first and (unrelated .. "\n" .. declaration)
+                            or (declaration .. "\n" .. unrelated))
+                        assert.is_nil(err)
+                        assert.same(declaration == "collaboration-mode: chat" and "chat" or { chat = { "Notes" } }, value)
+                    end
+                end
+            end
+        end
+    end)
     it("leaves absent fields absent", function()
         local value, err = parser.parse({ "# Document", "collaboration-mode: chat" })
         assert.is_nil(value)
@@ -194,6 +211,25 @@ local function copied_bytes(body)
 end
 
 describe("collaboration frontmatter scan work", function()
+    it("bounds VM work for punctuation in long plain root values", function()
+        local function work(size)
+            local running = jit.status()
+            jit.off()
+            jit.flush()
+            local count = 0
+            debug.sethook(function() count = count + 1 end, "", 1)
+            local ok, value, err = pcall(read, 'process-instruction: Keep ' .. string.rep('a, ', size)
+                .. '"please\ncollaboration-mode: chat')
+            debug.sethook()
+            if running then jit.on() end
+            assert.is_true(ok)
+            assert.is_nil(err)
+            assert.equals("chat", value)
+            return count
+        end
+        local small, large = work(2048), work(4096)
+        assert.is_true(large < small * 2.3, ("VM work grew from %d to %d"):format(small, large))
+    end)
     it("handles large whitespace runs and multiline collections without editor stalls", function()
         local start = os.clock()
         local value, err = read("notes: a" .. string.rep(" ", 20000) .. "z")
