@@ -1049,3 +1049,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 
 - Split the root key/value before scanning a plain scalar for comments. A quote starts a quoted root scalar only at its first character; punctuation later in ordinary instruction text does not reopen YAML quoting. Keep flow collection context separate, and test unrelated metadata beside both scalar and mapped legacy chat declarations.
 - After an operator scope pivot, keep prior plan rows explicitly historical and publish a current entity inventory; do not let an old completed checklist claim that removed runtime APIs remain part of delivery.
+
+- #322 close: when renaming a workflow in documentation, trace each recording/exclusion claim to its actual producer before replacing the old label. A broad text substitution can turn an obsolete exception into a false statement about a now-recorded path.

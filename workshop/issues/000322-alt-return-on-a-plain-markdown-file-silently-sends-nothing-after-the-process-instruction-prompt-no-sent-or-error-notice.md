@@ -85,6 +85,10 @@ TL-worker explicitly permits the binary-owned close review alongside a queued re
 
 The first close proposed4.59h and a dominant203.5m interval11:18–14:42; this includes #418's post-close classification/verification/landing tail through14:30 under the concurrent #322 claim. Authenticated TL35643b0f explicitly says do not adopt it: close with --no-actual and cite the contamination, no typed hours; file the classifier defect unclaimed in Ariadne. Interrupted only the in-flight close review through its terminal; it returned context-cancelled with no verdict or completion. Fresh issue observation confirms working, no completion, no actual adopted. Suite terminal81302/lease-2691705198 remains retained and unchanged. Re-enter close with the precise --no-actual waiver and required reason; no measurement-source repair.
 
+### 2026-10-23 — close SHIP; advisory documentation corrected
+
+The restarted --no-actual close returned SHIP, no blocking findings, one Minor advisory: attention-finder recording text was broadened incorrectly during terminology cleanup. Verified session_sync.release_and_send records successful submitted-path deliveries before its stale guard; corrected the exception to local review requests only and added the general lesson. Reviewer independently passed complete modes/review on both supported runtimes and skills/skill-system lifecycle coverage, lint and clean censuses. Close evidence252d3dff07c1fd8fee61d7cdb49a3d5893ea198b binds codecomplete with actual N/A; the rejected4.59h was not adopted. ariadne#580 holds the attribution defect, unclaimed. No runtime code changed after the recorded-suite head b9135976. Suite terminal81302/lease-2691705198 remains FIFO3; operator acceptance remains pending. Preserve the runner and stage; landing waits for those results.
+
 ## Revisions
 
 ### 2026-10-15 — Superseded by #332 at operator request

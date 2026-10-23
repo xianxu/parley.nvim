@@ -31,7 +31,7 @@ Every file submitted with Alt+Return that Couch accepted, and every new side doc
 ## Recording
 - The one hook is in `session_sync`'s `release_and_send`, which both Alt+Return paths reach (agentic documents via `send_registered`, and `type: session-sync` files). It takes the breadcrumb through #353's `file_history.snapshot(win)` before sending, and calls `attention.record` when the send succeeds, before the engine's stale-state guard.
 - The message ID is parsed from `couch --send-to`'s receipt line (`<ID> <from> -> <to> <status>`). With no ID, nothing is recorded and that is warned.
-- Document submissions aren't recorded, because nothing folds them.
+- Local review requests are not recorded: they do not send a submitted-path message to Couch.
 
 ## Finder
 - **Side-doc tree (#390):** after slot filtering and excluding the current file, `attention_rows.items` groups side docs under listed parents in preorder, two leading spaces per level. Roots and siblings retain the model's newest-submit-first order; the picker uses its top anchor so parents are physically above children. An absent/filtered parent makes a side doc a root. Cyclic metadata is rendered once from a deterministic cycle member, breaking only a cycle edge and preserving attached descendants; no store data is changed.
