@@ -42,10 +42,10 @@ Root cause (measured in a disposable clone at main 20f3513b, hrtime marks at eve
 - So a breach of 500 ms is a stall of the whole nvim process (scheduling under a full suite on a loaded machine), not a wait in the code under test. The fixture can't tell the two apart: with_timeouts(15000, 500) sets the move timeout equal to the 500 ms assertion bound, so the real regression (a synchronous Couch wait bounded by the move timeout) and a scheduling stall produce the same signal.
 
 Fix (a fixture mechanism, so it waits for TL approval):
-- [ ] Add a gate to fake_couch_registry.py: in delay mode with FAKE_COUCH_REGISTRY_GATE=PATH, the registry answers only once PATH exists (polled, with the delay as an upper bound). The test then controls when Couch answers.
-- [ ] Row 1: gate the registry and raise the move timeout to 5000. Assert causally: saveas returns while the gate is closed, the move operation is still pending, and identity has not moved. Then open the gate and await the landing. A synchronous wait would either block until the 5 s timeout or see no answer at all, so the pending-operation assertion fails on any load. Drop the wall-clock bound for this row.
-- [ ] Same class, same file: row 2 ("plain saveas asks Couch nothing") becomes a count of registry requests (zero), not a time. Row 4 ("legacy move refuses at once") gets the same gate treatment as row 1. The Alt+Return press bound at line 113 is #410's 500 ms input-admission requirement and stays as it is.
-- [ ] Negative control in the disposable clone: force decision.wait_destination true for row 1, and make row 4's move wait on register. Each must fail deterministically on the causal assertion. Record the output in the Log.
+- [x] Add a gate to fake_couch_registry.py: in delay mode with FAKE_COUCH_REGISTRY_GATE=PATH, the registry answers only once PATH exists (polled, with the delay as an upper bound). The test then controls when Couch answers.
+- [x] Row 1: gate the registry and raise the move timeout to 5000. Assert causally: saveas returns while the gate is closed, the move operation is still pending, and identity has not moved. Then open the gate and await the landing. A synchronous wait would either block until the 5 s timeout or see no answer at all, so the pending-operation assertion fails on any load. Drop the wall-clock bound for this row.
+- [x] Same class, same file: row 2 ("plain saveas asks Couch nothing") becomes a count of registry requests (zero), not a time. Row 4 ("legacy move refuses at once") gets the same gate treatment as row 1. The Alt+Return press bound at line 113 is #410's 500 ms input-admission requirement and stays as it is.
+- [x] Negative control in the disposable clone: force decision.wait_destination true for row 1, and make row 4's move wait on register. Each must fail deterministically on the causal assertion. Record the output in the Log.
 - [ ] Verify the modes/session_sync mapping on nvim 0.12.5 and 0.11.7, plus 20 reps of the three rows under 4-process load. Then run the suite through local-check.
 
 ## Log
@@ -59,3 +59,14 @@ Pass: `/tmp/parley-410-review-extra.log:85` names the identical case, followed b
 The implementer's own preferred mapping and complete operator Neovim0.11.7 mapping also passed this test (operator854/0/0). Raw local logs are diagnostic pointers; the assertion, setup, counts and limits above are durable evidence independent of those temporary files.
 
 TL permits #410 to proceed with its retained queued suite; if that recorded suite fails on this exact case, one evidenced rerun is authorized. This does not authorize accepting other unknown failures or changing test budgets in #410.
+
+2026-10-23: Plan approved by the TL. Done:
+- Added FAKE_COUCH_REGISTRY_GATE: answers once the file exists, bounded by the delay, and also opens when its directory disappears.
+- Added FAKE_COUCH_REGISTRY_TRACE: one verb per request.
+- Swept the same zero-margin class in agentic_document_spec beyond the planned rows 1, 2 and 4: row 3 (unknown identity) and rows 1, 5 (registered move_path; the band check still waits past the 1 s deadline before opening the gate).
+- Rows 3 and 4's causal check: a second move_membership while the gate is held returns the same refusal (nil; the question still stands and is deduplicated). A busy check was wrong; the first attempt failed on exactly that.
+- Negative controls in the disposable clone, with control A (wait_destination forced true) and control B (move_membership replacing ask_in_background with bounded_request) applied together: 45/3/0.
+  - Row 1 failed at :267, "rename not confirmed: Couch did not answer within 5 s".
+  - Rows 3 and 4 failed at :230 and :306, "Couch did not answer within 1 s" instead of the background refusal.
+  - Reverted: 48/0/0 on nvim 0.12.5 and 48/0/0 on 0.11.7 (agentic_document_spec).
+

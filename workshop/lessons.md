@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-10-23 (#414 — "it did not wait" as a fact, not a time)
+
+- A wall-clock bound that equals the timeout it guards has no margin. The regression it targets (a wait cut off by that timeout) and a scheduling stall on a loaded machine give the same reading. Assert the cause instead: hold the fake's answer behind a gate the spec opens, then check that the operation is still pending when the call returns.
+- A gated fake must also bound itself and release when the spec's directory goes away, so a spec that never opens the gate cannot leave a process behind.
+- A background load generator gets a hard time cap inside its own loop and a trap that kills it on every exit. A probe whose setup step failed once left four load loops spinning for nearly four hours, because the cleanup was the last command of a chain that never ran.
+
 ## 2026-10-23 (#423 — a length guard and the fixtures that test it)
 
 - A test for a size limit must hold at every input the guard accepts, not only at this checkout's input. Fixtures derived from an ambient root (tempname(), TMPDIR) grow with that root; build them relative to a cwd, and run the suite at the longest accepted root once.

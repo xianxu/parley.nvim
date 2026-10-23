@@ -129,6 +129,11 @@ def deliver(op, code, reply):
 
 def main():
     args = sys.argv[1:]
+    # FAKE_COUCH_REGISTRY_TRACE (a path): one line per request, its verb (#414).
+    trace = os.environ.get("FAKE_COUCH_REGISTRY_TRACE")
+    if trace:
+        with open(trace, "a") as output:
+            output.write((args[1] if len(args) > 1 else "") + "\n")
     mode = os.environ.get("FAKE_COUCH_REGISTRY_MODE", "")
     if mode == "unsupported":
         print("unknown session-sync verb", file=sys.stderr)
@@ -142,9 +147,21 @@ def main():
     if mode == "delay":
         # FAKE_COUCH_REGISTRY_DELAY (seconds, default 1): a slow registry (#357).
         # FAKE_COUCH_REGISTRY_DELAY_OPS (comma list, default all) slows only those.
+        # FAKE_COUCH_REGISTRY_GATE (a path): answer once it exists, the delay
+        # being only the upper bound, so a spec decides when Couch answers
+        # instead of racing a clock (#414). Its directory going away (the spec's
+        # cleanup) opens it too.
         only = os.environ.get("FAKE_COUCH_REGISTRY_DELAY_OPS")
         if not only or (args[1] if len(args) > 1 else "") in only.split(","):
-            time.sleep(float(os.environ.get("FAKE_COUCH_REGISTRY_DELAY") or "1"))
+            delay = float(os.environ.get("FAKE_COUCH_REGISTRY_DELAY") or "1")
+            gate = os.environ.get("FAKE_COUCH_REGISTRY_GATE")
+            if gate:
+                deadline = time.monotonic() + delay
+                while (time.monotonic() < deadline and not os.path.exists(gate)
+                       and os.path.isdir(os.path.dirname(gate))):
+                    time.sleep(0.02)
+            else:
+                time.sleep(delay)
     state_path = Path(os.environ["FAKE_COUCH_REGISTRY"])
     if len(args) > 1 and args[1] == "round":
         # Read-only: answered under the lock, delivered after it is released.
