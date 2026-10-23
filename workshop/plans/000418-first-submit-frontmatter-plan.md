@@ -124,7 +124,7 @@ ARCH-DRY: one canonical/legacy resolution owner, existing selectors, registry, s
 
 - [ ] Map all new pure/native cases under the existing `modes/review` and affected `modes/session_sync` specs; include arrival, buffer-mutation and source/authoring guards in focused preflight. Update the atlas's current no-header-edit claim and the optional-key examples.
 - [ ] Run `make test-spec SPEC=modes/review` and `make test-spec SPEC=modes/session_sync` sequentially in this checkout on preferred Neovim, then with `PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim`. Confirm exact runtime versions first. Run `make lint` and `git diff --check`.
-- [ ] Stage via `sdlc stage --build` only when ready for the required operator live acceptance; ask hub to exercise plain/partial documents in ops:0's right pane, owner resolution and visible feedback. Keep artifacts disposable; do not send a live operator message without its specific authorized check. Clear stage afterward unless landing clears it.
+- [ ] Stage via `sdlc stage --build` only when ready for the required operator live acceptance. The hub schedules the operator's check on a session document (approval 7acabe36), covering plain/partial front matter, owner resolution and visible feedback for the original pane submission path. Keep artifacts disposable; do not send a live operator message without its specific authorized check. Clear stage afterward unless landing clears it.
 - [ ] Push the tested branch. Run one recorded `sdlc local-check run --name affected` if main declares affected policy; otherwise `--name suite`. Retain its runner through completion; classify any failure by name, no blind passing retry.
 - [ ] Close #418 and #322 through the binary-owned review with each issue's own verified evidence; follow the binary's combined-issue handling rather than bypass ownership/branch gates. Enter `sdlc merge --yes`, accept its authoritative main integration checks, verify merged/archive evidence and report both outcomes to the hub.
 
@@ -133,3 +133,9 @@ ARCH-DRY: one canonical/legacy resolution owner, existing selectors, registry, s
 **#418:** plain header gains all three explicit defaults, partial header gains only missing effective components, current values/aliases/unknown metadata/body remain exact, later presses/reopen do not re-edit, changes are undoable and saved before submission, and canonical presentation/processing keys actually drive existing runtime consumers. Producer reference cases and both runtimes prove it.
 
 **#322:** plain Markdown in a valid Couch pane reaches that pane's owner after save/register with visible sent-owner/time feedback; lookup/owner/save/edit/validation failures and pending/timeout outcomes are visible and never silently invoke locally. Outside Couch, local review gives an explicit route/no-work/cancel/error outcome and does not require the deprecated process-instruction prompt. A live ops:0 right-pane check confirms the original user-facing path; the original historical prompt route remains evidence, not a route to recreate.
+
+## Revisions
+
+### 2026-10-23 — approved design and scheduled live acceptance
+
+TL approval 7acabe36-c3b8-4c2a-b70f-33d8f62d5788 accepts this design and bounds, with change-code after #562 lands and its fixtures can be pinned. The hub schedules live acceptance with the operator on a session document; no worker-initiated live send or unscheduled operator test is authorized by this plan. Confirm the original pane path through that scheduled check rather than assuming a slot/location beforehand.
