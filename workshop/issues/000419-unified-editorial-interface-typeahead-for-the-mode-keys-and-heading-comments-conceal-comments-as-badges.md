@@ -16,7 +16,7 @@ card_mirror: 'a019415ce83fb5acae8c51b830ac683b5fc535a2' # card fields mirrored f
 
 ## Spec
 
-**Settled with the operator (10-22, design chat in brain `chat.md`, section "Chat", from "The modes"):**
+**Settled with the operator (10-22, design chat in brain `chat.side/2026-10/2026-10-22-01-editorial-modes.md`):**
 - **Uniform names:** `collaboration-mode` (where an answer goes: discussion / collaboration / chat),
   `presentation-mode` (how edits are shown: highlight / direct / propose), `processing-mode` (how an edit is made:
   the review modes in `ariadne/construct/local/universal-review/modes/`: copy-editing, developmental, fact-check,
@@ -42,6 +42,9 @@ Project `unified-editorial-interface`; follows the spec in ariadne (dependency).
   ` -->` on the first accepted key; works with nvim-cmp and with Vim's popup, as today.
 - **Conceal** the heading comment as a small badge next to the heading (showing the effective overrides), revealed for
   editing when the cursor is on the line.
+
+
+**Side-doc layout (decided 10-22):** `<doc>.side/YYYY-MM/YYYY-MM-DD-NN-slug.md`: a year-month subfolder, with the full date kept in the filename so a file still makes sense when linked, grepped or moved. **No migration:** existing flat names stay valid (readers accept both). Reason: `ops/session.side/` already holds about 270 entries, 261 from October alone. For this issue: make this repo's side-doc creator use the new layout and its readers accept both. Applies to the naming rule in the universal-review spec (`collaboration-modes.md` §4) and to every side-doc creator (parley, Couch, and tl-lead's side-doc helpers).
 
 ## Done when
 
