@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 4.29
+actual_hours: 4.93
 tracker:
     version: 1
     completion:
-        token: close-f3b92bf11603
+        token: close-8eaa4474a67f
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: d2c41539377d246d50cda527312d979ab77789bf
-        evidence_commit: 87fdc7db447dedb0feb8564775e0e7c3edc9551f
+        reviewed_head: b1b34cb9761bfc7aa0fbe5fbe8139cde6e7ed44c
+        evidence_commit: 053aea044aee9a1f9995f7174e1e08dcf5a396e3
 ---
 
 # Legacy chat reader tolerates quotes in unrelated plain metadata
