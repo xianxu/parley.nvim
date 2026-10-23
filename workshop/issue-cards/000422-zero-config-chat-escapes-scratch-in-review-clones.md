@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.21
+actual_hours: 0.24
 tracker:
     version: 1
     completion:
-        token: close-399b27a052b5
+        token: close-5c514c25de4f
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 50ed7eba83107880c5e83904deccbdc4129547b1
-        evidence_commit: 41dacfe2b0cece7cf50c67a181aa4088578d7ef0
+        reviewed_head: f5bd5052ddd7f48fd515a88e0d4f2b38466f8af4
+        evidence_commit: 8cb7afc076347cd380f224bb36223aba0092c389
 ---
 
 # Zero-config chat escapes scratch in review clones
