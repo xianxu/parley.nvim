@@ -164,3 +164,55 @@ describe("arch: harness scratch stays out of the repo tree", function()
         end
     end)
 end)
+
+-- #422: the same rule, checked once before PREP_TEST_ENV creates anything. An
+-- inside-checkout review put TMPDIR in the clone; the zero-config spec then
+-- found the clone's marker and wrote a chat into its workshop/parley.
+describe("arch: the pre-write placement guard", function()
+    local marker = require("parley.config").repo_marker
+    local script = vim.fn.getcwd() .. "/scripts/test-placement.sh"
+    local base
+    before_each(function()
+        base = vim.fn.tempname()
+        vim.fn.mkdir(base .. "/checkout", "p")
+        base = vim.uv.fs_realpath(base)
+    end)
+    after_each(function() vim.fn.delete(base, "rf") end)
+
+    local function guard(root)
+        return vim.system({ script, root, base .. "/checkout", marker }, { text = true }):wait()
+    end
+
+    it("refuses a root under a marked tree and creates nothing there", function()
+        vim.fn.mkdir(base .. "/clone", "p")
+        vim.fn.writefile({}, base .. "/clone/" .. marker)
+        local result = guard(base .. "/clone/.sdlc-review/tmp/parley-test-env/key")
+        assert.equals(1, result.code, result.stderr)
+        assert.matches("is under " .. vim.pesc(base .. "/clone") .. ", which carries " .. vim.pesc(marker), result.stderr)
+        assert.equals(0, vim.fn.isdirectory(base .. "/clone/.sdlc-review"))
+    end)
+
+    it("refuses a root that carries the marker itself", function()
+        vim.fn.mkdir(base .. "/root", "p")
+        vim.fn.writefile({}, base .. "/root/" .. marker)
+        assert.equals(1, guard(base .. "/root").code)
+    end)
+
+    it("refuses a root inside the checkout even without a marker", function()
+        local result = guard(base .. "/checkout/.test-env")
+        assert.equals(1, result.code, result.stderr)
+        assert.matches("inside the checkout", result.stderr)
+    end)
+
+    it("accepts an unmarked root outside the checkout, existing or not", function()
+        assert.equals(0, guard(base .. "/scratch/not/yet").code)
+        vim.fn.mkdir(base .. "/scratch/now", "p")
+        assert.equals(0, guard(base .. "/scratch/now").code)
+    end)
+
+    it("is wired into PREP_TEST_ENV with the configured marker", function()
+        local makefile = table.concat(vim.fn.readfile("Makefile.parley"), "\n")
+        assert.matches("\nREPO_MARKER := " .. vim.pesc(marker) .. "\n", makefile)
+        assert.matches('define PREP_TEST_ENV\n"%$%(CURDIR%)/scripts/test%-placement%.sh" "%$%(TEST_ENV_ROOT%)" "%$%(CURDIR%)" "%$%(REPO_MARKER%)" &&', makefile)
+    end)
+end)

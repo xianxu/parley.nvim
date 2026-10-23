@@ -69,6 +69,7 @@ class RunLeaseTests(unittest.TestCase):
         if WRAPPER.exists():
             shutil.copyfile(WRAPPER, root / 'scripts/test-run-lease.py')
         shutil.copyfile(ROOT / 'scripts/reap-test-orphans.py', root / 'scripts/reap-test-orphans.py')
+        shutil.copy(ROOT / 'scripts/test-placement.sh', root / 'scripts/test-placement.sh')
         shutil.copyfile(ROOT / 'scripts/test-process-census.lua', root / 'scripts/test-process-census.lua')
         helpers = root / 'tests/helpers'
         helpers.mkdir()

@@ -91,8 +91,11 @@ SENTINEL_CHECK = if [ -s "$(SENTINEL_LOG)" ]; then echo "test sentinel (\#365): 
 # gets the gate by adding a line rather than restating the command.
 ORPHANS = python3 scripts/reap-test-orphans.py --root "$(CURDIR)"
 
+# The placement guard (#422) runs first: a scratch root inside the checkout, or
+# under any `.parley` tree, refuses before anything is created there.
+REPO_MARKER := .parley
 define PREP_TEST_ENV
-mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/config" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)" && : > "$(SENTINEL_LOG)" && $(ORPHANS) --phase before
+"$(CURDIR)/scripts/test-placement.sh" "$(TEST_ENV_ROOT)" "$(CURDIR)" "$(REPO_MARKER)" && mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/config" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)" && : > "$(SENTINEL_LOG)" && $(ORPHANS) --phase before
 endef
 
 # Run the whole suite. Execution model (parallel fan-out, per-spec processes,
