@@ -698,6 +698,7 @@ atlas:
 
   infra/test_harness:
     code:
+      - tests/helpers/discovery_registry_fixture.lua
       - lua/parley/test_isolation.lua
       - scripts/golden_fixture.lua
       - Makefile.parley
@@ -739,6 +740,7 @@ atlas:
       - tests/fixtures/orphan_me.sh
       - tests/perf/chat_typing.lua
     tests:
+      - tests/integration/discovery_registry_fixture_spec.lua
       - tests/unit/test_isolation_spec.lua
       - tests/unit/version_support_spec.lua
       - tests/integration/test_isolation_spec.lua
@@ -1480,3 +1482,47 @@ atlas:
     tests:
       - tests/unit/frontmatter_enum_spec.lua
       - tests/integration/frontmatter_enum_popup_spec.lua
+
+  modes/remote_session:
+    code:
+      - lua/parley/remote_session.lua
+      - lua/parley/session_sync.lua
+      - lua/parley/init.lua
+      - lua/parley/remote_session_model.lua
+      - lua/parley/remote_runtime.lua
+      - lua/parley/remote_runtime_record.lua
+      - lua/parley/remote_process.lua
+      - lua/parley/document_registry.lua
+      - tests/helpers/fake_process_source.lua
+      - tests/helpers/remote_runtime_fixture.lua
+      - tests/helpers/fixture_files.lua
+      - tests/helpers/embedded_nvim.lua
+      - tests/minimal_init.vim
+      - tests/helpers/fake_couch.lua
+      - tests/fixtures/fake_ps.py
+      - tests/fixtures/fake_couch_editor.py
+      - tests/fixtures/fake_couch_registry.py
+      - scripts/check-couch-registry-conformance.py
+      - scripts/couch-editor-probe.lua
+      - scripts/couch_bridge.py
+      - tests/fixtures/fake_couch_bridge.py
+      - tests/packaging/test_couch_bridge.py
+      - tests/packaging/test_registry_conformance_bridge.py
+    tests:
+      - tests/integration/couch_bridge_spec.lua
+      - tests/unit/remote_session_model_spec.lua
+      - tests/unit/remote_runtime_record_spec.lua
+      - tests/integration/remote_process_spec.lua
+      - tests/integration/remote_runtime_spec.lua
+      - tests/integration/remote_runtime_fixture_spec.lua
+      - tests/integration/embedded_nvim_spec.lua
+      - tests/integration/editor_endpoint_registry_spec.lua
+      - tests/integration/document_registry_spec.lua
+      - tests/integration/remote_session_spec.lua
+      - tests/integration/remote_session_native_spec.lua
+      - tests/integration/remote_session_exit_spec.lua
+      - tests/integration/remote_session_quit_spec.lua
+      - tests/integration/zero_config_spec.lua
+      - tests/arch/spawn_seam_spec.lua
+      - tests/arch/fixture_lifecycle_spec.lua
+      - tests/arch/embedded_rpc_spec.lua

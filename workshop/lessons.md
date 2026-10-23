@@ -1,5 +1,17 @@
 # Lessons
 
+## 2026-10-22 (#405 — native listener ownership)
+
+- A resource's live consumers and pending cleanup are different counts. The last consumer must cancel queued intent and join abandoned startup; retain admitted effects until exact cleanup, then close the resource before admitting a new epoch.
+- A deadline covering multiple stages is one absolute deadline, passed across each stage. Separate correct per-stage timers can still violate the total bound; test delayed acquisition plus delayed durable publication together.
+- Correct the authoritative concept table when a module moves; a later revision explaining the new location does not repair a contradictory table.
+- A native close can also unlink a pathname. Probe replacement behavior, then revalidate the exact owned socket identity immediately before serverstop; uncertain or replaced paths must never be passed to it.
+- Test retirement at each async resource boundary, including after the kernel listener exists but before its durable marker is finished. Ending the resource lifetime and reporting the caller's completion are separate obligations.
+- A shared acquisition handle cannot cancel a consumer's later transaction. Retain the exact reservation/listen/publication handle until its callback is delivered, and prove slot reuse while another consumer keeps the shared resource alive.
+- Capture created-file and directory identity in the native callback before a canceled coroutine resumes. Freeze the first created inode: an fd number may be reused during later reads. Identical bytes at a replacement inode are foreign, not ownership proof.
+- When a model rejects external evidence, callbacks, cached results and notices must consume its accepted outcome rather than the transport's raw reply. Test their agreement with a transport-valid acknowledgment that fails the model's fuller identity check.
+- Validate all known model inputs before allocating resources, using the same pure field rules as the final constructor. Rejected allocated values or construction must finish exact cleanup and release the shared queue; test a rejected request followed by successful ordinary work and close, rather than rejection alone.
+
 ## 2026-10-22 (#409 — a census is not run ownership)
 
 - Persistence and a recognizable command prove that a process exists, not that
@@ -963,6 +975,7 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   presence on an actual attached buffer, using the existing executable fake
   for attachment's status/round queries; even a declaration check can spawn IO.
 
+- #405: A child RPC wait can inherit the correct arrival budget while hiding it behind a generic local or vararg. Keep its arrival-derived name inside the child and run the architecture guards with the targeted mapping; behavioral passes alone miss those contracts. Parser-wide protection likewise needs each external decode locally explicit to the JSON guard.
 - #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
 
 - #412: A refusal/retry behavioral fixture must not assume its external producer
@@ -972,6 +985,12 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   Failure diagnostics include outcome, elapsed time, mode, runtime and load.
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
 
+- #405 final-suite corrections: clean embedded Lua chunks import the shared arrival budget explicitly; a positive wait hidden inside a chunk is still a suite wait. A new blocking executable fixture installs the existing parent-death watchdog before its first IO, and the architecture corpus count grows with the fixture. Verify parent death with stdin independently held open so EOF cannot mask a missing watchdog.
+
+- #405 traceability: make test-spec routes its tests entries to Plenary, so Python modules belong to the code corpus with a bounded Lua unittest wrapper in tests. Directly listing Python tests both breaks the focused target and leaves their behavior out of the ordinary Lua suite. Exercise the mapped command before declaring traceability complete.
+
+- #405 BR-8: discovery owns negative outcomes too. Distinguish positive absence from unavailable lookup, cover pre-allocation identity rejection and allocated rejection, and share notice dedup with the dispatcher for the same buffer lifetime. Stale callbacks must not report into a replacement lifetime.
+- #405 BR-9: whenever an executable gains a required argument, sweep all changed runnable entrypoints and their README commands in the same round. A prerequisite sentence or an atlas-only invocation does not make the README runnable.
 
 ## 2026-10-22 (#416 — birth evidence through terminal census)
 

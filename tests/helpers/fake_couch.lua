@@ -22,9 +22,13 @@ function M.write(root, log_file, argv_file)
     local bin = root .. "/bin/couch"
     vim.fn.mkdir(root .. "/bin", "p")
     local registry = vim.fn.fnamemodify("tests/fixtures/fake_couch_registry.py", ":p")
+    local editor = vim.fn.fnamemodify("tests/fixtures/fake_couch_editor.py", ":p")
     local operator = vim.fn.fnamemodify("tests/fixtures/fake_couch_operator.py", ":p")
     vim.fn.writefile({
         "#!/bin/sh",
+        'if [ "$1" = "--editor-endpoint" ]; then',
+        '  exec python3 "' .. editor .. '" "$@"',
+        'fi',
         'if [ "$1" = "--session-sync" ]; then',
         '  case "$2" in operator-acquire|operator-release) exec python3 "' .. operator .. '" "$@";; esac',
         'fi',
