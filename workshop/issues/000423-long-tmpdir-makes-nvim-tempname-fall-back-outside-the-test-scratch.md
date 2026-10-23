@@ -1,13 +1,21 @@
 ---
 id: 000423
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '13d05fea5ffefd5ef851c61fc8c13754861598cc' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd2852a024afb8289749a48d4bfb866d4af9942bc' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-23T04:29:39-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Long TMPDIR makes nvim tempname() fall back outside the test scratch
@@ -27,7 +35,18 @@ Find Neovim's TMPDIR acceptance rule (a length limit or a usability check) and m
 
 ## Plan
 
-- [ ]
+Measured 2026-10-23 on both supported versions (Homebrew 0.12.5 and 0.11.7, same result). Neovim uses `$TMPDIR` only while the raw string is at most 189 bytes; at 190 or more, a trailing slash included, tempname() silently returns /tmp/nvim.<user>/…. This matches Neovim's fixed temp-path buffer (TEMP_FILE_PATH_MAXLEN 256, minus room for its own suffix). The harness sets TMPDIR to `TEST_ENV_ROOT/tmp`, and TEST_ENV_ROOT = `<inherited TMPDIR>/parley-test-env/<checkout basename>-<cksum>`. A long inherited TMPDIR or a long checkout name therefore pushes every spec's scratch out to /tmp. That escapes TEST_ENV_ROOT (and the census/cleanup that assume it), escapes #422's marker check, and fails confusingly where a sandbox denies /tmp.
+
+Two checks, the same split as #422:
+1. **Pre-write (scripts/test-placement.sh):** it already receives TEST_ENV_ROOT. Also refuse when `ROOT/tmp` is longer than 189 bytes. The message names the length, the limit and the fix: a shorter TMPDIR or TEST_ENV_ROOT, or a shorter checkout name.
+2. **In-process (tests/arch/scratch_placement_spec.lua):** assert that vim.fn.tempname() lies under $TMPDIR. This asserts the produced path rather than a constant, so it also catches any other fallback cause and any change in Neovim's limit.
+
+Tests:
+- [ ] Guard: a root whose `/tmp` is exactly 189 bytes passes; 190 refuses with the length message and creates nothing.
+- [ ] Spec pins the constant against the running nvim: TMPDIR of 189 bytes is used, and 190 falls back. If Neovim changes its limit, the guard's constant fails visibly here rather than drifting. The suite's compat pass runs it on the second version.
+- [ ] The scratch_placement tempname()-under-$TMPDIR assertion.
+- [ ] Live: a long-root `make test-spec SPEC=infra/config TEST_ENV_ROOT=<long>` refuses up front; the normal checkout passes infra/test_harness and infra/config.
+- [ ] atlas/infra/test_harness.md: one line next to the #422 guard.
 
 ## Log
 
