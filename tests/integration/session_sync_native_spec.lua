@@ -730,15 +730,79 @@ describe("session-sync native edits", function()
         assert.is_nil(vim.uv.fs_stat(sent_file),"stale release submitted a newer turn")
     end)
 
+    -- Installed after attachment: this observer runs after the production
+    -- InsertEnter handler, rather than treating mode i as admission completion.
+    local function observe_insert_admission()
+        exec([[
+            local couch=require("parley.couch");local original=couch.operator_lock
+            couch.operator_lock=function(verb,...)
+                local start=vim.uv.hrtime()
+                local result=original(verb,...)
+                if verb=="acquire" then
+                    _G.entry_admission={result=result,elapsed_ms=(vim.uv.hrtime()-start)/1e6,
+                        budget_ms=couch.OPERATOR_LOCK_TIMEOUT_MS}
+                end
+                return result
+            end
+            vim.api.nvim_create_autocmd("InsertEnter",{buffer=0,callback=function()
+                _G.entry_admission_complete=true
+            end})
+        ]])
+    end
+    local function completed_entry()
+        wait_for("return _G.entry_admission_complete==true and vim.fn.mode()=='i'")
+        return exec([[return {admission=entry_admission,mode=vim.fn.mode(),modifiable=vim.bo.modifiable,
+            notifications=notifications,bar=vim.wo.winbar,version=tostring(vim.version())}]])
+    end
     local function refuse_insert_entry()
         exec([[
+            -- Refusal/retry behavior is the subject here, not subprocess latency.
+            -- This override dies with this case's disposable child; deadline
+            -- controls below and couch_spec retain the production 500ms budget.
+            require("parley.couch").OPERATOR_LOCK_TIMEOUT_MS=require("tests.helpers.arrival").MS
             vim.env.FAKE_COUCH_OPERATOR_CODE="operator-lock"
             vim.env.FAKE_COUCH_OPERATOR_EXIT="3"
         ]])
-        keys("I");wait_for("return vim.fn.mode()=='i'")
-        assert.is_false(exec("return vim.bo.modifiable"),vim.inspect(exec("return {mode=vim.fn.mode(),notifications=notifications}")))
+        observe_insert_admission()
+        keys("I")
+        local outcome=completed_entry()
+        local diagnostic=vim.inspect({entry=outcome,load={vim.uv.loadavg()}})
+        assert.equals("refused",outcome.admission.result.kind,diagnostic)
+        assert.equals("operator-lock",outcome.admission.result.error,diagnostic)
+        assert.is_false(outcome.modifiable,diagnostic)
         keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
     end
+
+    for _, outcome in ipairs({"refused","unavailable"}) do
+        it("distinguishes completed "..outcome.." from pending insert mode (#412)",function()
+            open(false,false,true,true)
+            exec([[
+                local outcome=...
+                local original=vim.system
+                vim.system=function(argv,options,...)
+                    if argv[3]~="operator-acquire" then return original(argv,options,...) end
+                    return {wait=function()
+                        if outcome=="unavailable" then return {code=124,stdout="",stderr=""} end
+                        return {code=3,stdout=vim.json.encode({Code="operator-lock",Error="held"}),stderr=""}
+                    end}
+                end
+            ]],outcome)
+            observe_insert_admission()
+            keys("I")
+            local entry=completed_entry()
+            local diagnostic=vim.inspect({entry=entry,load={vim.uv.loadavg()}})
+            assert.equals(outcome,entry.admission.result.kind,diagnostic)
+            assert.equals(outcome=="unavailable",entry.modifiable,diagnostic)
+            if outcome=="unavailable" then
+                assert.is_truthy(entry.bar:find("Couch unreachable",1,true),diagnostic)
+            else
+                assert.is_truthy(table.concat(entry.notifications,"\n"):find("held by operator",1,true),diagnostic)
+            end
+            assert.equals("first bullet",exec("return vim.api.nvim_buf_get_lines(0,7,8,false)[1]"))
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        end)
+    end
+
     local function settle_retry_input(value)
         keys(value)
         exec("_G.retry_input_settled=false;vim.schedule(function() _G.retry_input_settled=true end)")
