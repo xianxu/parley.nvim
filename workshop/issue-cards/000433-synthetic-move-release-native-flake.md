@@ -5,6 +5,7 @@ created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 github_issue:
+flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits releases synthetic move protection only at the unchanged acquisition baseline]
 ---
 
 # Synthetic move release native test intermittently fails its baseline assertion
