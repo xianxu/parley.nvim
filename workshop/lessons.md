@@ -965,6 +965,11 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 
 - #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
 
+- #412: A refusal/retry behavioral fixture must not assume its external producer
+  always beats the product UI deadline. A completed timeout legitimately admits
+  editing. Scope a test arrival budget to the behavioral fixture, retain separate
+  product-deadline controls, and assert the completed outcome before protection.
+  Failure diagnostics include outcome, elapsed time, mode, runtime and load.
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
 
 
@@ -984,3 +989,10 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #416 close BR-4: canonicalize a shared fixture base before deriving path expectations or metadata-fake keys. Otherwise symlinked scratch makes the fake identify a different path from production. Run sensitive tests under an explicit scratch alias as part of the normal suite, rather than relying on machine-specific `/tmp` layout.
 
 - #416 first full suite: generated child Lua must receive the same arrival budget by value as parent predicates. Include the existing arrival architecture guard in the affected harness mapping; a narrow native map alone can miss static guard violations in generated source strings.
+## 2026-10-22 (#417 — notification prompts after a completed edit)
+
+- A successful asynchronous edit can still block the next key on builtin notification hit-enter. Keep the real notification surface in attached-UI regressions; an injected recording notifier hides this failure. Inspect fast `nvim_get_mode` before ordinary Lua RPC when a prompt may be active, then prove subsequent typing reaches the buffer.
+
+- #417 BR-1: enumerate every producer of completion diagnostics before declaring feedback nonblocking. A short prefix with an unbounded suffix still blocks; native UI tests must cover conversion-limit refusal, tool resolution and converter failure, alongside the plain success case.
+
+- #417 BR-2: a mode-specific input contract needs both accepted and refused native mapping cases. A direct function call with a recording notifier does not prove that Normal/Insert input survives a builtin error notice; forward to the real UI, assert no mutation, and type the next key.

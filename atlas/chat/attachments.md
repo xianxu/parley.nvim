@@ -11,9 +11,14 @@ for both send-budget stat and bounded reads.
 - `<M-i>` (`paste_image`, `parley_buffer` scope, n/i): reads a PNG off the
   clipboard, saves it as `assets/<ts>/<stamp>.<png|jpg>`, inserts
   `![<stamp>.<ext>](assets/<ts>/<stamp>.<ext>)` on its own line after the cursor
-  line (the alt is the file name so markdown conceal shows a label rather than
-  a blank line; edit it freely).
-  Declines with a message when the clipboard holds no image, when no tool is
+  line immediately, without confirmation (the alt is the file name so markdown
+  conceal shows a label rather than a blank line; edit it freely).
+  Reports `No image in the clipboard` as a one-line error without changing the
+  buffer or saving assets when the clipboard holds no image. Every successful
+  paste shows the fixed short notice `Image pasted; details in the Parley log`; the full path,
+  shrink sizes and retained-original diagnostics go to the existing log without
+  another notification. Use `:ParleyInspectLog` to read them.
+  Declines with a message when no tool is
   found (names what to install), when the buffer has no named Markdown path
   with a directory, or when a paste is already in flight for that buffer.
   Markdown stems use the same writer/shrink step and rollback as chat keys.
