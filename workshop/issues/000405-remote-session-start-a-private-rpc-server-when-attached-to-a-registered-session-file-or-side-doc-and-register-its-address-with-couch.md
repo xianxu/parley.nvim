@@ -45,13 +45,14 @@ the file open, without the operator starting nvim with special flags.
 ## Plan
 
 - [x] M1 — endpoint model, private listeners and producer conformance (see [durable plan](../plans/000405-remote-session-endpoint-plan.md)).
-- [ ] M2 — attachment lifecycle, outside-pane discovery, native takeover/teardown and real-profile acceptance.
+- [x] M2 — attachment lifecycle, outside-pane discovery, native takeover/teardown and real-profile acceptance.
 
 ## Log
 
 ### 2026-10-20
 
 ### 2026-10-22 — claimed and planned against producer prerequisite
+- 2026-10-22: closed M2 — BR-8 corrected through one existing buffer-lifetime notice owner and stale token/path guards: unsupported/malformed/missing/timeout lookup, early identity rejection, unsafe runtime, late endpoint rejection, duplicate/reopen and stale failure controls. Native RED14PASS/5FAIL becomes21PASS each version. Final lifecycle/guard mapping77PASS/0FAIL/0ERROR each nvim0.12.5/0.11.7, clean censuses. Fixed-code real/fake/corrupt control conformance passes both against clean landed #801 b5c1cb99260fa8131b48092e4601c2ac86abf5d7; TL23088180 live acceptance. BR-9 README swept for required absolute --bridge, Pair build, native PATH selection and optional --couch. No deadlines/assertions weakened; earlier two runtime intermittents registered421 with TL approval. Fresh recorded suite lease-3395714002 queued on c74756ce, still required green before landing.; review verdict: SHIP
 - 2026-10-22: closed M1 — TL0bb56c13 authorizes round5 after complete input/construction boundary sweep. Shared pure pending/listening validation RED46pass6fail ->52PASS both versions; native rejection sequence RED26pass4fail ->31PASS including unsupported filename before allocation, allocated Socket rejection, refused/throwing constructors, invalid native buffer control, subsequent ordinary attachment and close. Canonical195PASS both Neovim0.12.5/0.11.7, clean censuses; lint0warnings0errors834files; endpoint fake conformance and corrupt-identity negative controls pass both. Fresh recorded suite pending on411be8eb; no landing until final pass. Real producer acceptance remains M2 pending pair#758/#801. Any further new finding family returns to TL for scope decision before patching.; review verdict: SHIP
 
 Ran tl-worker/help and start-plan. The startup weave refresh changed only a generated CI workflow; restored that refresh delta under the TL's standing instruction, so no workflow/local-gates change is part of #405.

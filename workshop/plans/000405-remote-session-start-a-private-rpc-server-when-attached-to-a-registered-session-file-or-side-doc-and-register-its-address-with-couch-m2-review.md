@@ -89,3 +89,81 @@ findings:
    Add a `## Revisions` entry specifying discovery outcomes: positive absence stays silent; unavailable or rejected discovery produces one notice; duplicate events do not retry; explicit reopen permits fresh discovery. Record the regression enumeration and README invocation sweep.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2bbf7b4d-ee55-4f16-a8f6-dbc99491c11a","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":1,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/3bd173b7adfcdbd3","reviewed_head":"6b35f51b1b61a3c440775c213b63876344b35562","slot":"parley.nvim:1","requested_at":"2026-10-23T06:20:36.303908Z"},"phase":"finished","pid":79298,"started_at":"2026-10-23T06:20:36.409341Z","finished_at":"2026-10-23T06:24:08.111983Z","session_id":"01a1676b-22bd-78b2-8df1-857f77225bbe","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T23:46:36-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 405 — remote-session: start a private RPC server when attached to a registered session file or side doc, and register its address with Couch |
+| repo | parley.nvim |
+| issue file | workshop/issues/000405-remote-session-start-a-private-rpc-server-when-attached-to-a-registered-session-file-or-side-doc-and-register-its-address-with-couch.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | d4f332353feca049bb17eb68643b40a66176d25d..4508683883564bbd676e42c2ee50d15935a95454 |
+| command | sdlc milestone-close --issue 405 --milestone M2 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T23:46:36-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The M2 implementation matches the attachment, discovery, move, and teardown contracts. Both prior findings are addressed with appropriate evidence. No new blocking findings emerged. The focused mapping’s sole failure also reproduces at the pinned base.
+
+```findings
+dispose:
+  - id: BR-8
+    disposition: addressed
+    note: |
+      remote_session.lua:378-388 reports unavailable discovery and rejected attachment through one incarnation-owned notice. remote_session_native_spec.lua:133-200 covers failure classes, silent absence, deduplication and reopen. Removing the correction in a disposable pinned-head copy produced five regression failures with zero errors; all 21 native lifecycle cases pass at head.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      README.md:216-230 now documents the Pair bridge build, real --editor-endpoints --bridge invocation, absolute executable requirement, native nvim selection through PATH, and optional --couch candidate. These instructions match the driver's argument validation and atlas/modes/remote_session.md. Inspection establishes this prose-only correction without a wording-presence test.
+```
+
+1. **Strengths**
+
+   - Discovery distinguishes confirmed absence from failure and preserves local editing.
+   - Shutdown batches exact generation witnesses under one shared, queue-inclusive deadline.
+   - Native tests exercise production listeners, reload/reopen behavior, moves, and actual quit ordering.
+   - Atlas and README updates describe the new lifecycle and runnable conformance surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - Preferred-runtime focused mapping: **275 passed, 1 failed, 0 errors**.
+   - The zero-config chat directory failure reproduces at base: **8 passed, 1 failed, 0 errors**.
+   - Neovim 0.11 lifecycle/exit/quit/model checks: **96 passed**.
+   - Counterfactual notice-fix removal: **16 passed, 5 failed, 0 errors**.
+   - Fake endpoint conformance and corrupted-reply negative control passed.
+   - Test process censuses were clean. Disposable checkouts and generated review artifacts were removed; repository status is clean.
+   - Real-producer conformance was not rerun during this review.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** existing registry transport and ownership helpers are reused.
+   - **ARCH-PURE — pass:** attachment authority and batch composition remain independently tested without IO.
+   - **ARCH-PURPOSE — pass:** parent/side admission, outside-pane discovery, supersession, moves, and teardown are delivered.
+   - **ARCH-MOCK — pass:** persisted fakes share production boundaries; native and real-conformance drivers are present.
+   - **ARCH-CONSTRAINTS — pass:** capacity, deadlines, queue expiry, and counted workloads have executable coverage.
+   - **ARCH-SECURE — pass:** private runtime ownership and typed authority witnesses govern allocation and cleanup.
+   - **ARCH-ORDER — pass:** production transitions and controlled late-completion sequences preserve ownership.
+   - **ARCH-FUNERAL — pass:** listeners, runtime residue, subprocesses, and fixture roots have cleanup owners.
+   - **ARCH-EVOLVE — pass:** ownership-record tests preserve unknown root and nested fields while retaining strict validation.
+
+7. **Plan revision recommendations:** None required for this boundary.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"11a80245-be01-4d32-9847-77169cbb70f8","repository":"github.com/xianxu/parley.nvim","issue_id":"000405","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/2464fb7b496173d8","reviewed_head":"4508683883564bbd676e42c2ee50d15935a95454","slot":"parley.nvim:1","requested_at":"2026-10-23T06:42:06.410138Z"},"phase":"finished","pid":34921,"started_at":"2026-10-23T06:42:06.514697Z","finished_at":"2026-10-23T06:46:35.846371Z","session_id":"01a1677e-d239-7001-a6e7-310fdca143d5","outcome":"returned"}] -->
