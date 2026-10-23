@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-10-23 (#423 — a length guard and the fixtures that test it)
+
+- A test for a size limit must hold at every input the guard accepts, not only at this checkout's input. Fixtures derived from an ambient root (tempname(), TMPDIR) grow with that root; build them relative to a cwd, and run the suite at the longest accepted root once.
+- In shell, `${#var}` counts characters under a UTF-8 locale. A byte limit is measured with `printf %s "$v" | LC_ALL=C wc -c`.
+- When one guard checks several things, put the one that names the root cause first. A length refusal printed ahead of a marker refusal hides the actual cause.
+- When a relaxed fixture sidesteps a check, the proof has to be a constructed case that fails the bad version. My first 190-byte probe made a `.t` directory instead of `t`, so its "fallback" result proved nothing.
+
 ## 2026-10-23 (#422 — scratch placement checked before the first write)
 
 - An invariant an environment can break (the scratch root sits outside every marked tree) is checked once, before the first write. A spec that checks it alongside other specs reports the problem only after they have already written into the tree.

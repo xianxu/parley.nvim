@@ -94,7 +94,9 @@ qa!
         # A spec's ambient inherited lease must not bless a new disposable root.
         argv = ['make', '--no-print-directory', *goals, 'SPEC=infra/test_harness',
                 'PLENARY=' + str(root / 'plenary'), 'TEST_NVIM_DIR=', 'TEST_RUN=env',
-                'TEST_ENV_ROOT=' + str(self.base / (name + '-env')),
+                # Relative to the checkout (base/<checkout>), naming base/<name>-env: a short
+                # raw TMPDIR the placement guard accepts at any accepted outer TMPDIR (#423).
+                'TEST_ENV_ROOT=../' + name + '-env',
                 'ORPHANS=python3 scripts/reap-test-orphans.py --root "' + str(root) + '" --grace 0']
         return self.start(argv + list(extra), name, cwd=root, env=env)
 
@@ -433,7 +435,7 @@ qa!
         first, _, _ = self.wrapped(root, self.gate_command('first'), 'first')
         self.until((self.base / 'first.ready').exists, 'owner never entered')
         dry, out, err = self.start(['make', '-n', '--no-print-directory', 'test',
-                                    'TEST_NVIM_DIR=', 'TEST_ENV_ROOT=' + str(self.base / 'dry-env')],
+                                    'TEST_NVIM_DIR=', 'TEST_ENV_ROOT=../dry-env'],
                                    'dry', cwd=root)
         self.assertEqual(dry.wait(timeout=10), 0, err.read_text())
         self.assertIn('rm -rf', out.read_text())
