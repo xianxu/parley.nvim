@@ -9,6 +9,9 @@ describe('private editor RPC runtime ownership', function()
         options = options or {}
         options.parent = options.parent or root .. '/runtime'
         options.incarnation = options.incarnation or string.rep('a', 32)
+        -- A case that tests a deadline passes its own; the rest get the
+        -- suite's arrival budget, so a short stall cannot fail them (#421).
+        options.timeout_ms = options.timeout_ms or arrival.MS
         if options.source == false then options.source=nil else options.source=options.source or source end
         runtime.acquire(options, function(value) result = value end)
         assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end, 10))
@@ -113,7 +116,7 @@ describe('private editor RPC runtime ownership', function()
     end
     local function await_default()
         local result
-        runtime.acquire({incarnation=string.rep('a',32),source=source},function(value) result=value end)
+        runtime.acquire({incarnation=string.rep('a',32),source=source,timeout_ms=arrival.MS},function(value) result=value end)
         assert.is_true(vim.wait(arrival.MS,function() return result~=nil end,10))
         if result.kind=='ready' then resources[#resources+1]=result.runtime end
         return result
@@ -215,7 +218,8 @@ describe('private editor RPC runtime ownership', function()
     it('cancels a held startup and releases the allocation lease', function()
         source.hold = true
         local result
-        local operation = runtime.acquire({ parent = root .. '/runtime', incarnation = string.rep('a', 32), source = source },
+        local operation = runtime.acquire({ parent = root .. '/runtime', incarnation = string.rep('a', 32), source = source,
+            timeout_ms = arrival.MS },
             function(value) result = value end)
         assert.is_true(vim.wait(arrival.MS, function() return #source.reads == 1 end, 10))
         operation.cancel()
@@ -241,8 +245,8 @@ describe('private editor RPC runtime ownership', function()
     local function start_child(parent)
         local child = require('tests.helpers.embedded_nvim').start({rtp='prepend'})
         children[#children+1] = child
-        child:exec([[local parent=...; require('parley.remote_runtime').acquire({parent=parent,incarnation=string.rep('c',32)},
-            function(value) _G.runtime_result=value end)]],parent)
+        child:exec([[local parent,timeout=...; require('parley.remote_runtime').acquire({parent=parent,incarnation=string.rep('c',32),timeout_ms=timeout},
+            function(value) _G.runtime_result=value end)]],parent,arrival.MS)
         assert(vim.wait(arrival.MS,function() return type(child:exec('return _G.runtime_result and _G.runtime_result.kind'))=='string' end,10))
         return child
     end
@@ -323,7 +327,7 @@ describe('private editor RPC runtime ownership', function()
         local directory=seed_owner(parent,'e-changing',900001)
         source.hold=true
         local result
-        runtime.acquire({parent=parent,incarnation=string.rep('a',32),source=source},function(value) result=value end)
+        runtime.acquire({parent=parent,incarnation=string.rep('a',32),source=source,timeout_ms=arrival.MS},function(value) result=value end)
         assert(vim.wait(arrival.MS,function() return #source.reads==1 end,10))
         local marker=directory..'/owner.json'
         local record=assert(require('parley.remote_runtime_record').decode(table.concat(vim.fn.readfile(marker),'\n')))
@@ -418,7 +422,7 @@ describe('private editor RPC runtime ownership', function()
         local directory=seed_owner(parent,'e-changing',900001)
         source.hold=true
         local result
-        runtime.acquire({parent=parent,incarnation=string.rep('a',32),source=source},function(value) result=value end)
+        runtime.acquire({parent=parent,incarnation=string.rep('a',32),source=source,timeout_ms=arrival.MS},function(value) result=value end)
         assert(vim.wait(arrival.MS,function() return #source.reads==1 end,10))
         assert(uv.fs_rename(directory,directory..'.original'))
         assert(uv.fs_mkdir(directory,448))
@@ -430,28 +434,28 @@ describe('private editor RPC runtime ownership', function()
         assert.is_not_nil(uv.fs_lstat(directory..'.original'))
     end)
 
-    local function delayed_acquire()
-        source.hold=true
-        local result
-        runtime.acquire({parent=root..'/runtime',incarnation=string.rep('a',32),source=source},function(value) result=value end)
-        assert(vim.wait(arrival.MS,function() return #source.reads==1 end,10))
-        vim.defer_fn(function() source.release(1) end,800)
-        assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+    -- The startup budget under test. It is 1 s shorter than a later listener's
+    -- fixed 2 s budget, so a listener on the wrong budget visibly outlives it.
+    local STARTUP_MS=1000
+    local function startup_acquire()
+        local result=await_start({timeout_ms=STARTUP_MS})
         assert.equals('ready',result.kind,vim.inspect(result))
-        resources[#resources+1]=result.runtime
         return result.runtime
+    end
+    local function await_startup_deadline(deadline)
+        assert(vim.wait(arrival.MS,function() return uv.hrtime()/1000000>=deadline end,10))
     end
     for _,stage in ipairs({'reservation','publication'}) do
         it('shares the acquisition deadline through first-listener '..stage..' durability',function()
-            local resource=delayed_acquire()
+            local resource=startup_acquire()
             local own_path=resource.directory..'/s1'
             local foreign=vim.fn.serverstart(root..'/foreign.sock')
-            local calls,started,delivered,effects_after_delivery=0,0,false,0
+            local calls,started,delivered,effects_after_delivery,release=0,0,false,0,nil
             uv.fs_fsync=function(fd,callback)
                 calls=calls+1
                 if calls==(stage=='reservation' and 1 or 3) then
                     return saved_io.fsync(fd,function(err,value)
-                        vim.defer_fn(function() delivered=true;callback(err,value) end,1500)
+                        release=function() delivered=true;callback(err,value) end
                     end)
                 end
                 return saved_io.fsync(fd,callback)
@@ -465,7 +469,14 @@ describe('private editor RPC runtime ownership', function()
                 if delivered then effects_after_delivery=effects_after_delivery+1 end
                 return saved_io.serverstart(path)
             end
-            local result=listen(resource,'s1')
+            local result
+            resource.listen('s1',function(value) result=value end)
+            -- The durability completion arrives only after the shared startup
+            -- deadline has passed, whatever the machine's speed (#421).
+            assert(vim.wait(arrival.MS,function() return release~=nil end,10))
+            await_startup_deadline(resource.startup_deadline)
+            release()
+            assert(vim.wait(arrival.MS,function() return result~=nil end,10))
             -- Restore before teardown even when the assertions below fail.
             uv.fs_fsync,uv.fs_rename,vim.fn.serverstart=saved_io.fsync,saved_io.rename,saved_io.serverstart
             local foreign_preserved=vim.tbl_contains(vim.fn.serverlist(),foreign)
@@ -481,20 +492,12 @@ describe('private editor RPC runtime ownership', function()
         end)
     end
     it('gives later listeners a fresh operation budget after the first durable publication',function()
-        local resource=delayed_acquire()
+        local resource=startup_acquire()
+        local startup=resource.startup_deadline
         assert.equals('listening',listen(resource,'s1').kind)
-        local delayed=false
-        uv.fs_fsync=function(fd,callback)
-            if not delayed then
-                delayed=true
-                return saved_io.fsync(fd,function(err,value)
-                    vim.defer_fn(function() callback(err,value) end,1500)
-                end)
-            end
-            return saved_io.fsync(fd,callback)
-        end
+        -- The second listener starts after the startup budget has run out.
+        await_startup_deadline(startup)
         local result=listen(resource,'s2')
-        uv.fs_fsync=saved_io.fsync
         assert.equals('listening',result.kind,vim.inspect(result))
         assert.is_not_nil(uv.fs_lstat(result.path))
     end)
@@ -612,7 +615,7 @@ describe('private editor RPC runtime ownership', function()
                 end
                 return saved_io.rename(old,new,callback)
             end
-            operation=runtime.acquire({parent=root..'/runtime',incarnation=string.rep('a',32),source=source},
+            operation=runtime.acquire({parent=root..'/runtime',incarnation=string.rep('a',32),source=source,timeout_ms=arrival.MS},
                 function(value) result=value;calls=calls+1 end)
             if stage=='initial-fsync' or stage=='initial-rename' then
                 assert(vim.wait(arrival.MS,function() return release~=nil end,10))

@@ -46,11 +46,20 @@ Design (test-only; product deadlines unchanged):
 
 ## Plan
 
-- [ ] Rewrite the three margin tests causally (hold fsync until the deadline under test has passed); drop the 800 ms burn.
-- [ ] await_start and case 2 acquire with timeout_ms=arrival.MS where the deadline is not under test.
-- [ ] Negative controls: listen reusing the startup deadline for s2, and listen ignoring the startup deadline, each fail their row.
-- [ ] Both nvim versions; 20 reps under capped load; then the suite.
+- [x] Rewrite the three margin tests causally (hold fsync until the deadline under test has passed); drop the 800 ms burn.
+- [x] await_start and case 2 acquire with timeout_ms=arrival.MS where the deadline is not under test.
+- [x] Negative controls: listen reusing the startup deadline for s2, and listen ignoring the startup deadline, each fail their row.
+- [x] Both nvim versions; 20 reps under capped load; then the suite.
 
 ## Log
 
 ### 2026-10-22
+
+### 2026-10-23
+
+- Measured: see Spec. The registered pair's only remaining explanation is a whole-process stall over 15 s with no system-log trace (no jetsam or memory-pressure event 23:08 to 23:13 on 10-22), not reproducible in 10 runs under capped load. Per the TL, close unregisters the pair: if it recurs, the registry rerun shows it and a new issue gets that evidence.
+- Fix (tests only, product deadlines unchanged): the two shared-deadline cases hold the durability fsync and release it only after resource.startup_deadline has passed; the fresh-budget case starts s2 only after the startup deadline has passed, with no injected delay. The acquisition budget under test is STARTUP_MS=1000, 1 s below a later listener's fixed 2 s, so a wrong-budget listener visibly outlives it. delayed_acquire's 800 ms burn is gone. Every acquire whose deadline is not under test passes timeout_ms=arrival.MS (await_start's default, await_default, the held-startup cancel, both inspection-change cases, the finalization cases, the child editor).
+- Remaining exposure: a shared-deadline case needs acquire plus reaching the held fsync within STARTUP_MS (measured single-digit ms); later listen/stop/close keep their fixed, non-injectable 2 s budgets.
+- Negative controls (one at a time in a disposable clone, restored after): C1 listen ignores the startup deadline: both shared-deadline cases fail, nothing else. C2 the startup deadline is never cleared after publication: the fresh-budget case fails, nothing else.
+- Verified: remote_runtime_spec 44/0/0 on nvim 0.12.5 and clean on 0.11.7; 20/20 under capped load (3 CPU spinners plus an fsync dd loop, 1500 s cap, trap cleanup). Before the fix the same load failed the fresh-budget case 1 in 10.
+

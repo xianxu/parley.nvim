@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-23 (#421 — an injected delay inside a fixed budget is a race with real IO)
+
+- A deadline test that injects a fixed delay (1500 ms of a 2000 ms budget) leaves the rest of the budget to real fsyncs, so a loaded disk fails it. Hold the completion instead, and release it only once the deadline under test has passed (the deadline the resource carries); a test for a fresh budget starts the next operation only after the old deadline has passed.
+- A case that does not test a deadline should not run under a product default shorter than the suite's arrival budget: pass timeout_ms=arrival.MS where the API takes one, so a short stall cannot fail an unrelated property.
+
 ## 2026-10-23 (#414 — "it did not wait" as a fact, not a time)
 
 - A wall-clock bound that equals the timeout it guards has no margin. The regression it targets (a wait cut off by that timeout) and a scheduling stall on a loaded machine give the same reading. Assert the cause instead: hold the fake's answer behind a gate the spec opens, then check that the operation is still pending when the call returns.
