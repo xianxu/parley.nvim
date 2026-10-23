@@ -1,13 +1,13 @@
 ---
 id: 000405
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-20
 updated: 2026-10-22
 estimate_hours: 5.41
 collaboration-mode: collaboration
-card_mirror: '315a57b4c66add1f567d61997625aae88ea856d1' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '9ce130777d1dfc2e4b1cb86ba80e7b89b53d4b9f' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T04:55:52-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 14.12
 ---
 
 # remote-session: start a private RPC server when attached to a registered session file or side doc, and register its address with Couch
