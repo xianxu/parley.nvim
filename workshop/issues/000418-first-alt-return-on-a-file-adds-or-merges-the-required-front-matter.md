@@ -164,6 +164,11 @@ Authenticated peer 0c807306-0796-4026-ac26-d4d21d6f68e1 supplies landed pair#823
 
 Authenticated TL delivery 3b3b276e-1cdf-4742-a9b1-0476de1d51e3 reports operator live acceptance PASSED at 09:25: a plain file received all three mode defaults and submitted to ops:0; after keys were removed, Alt+Return restored only missing keys and retained the body edit. TL directs closing both cards and landing, then taking #419. The automated suite on 22ee10d0 passed preferred/compat runtimes in 5m9s, including repeat-submit idempotence and failure/receipt coverage. No runtime changes followed that tested head. Close review and landing are the remaining workflow gates, not completed implementation evidence. The hub will clear scratch documents.
 
+
+### 2026-10-23 — close round 1 REWORK; correction classes
+
+Binary-owned close review returned REWORK, leaving the card working. BR-1 persisted-scalar-roundtrip identifies materialized legacy text such as true/123/null emitted as YAML non-string scalars and decoded newlines emitted inside a native insertion entry. BR-2 preserve-root-mapping-layout identifies valid root indentation lost by new column-zero additions, which then fail projected shape validation. BR-3 core-concept-inventory-accuracy identifies the unchanged instruction.lua module incorrectly classified as modified. Sidecar and gate ledger retain exact findings. Two bounded helpers are adding pure/native RED regressions; parent owns codec/layout fixes and corrected plan inventory. No close is finalized and no merge is started. Runtime changes will need new recorded verification; previous suite and live evidence remain historical baseline proof.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

@@ -50,7 +50,7 @@ Presentation fallback clarification: ariadne:5 delivery 7106eb75 relays TL confi
 | Effective document editorial settings and additive fill projection | `lua/parley/editorial_frontmatter.lua` | new |
 | `resolve`, `fill`, `presentation_value` — effective components, additive projection and independent repaint selection | `lua/parley/editorial_frontmatter.lua` | new |
 | `header`, `scalar` — bounded root presence and owned scalar decoding | `lua/parley/skills/review/collaboration_value.lua` | new |
-| Processing selector and free-text resolution | `lua/parley/skills/review/instruction.lua` | modified |
+| Processing selector and free-text resolution | `lua/parley/skills/review/instruction.lua` | unchanged, reused |
 | Presentation selection | `lua/parley/presentation.lua` | modified |
 | Owned preparation and submission lifecycle | `lua/parley/document_session.lua` | modified |
 
@@ -69,7 +69,8 @@ The pure result is local to one submit and dies with it. One document has one pr
 | Outside-Couch review entry | `lua/parley/review_send.lua` | modified | Same projection/edit helper, local invocation and visible routing result |
 | Legacy session submit preparation | `lua/parley/session_sync.lua` | modified if needed | Existing `prepare_submit` path; shared helper once, never duplicate fill |
 | Protected front matter insertion | `lua/parley/editorial_prepare.lua` | new | Current buffer snapshot and `buffer_edit.edit_user_lines`; no disk writer |
-| Runtime settings consumers | `lua/parley/presentation.lua`, `lua/parley/skills/review/instruction.lua`, `lua/parley/review_send.lua` | modified | Canonical/legacy projection, local invoke arguments and round display |
+| Runtime settings consumers | `lua/parley/presentation.lua`, `lua/parley/review_send.lua` | modified | Canonical/legacy projection, local invoke arguments and round display |
+| Processing primitive reuse | `lua/parley/skills/review/instruction.lua` | unchanged, reused | Existing parse/resolve/context semantics remain authoritative |
 
 Registered fill belongs in an explicit **prepare** stage of the existing accepted submit operation, before ordinary save. The previous proposal to edit inside save is retired: `agentic_document.lua`'s real on_lines observer dispatches changed while busy, and `document_session.lua` cancels save on that event. Retain that ordinary invalidation behavior rather than suppressing the observer. A busy press joins the same operation and does not mutate text. Preparation failure ends that operation visibly and permits no save/register/send. The edit remains an ordinary undoable operation through existing provenance/lock machinery, never raw set-lines or a direct disk overwrite. A save failure leaves the visible unsaved edit available for undo/retry and sends nothing; no automatic rollback over another edit.
 
@@ -192,3 +193,11 @@ The architecture sweep found that the Core-concepts table described the modules 
 ### 2026-10-23 — live acceptance completed
 
 TL delivery 3b3b276e reports operator acceptance passed at 09:25 and directs close/landing for #418 and #322. Staging and its live check are complete. The final close/merge workflow checkbox remains pending until those gates actually finish; each issue's implementation acceptance checklist now distinguishes that future gate from completed behavior proof.
+
+### 2026-10-23 — close round 1: scalar round-trip and root layout
+
+BR-1 requires materialized strings to retain their YAML string type and decoded contents, including internal control/line-break characters, on the next resolve/fill. Reuse the owned scalar reader to test plain-value round-trip and quote unsafe values through a JSON-compatible YAML string encoding with escaped controls; ordinary safe fixture values remain plain. Enumerate implicit scalar types, numeric/date-like values, quote/comment punctuation, escaped text and Unicode line controls in pure tests, plus real native insertion/save/send coverage. Do not rewrite existing alias or metadata lines.
+
+BR-2 requires additions to use the existing root mapping's indentation, rather than changing its layout and failing projected validation. Derive that indentation from the scanner's existing first root entry; preserve all old rows, test widths 1–4 with nested/literal/legacy fields, and require idempotent output and native submission.
+
+BR-3 corrects both Core-concepts inventory rows for instruction.lua: the selector module is unchanged and reused, as its empty pinned diff and earlier implementation note establish. Runtime consumer changes are confined to presentation.lua/review_send.lua; no acceptance or scope changes.

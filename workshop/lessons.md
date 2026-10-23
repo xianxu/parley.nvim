@@ -6,6 +6,8 @@
 
 - #418 full-suite correction: a repeat-submit fixture must locate its body after metadata preparation. Fixed line numbers can overwrite a newly inserted fence and make downstream receipt/attention tests fail for the wrong reason. Preserve per-file header variants and assert the intended body target before editing.
 
+- #418 close BR-1/BR-2: additive YAML insertion must preserve value type, decoded contents and the existing root layout. Presence/preservation tests alone miss a first fill that cannot be read on the next submit. Generate implicit-type/control-string and indentation cases; require resolve/fill round-trip plus a real native insertion, and validate the projected header.
+
 ## 2026-10-22 (#409 — a census is not run ownership)
 
 - Persistence and a recognizable command prove that a process exists, not that
