@@ -28,14 +28,6 @@ dir=$root
 while [ ! -d "$dir" ]; do dir=$(dirname "$dir"); done
 dir=$(cd "$dir" && pwd -P)
 
-tmp=$root/tmp
-if [ "${#tmp}" -gt "$TMPDIR_MAX" ]; then
-    echo "test-placement: the test TMPDIR $tmp is ${#tmp} bytes; Neovim ignores a TMPDIR over $TMPDIR_MAX bytes." >&2
-    echo "  Specs would write their scratch to /tmp/nvim.\$USER, outside the test root (#423)." >&2
-    echo "  Point TMPDIR (or TEST_ENV_ROOT) at a shorter path, or use a shorter checkout name." >&2
-    exit 1
-fi
-
 refuse() {
     echo "test-placement: the test scratch root $root $1." >&2
     echo "  Specs would treat that tree as a parley project and write into it (#202, #338, #422)." >&2
@@ -49,3 +41,13 @@ while :; do
     [ "$dir" = / ] && break
     dir=$(dirname "$dir")
 done
+
+tmp=$root/tmp
+# Bytes, not characters: ${#tmp} counts characters under a UTF-8 locale.
+bytes=$(printf %s "$tmp" | LC_ALL=C wc -c | tr -d ' ')
+if [ "$bytes" -gt "$TMPDIR_MAX" ]; then
+    echo "test-placement: the test TMPDIR $tmp is $bytes bytes; Neovim ignores a TMPDIR over $TMPDIR_MAX bytes." >&2
+    echo "  Specs would write their scratch to /tmp/nvim.\$USER, outside the test root (#423)." >&2
+    echo "  Point TMPDIR (or TEST_ENV_ROOT) at a shorter path, or use a shorter checkout name." >&2
+    exit 1
+fi
