@@ -45,7 +45,8 @@ The adapter adds constant work (one short notice and one owner call), removes a 
 - [x] Add failing production-mapping regressions for outside-Couch plain/partial/legacy files, exact empty arguments, no prompt/write/send, and local-route/error outcomes; exercise actual review admission as well as the adapter seam.
 - [x] Remove prompt/placement/standing-instruction expansion from review_send.submit; delete unused insertion helpers, keep completion until #419; retain existing coordinator dispatch and invoke the existing local owner with empty args and a short truthful notice.
 - [x] Run focused review-send/review-invoke/native ownership tests on both runtimes, plus native UI notice/input verification and relevant architecture/lint checks; update atlas and checkpoint.
-- [ ] Push, queue recorded suite, coordinate live acceptance with the hub, close via SDLC and let merge own integration.
+- [x] Push and retain the recorded suite; coordinate the approved stage and live acceptance with the hub.
+- [x] Admit the tested candidate to binary-owned close review. Landing remains conditional on the recorded suite and live acceptance, then merge owns integration.
 
 ## Log
 
@@ -73,6 +74,10 @@ PR344 contains code b9135976daa17a4a2986cb1fd1b8e02fd4708e9d. Recorded suite ter
 Authenticated TL7f03823a approves staging; stage --build completed on parley.nvim:0 at the exact candidate b9135976daa17a4a2986cb1fd1b8e02fd4708e9d. This Lua plugin has no Go entrypoints/binaries, so no Go build was needed. Hub received three operator steps (plain no-work; ready comment; unnamed save-first) and a fresh-plugin-load caution; receipt1c6f1f7a is submitted. Operator acceptance remains pending. Clear stage after acceptance or landing through the existing SDLC lease, without touching editor processes.
 
 A documentation sweep corrected standing-instruction descriptions and links to the renamed Alt+Return atlas section; documentation_spec4 passes with clean census. Exact next step: read retained terminal81302 to completion, receive live result, then binary-owned close review/merge. No new full run is authorized merely by queue delay; classify any failure and retain all attempts. #419 remains separate, waiting for the landed #576 fixture revision.
+
+### 2026-10-23 — close review overlaps retained suite
+
+TL-worker explicitly permits the binary-owned close review alongside a queued recorded suite, provided a final-code pass precedes landing and any review code fix requeues verification. Enter close on the complete tested candidate; suite lease-2691705198 and operator acceptance are still pending. Plan ticks record review admission and completed stage coordination, not those pending landing conditions. This issue has its own new implementation interval under the revised dispatch, so use measured actual adoption; the historical acceptance-only no-actual proposal was superseded by TL49bad7d4. Never infer a full-suite pass or live result from codecomplete.
 
 ## Revisions
 
