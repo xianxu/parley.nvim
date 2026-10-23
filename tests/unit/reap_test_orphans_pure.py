@@ -106,6 +106,33 @@ class CensusPureTests(unittest.TestCase):
 
 
 class CensusSamplingTests(unittest.TestCase):
+    def test_git_metadata_does_not_hide_unresolved_legacy_evidence(self):
+        with tempfile.TemporaryDirectory(prefix='census-legacy-') as scratch:
+            root = pathlib.Path(scratch)
+            census.subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            gitdir = pathlib.Path(census.subprocess.check_output(
+                ['git', '-C', str(root), 'rev-parse', '--absolute-git-dir'], text=True).strip())
+            metadata = gitdir / 'parley-test-processes'
+            metadata.mkdir()
+            legacy = root / '.test-processes'
+            legacy.mkdir()
+            (legacy / 'unresolved').write_text('pending evidence')
+            calls = root / 'observer-calls'
+            fake = root / 'nvim'
+            fake.write_text('#!/usr/bin/env python3\nimport os,pathlib,sys\n'
+                            'base=pathlib.Path(sys.argv[7])\n'
+                            'with open(os.environ["ARGV_LOG"],"a") as f:f.write(str(base)+"\\n")\n'
+                            'if base.name==".test-processes":\n'
+                            ' print("owned process census unknown: legacy pending");sys.exit(2)\n'
+                            'print("owned process census verified")\n')
+            fake.chmod(0o700)
+            with patch.dict(os.environ, {'PARLEY_TEST_NVIM': str(fake), 'ARGV_LOG': str(calls)}), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                result = census.recorded_children(str(root), 'after', 0, False)
+            self.assertNotEqual(result, 0)
+            self.assertEqual(set(calls.read_text().splitlines()), {str(metadata), str(legacy)})
+            self.assertTrue((legacy / 'unresolved').exists())
+
     def test_an_observer_exit_zero_without_a_positive_verdict_is_unknown(self):
         with tempfile.TemporaryDirectory(prefix='census-observer-') as scratch:
             root = pathlib.Path(scratch)

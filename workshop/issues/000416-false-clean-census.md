@@ -50,7 +50,7 @@ The leaked run predates the later #405 fixture and parent/child cleanup changes.
 
 ## Plan
 
-- [ ] Implement the approved design in [the durable plan](../plans/000416-false-clean-census-plan.md), with native red/green coverage before changing cleanup.
+- [x] Implement the approved design in [the durable plan](../plans/000416-false-clean-census-plan.md), with native red/green coverage before changing cleanup.
 - [ ] Verify exact ownership, observed death, refusal paths, both supported runtimes, and #409 serialization; record the pushed-head full suite and close review.
 
 ## Revisions
@@ -117,3 +117,11 @@ Next: finish broad mapped tests on preferred 0.12.5 and affected regressions on 
 A final native-width regression first showed that persisted out-of-pid_t identifiers could reach observation/retirement. Native identity and record decoding now share a signed-32-bit `MAX_PID` boundary, including legacy job reads, preventing C argument wrap. The complete focused map then passed on both exact runtimes: 6 native lifecycle cases, 7 pure policy cases, 18 registry cases; logs `/tmp/parley416-final-focused.log` (0.12.5) and `/tmp/parley416-final-compat.log` (0.11.7). Registry coverage includes generated future structures/null/empty-container preservation, changed evidence before unlink, late scopes during cleanup, explicit absence, refusal and counted linear probes. The running public spec asserts its retained context is under this checkout and its own native birth is published, so a silently stripped context cannot pass vacuously.
 
 All targeted checks and diff/lint checks passed. Next: push this checkpoint and queue one recorded full suite on that exact pushed head, then the binary-owned close review. No #416 recorded full-suite pass or close verdict exists yet.
+
+
+### 2026-10-22 — Git metadata placement correction before close
+
+Native directory churn under the working tree reproduced the #202 walk race: real `find .` failed on iteration 3 while an owned scope retired. The authoritative plan Revision moves this same registry into the checkout’s own Git metadata (an approved location), retaining the no-Git fallback and legacy-path census. Per-worktree placement and legacy-unknown migration tests failed before the fix and now pass. All 26 lease tests and 15 Python census tests pass. The source-search injection case now walks immutable source rather than mutable Git/test metadata. Recorded suite `lease-2698737677` on the old pushed head was cancelled through `sdlc local-check cancel` before execution; it provides no passing evidence. One replacement will be queued on the corrected pushed head after two-runtime checks. Hub report receipt 3dd06741-69b4-4629-b2c4-df562fd3e65c is submitted.
+
+
+Both runtime focused mappings passed after placement correction: `/tmp/parley416-placement-native.log` (0.12.5), `/tmp/parley416-placement-compat.log` (0.11.7), covering 6 native lifecycle, 7 pure policy, 18 retained-registry and 4 find safety cases each. A native 100-walk probe passed while private scopes churned in this linked checkout's Git metadata; the old source-tree placement failed at walk 3. Lint remains clean across 828 files (`/tmp/parley416-placement-lint.log`).

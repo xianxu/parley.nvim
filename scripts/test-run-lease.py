@@ -7,12 +7,33 @@ import pathlib
 import sys
 import stat
 import tempfile
+import subprocess
 from itertools import islice
 
 FD_ENV = 'PARLEY_TEST_LEASE_FD'
 CONTEXT_ENV = 'PARLEY_TEST_PROCESS_DIR'
 MAX_RUNS = 256
 MAX_SCOPES = 64
+
+
+def registry_base(root):
+    """Keep Git checkout churn in its own metadata, outside linked worktrees."""
+    root = pathlib.Path(root).resolve()
+    if not os.path.lexists(root / '.git'):
+        return root / '.test-processes'  # contributor archives / isolated fixtures
+    env = dict(os.environ)
+    for name in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR'):
+        env.pop(name, None)
+    result = subprocess.run(['git', '-C', str(root), 'rev-parse', '--absolute-git-dir', '--show-toplevel'],
+                            capture_output=True, text=True, timeout=5, env=env)
+    values = result.stdout.splitlines()
+    if result.returncode or len(values) != 2 or not pathlib.Path(values[0]).is_absolute() \
+            or pathlib.Path(values[1]).resolve() != root:
+        raise ValueError('test process registry cannot resolve checkout Git metadata')
+    gitdir = pathlib.Path(values[0]).resolve()
+    if not owned_directory(gitdir):
+        raise ValueError('unowned checkout Git metadata')
+    return gitdir / 'parley-test-processes'
 
 
 def owned_directory(path):
@@ -22,7 +43,7 @@ def owned_directory(path):
 
 def run_context(root, reuse=False):
     """Retain bounded birth evidence outside the scratch cleaned by make."""
-    base = pathlib.Path(root).resolve() / '.test-processes'
+    base = registry_base(root)
     if not reuse:
         base.mkdir(mode=0o700, exist_ok=True)
     if not owned_directory(base):
@@ -125,7 +146,7 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         sys.exit(f'test lease: {exc}')
     except KeyboardInterrupt:
         sys.exit(130)

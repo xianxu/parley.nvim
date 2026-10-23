@@ -510,5 +510,24 @@ qa!
         self.assertIn('same checkout serialize', out.read_text())
 
 
+    def test_git_checkouts_keep_mutable_records_in_independent_git_metadata(self):
+        root = self.checkout('git checkout')
+        subprocess.run(['git', 'init', '-q', str(root)], check=True)
+        subprocess.run(['git', '-C', str(root), '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+                        'commit', '-q', '--allow-empty', '-m', 'fixture'], check=True)
+        linked = self.base / 'linked checkout'
+        subprocess.run(['git', '-C', str(root), 'worktree', 'add', '-q', '-b', 'linked', str(linked)], check=True)
+        parents = []
+        for checkout in (root, linked):
+            with mock.patch.dict(os.environ):
+                context = pathlib.Path(Lease.run_context(checkout))
+            gitdir = pathlib.Path(subprocess.check_output(
+                ['git', '-C', str(checkout), 'rev-parse', '--absolute-git-dir'], text=True).strip())
+            self.assertEqual(context.parent, gitdir / 'parley-test-processes')
+            self.assertFalse((checkout / '.test-processes').exists(), 'mutable registry reentered the working tree')
+            parents.append(context.parent)
+        self.assertNotEqual(parents[0], parents[1], 'linked checkouts must never share their process registry')
+
+
 if __name__ == '__main__':
     unittest.main()
