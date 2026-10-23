@@ -63,7 +63,11 @@ end
 
 local function draw(buf, round)
     local lines = lines_of(buf)
-    if presentation.value(lines) ~= "highlight" then
+    local value, warnings = presentation.value(lines)
+    if not value then
+        for _, warning in ipairs(warnings) do vim.notify("parley: " .. warning, vim.log.levels.WARN) end
+    end
+    if value ~= "highlight" then
         skill_render.clear_round(buf)
         return
     end

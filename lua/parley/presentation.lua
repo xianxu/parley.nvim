@@ -14,9 +14,10 @@ local M = {}
 M.MAX_SPANS = 200
 
 --- The document's presentation: direct, highlight or propose. A missing or
---- unknown value is highlight, as Couch reads it.
+--- unknown scalar value is highlight, as Couch reads it. Unsupported headers
+--- return no mode and a named diagnostic rather than guessing a presentation.
 --- @param lines string[]
---- @return string
+--- @return string|nil
 function M.value(lines)
     return editorial.presentation_value(lines)
 end

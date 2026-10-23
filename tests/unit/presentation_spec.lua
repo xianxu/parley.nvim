@@ -27,12 +27,59 @@ describe("presentation.value", function()
         assert.equals('direct', actual)
     end)
 
-    it("reads the key, and highlights when it is missing, unknown or unclosed", function()
+    it("reads the key, and highlights when it is missing or an unknown scalar", function()
         assert.equals("highlight", presentation.value({ "# no frontmatter" }))
         assert.equals("propose", presentation.value({ "---", "presentation: propose", "---" }))
         assert.equals("direct", presentation.value({ "---", 'presentation: "direct"', "---" }))
         assert.equals("highlight", presentation.value({ "---", "presentation: shout", "---" }))
-        assert.equals("highlight", presentation.value({ "---", "presentation: propose" }))
+    end)
+
+    it("refuses selected non-string scalar presentations without guessing highlight", function()
+        for _, key in ipairs({ "presentation-mode", "presentation" }) do
+            for _, value in ipairs({ "42", "true", "null" }) do
+                local document = { "---", key .. ": " .. value, "---", "body" }
+                local before = vim.deepcopy(document)
+                local mode, warnings = presentation.value(document)
+                assert.is_nil(mode, document[2])
+                assert.is_table(warnings)
+                assert.truthy(table.concat(warnings, ";"):find("line 2", 1, true), vim.inspect(warnings))
+                assert.same(before, document)
+            end
+        end
+        local mode, warnings = presentation.value({ "---", 'presentation-mode: "42"', "---" })
+        assert.equals("highlight", mode, "an unknown string retains the warned-highlight policy")
+        assert.truthy(table.concat(warnings, ";"):find("unknown value 42", 1, true), vim.inspect(warnings))
+    end)
+
+    it("refuses unsupported header representations with no mode and a named line", function()
+        for _, header in ipairs({
+            { "metadata:", "  topic: notes" }, { "metadata: |", "  retained text" },
+            { "metadata: [one, two]" }, { "metadata: &named retained" }, { "metadata: !text retained" },
+        }) do
+            local document = { "---" }
+            vim.list_extend(document, header)
+            vim.list_extend(document, { "presentation-mode: highlight", "---", "body" })
+            local before = vim.deepcopy(document)
+            local mode, warnings = presentation.value(document)
+            assert.is_nil(mode, header[1])
+            assert.is_table(warnings)
+            assert.truthy(table.concat(warnings, ";"):find("line 2", 1, true), vim.inspect(warnings))
+            assert.same(before, document)
+        end
+        local mode, warnings = presentation.value({ "---", "presentation: propose" })
+        assert.is_nil(mode)
+        assert.truthy(table.concat(warnings, ";"):find("line ", 1, true), vim.inspect(warnings))
+    end)
+
+    it("keeps legacy collaboration maps semantically readable without guessing presentation", function()
+        local document = { "---", "collaboration-mode:", "  default: discussion", "  chat: [Questions]",
+            "presentation-mode: propose", "---", "# Questions" }
+        assert.equals("propose", presentation.value(document))
+    end)
+
+    it("reads presentation alongside literal quotes in an already-started root plain scalar", function()
+        assert.equals("direct", presentation.value({ "---", 'title: A, "unfinished',
+            "presentation-mode: direct", "---", "body" }))
     end)
 end)
 

@@ -225,3 +225,53 @@ describe("collaboration frontmatter scan work", function()
         end
     end)
 end)
+
+
+describe("flat root embedded quote lexical context", function()
+    it("opens quoted scalars only at the first value character", function()
+        local failed = {}
+        for _, punctuation in ipairs({ ',', '[', '{', ']', '}', ':', '-', '?', '/', '=', ' ', '' }) do
+            for _, quote in ipairs({ '"', "'" }) do
+                for _, matched in ipairs({ false, true }) do
+                    local text = 'Keep ' .. punctuation .. quote .. 'voice' .. (matched and quote or '')
+                    for _, suffix in ipairs({ '', '#literal', ' # comment', '\\path' }) do
+                        for _, key in ipairs({ 'processing-instruction', 'process-instruction' }) do
+                            local original = { '---', key .. ': ' .. text .. suffix,
+                                'collaboration-mode: chat', '---', '# Body' }
+                            local captured = vim.deepcopy(original)
+                            local ok = pcall(function()
+                                local header = assert(parser.header(original))
+                                local value, err = parser.scalar(header.fields[key][1], key == 'process-instruction')
+                                assert.is_nil(err)
+                                local expected = text .. (suffix == ' # comment' and key ~= 'process-instruction' and '' or suffix)
+                                assert.equals(expected, value)
+                                local route, route_err = parser.parse(original)
+                                assert.is_nil(route_err)
+                                assert.equals('chat', route)
+                                assert.same(captured, original)
+                            end)
+                            if not ok then
+                                failed[#failed + 1] = key .. ': ' .. text .. suffix
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        local sample = {}
+        for i = 1, math.min(8, #failed) do sample[i] = failed[i] end
+        assert.equals(0, #failed, 'failed root scalar cases (first 8): ' .. table.concat(sample, ' | '))
+    end)
+
+    it("keeps actual quoted scalars and legacy collection grammar separate from embedded quotes", function()
+        for _, source in ipairs({ [["chat" # comment]], [['chat' # comment]] }) do
+            local value, err = read('notes: Keep ,"unmatched\ncollaboration-mode: ' .. source)
+            assert.is_nil(err)
+            assert.equals('chat', value)
+        end
+        assert.same({ chat = { 'A, B', 'Say "yes"', "What's next" } },
+            read([[collaboration-mode: {chat: ["A, B", 'Say "yes"', 'What''s next']}]]))
+        bad([[collaboration-mode: "chat" trailing]])
+        bad([[collaboration-mode: "ch\qat"]])
+    end)
+end)

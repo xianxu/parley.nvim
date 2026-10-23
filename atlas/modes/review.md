@@ -139,19 +139,33 @@ names another value. Legacy collaboration maps remain readable and unchanged.
 Header input and its projected output are bounded to 8192 lines / 1 MiB; document
 body size does not count toward that envelope.
 
+Convenience fill handles flat, uniformly indented root key/value lines with
+supported plain or quoted scalar values. A quote inside an already-started
+plain value is literal text. Nested metadata, flow collections, block scalars
+and other unsupported representations are left byte-identical, with
+`front matter left unchanged: not a simple header (line N)`. Legacy collaboration
+maps also skip fill but remain readable through the existing map parser.
+Semantic readers refuse unsupported settings with the offending line named;
+they do not guess modes or instructions. An unreadable presentation clears
+round decorations instead of assuming highlight. Missing/empty/unknown scalar
+presentation retains the warned-highlight rule above.
+
 Inside Couch, [agentic document submission](session_sync.md) owns preparation,
 ordinary save, registration and delivery. Its existing operation records exact
 before/after hashes; only the matching native edit may advance preparation.
 Every other edit, reload, context change or detach cancels stale work. One
 provenance-authorized insertion is undoable; a second submit adds no metadata.
 Parley sends only `submitted: <absolute path>`, never instruction prose or an
-editor diff. The pane agent supplies the default owner; couch-owner overrides
+editor diff. A skipped convenience fill still follows ordinary save/register/send
+with the original bytes. The pane agent supplies the default owner; couch-owner overrides
 it, while business owner metadata does not. Unknown membership retains the
 existing editable unavailable state, and confirmed identity survives header edits.
 
 Outside Couch, the same preparation saves the file and announces local review,
 then passes effective modes and free instruction to run_via_invoke. Missing
 legacy process-instruction needs no prompt: free-form is sufficient. The local
+reader resolves a skipped header before save/invoke and reports a named refusal
+if its settings cannot be read. A readable legacy map keeps its routing. The local
 review retains its normal marker/routing behavior; typed legacy session-sync
 files retain their dedicated save/send path. A failed pane lookup cannot fall
 back to local review. Legacy bracket completion remains until #419 adds canonical

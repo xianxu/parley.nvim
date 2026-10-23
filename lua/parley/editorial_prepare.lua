@@ -45,10 +45,13 @@ function M.project(buf)
     local modes = dir and require("parley.skills.review.mode").list(dir) or {}
     local result, err = require("parley.editorial_frontmatter").fill(lines, modes)
     if not result then return nil, err end
-    local settings = result.settings
+    -- A skipped convenience edit carries only its notice. Couch transport
+    -- does not need guessed editorial settings; semantic consumers resolve
+    -- separately before using a mode or instruction.
+    local settings = result.settings or { warnings = { result.skip_reason } }
     local projection = { buf = buf, path = before.path, changedtick = before.changedtick,
         before_hash = content_hash(lines), after_hash = content_hash(result.lines),
-        changed = result.changed, patch = result.patch, settings = {
+        changed = result.changed, patch = result.patch, skip_reason = result.skip_reason, settings = {
             modes = settings.modes, instruction = settings.instruction,
             presentation = settings.presentation, warnings = settings.warnings,
         } }

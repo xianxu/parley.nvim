@@ -52,6 +52,9 @@ registers and submits it to the pane's agent. Missing frontmatter mode keys are
 added as collaboration-mode: discussion, presentation-mode: highlight and
 processing-mode: free-form. Existing choices, aliases and unknown metadata stay
 unchanged; missing keys use effective legacy choices before defaults.
+Automatic fill handles flat key/value headers. More complex headers stay
+unchanged and submit through Couch with a short notice; local review names any
+header line it cannot interpret. Existing legacy collaboration maps remain readable.
 The winbar confirms the destination and time after submission succeeds, until
 your next edit or the agent's write; failures show an error there. Unchanged
 content shows `nothing to submit` instead of sending again. Press Alt+Return

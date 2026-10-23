@@ -118,11 +118,11 @@ describe("editorial submit preparation through the native observer", function()
     end)
 
     it("retains existing scalar bytes and body when adding missing settings", function()
-        local before = { "---", "owner: business-team", "presentation: direct", "future:", "  nested: untouched",
+        local before = { "---", "owner: business-team", "presentation: direct", "future: untouched",
             "---", "# Question", "original", "tail" }
         replace_file(before)
         press()
-        local expected = { "---", "owner: business-team", "presentation: direct", "future:", "  nested: untouched",
+        local expected = { "---", "owner: business-team", "presentation: direct", "future: untouched",
             "collaboration-mode: discussion", "presentation-mode: direct", "processing-mode: free-form",
             "---", "# Question", "original", "tail" }
         assert.same(expected, lines())
@@ -209,7 +209,7 @@ describe("editorial submit preparation through the native observer", function()
 
     it("retains a valid indented root mapping while materializing missing settings", function()
         preserves_materialized_settings({ "---", "  owner: business-team", "  presentation: direct",
-            "  future:", "    nested: untouched", "---", "# Question", "original", "tail" }, "", "direct", "  ")
+            "  future: untouched", "---", "# Question", "original", "tail" }, "", "direct", "  ")
     end)
 
     for _, case in ipairs({
@@ -246,6 +246,118 @@ describe("editorial submit preparation through the native observer", function()
             vim.list_extend(before, { "---", "# Question", "original", "tail" })
             preserves_materialized_settings(before, text, "highlight", nil,
                 { edits = legacy and 1 or 0, submit_first = true })
+        end)
+    end
+
+    for _, punctuation in ipairs({
+        { name = "comma", prefix = "Keep commas, ", tail = "please" },
+        { name = "bracket", prefix = "Keep [", tail = "asides] intact" },
+        { name = "dash", prefix = "Keep -", tail = "voice intact" },
+    }) do
+        for _, quote in ipairs({ '"', "'" }) do
+            for _, legacy in ipairs({ false, true }) do
+                for _, complete in ipairs({ false, true }) do
+                    it("submits " .. (legacy and "legacy" or "canonical") .. " "
+                        .. (complete and "complete" or "partial") .. " plain text with unmatched "
+                        .. (quote == '"' and "double" or "single") .. " quote after " .. punctuation.name, function()
+                        local text = punctuation.prefix .. quote .. punctuation.tail
+                        local before = { "---", "future: untouched" }
+                        if complete then
+                            vim.list_extend(before, { "collaboration-mode: discussion", "presentation-mode: highlight",
+                                "processing-mode: free-form", "processing-instruction: " .. text })
+                        end
+                        if legacy then before[#before + 1] = "process-instruction: " .. text
+                        elseif not complete then before[#before + 1] = "processing-instruction: " .. text end
+                        vim.list_extend(before, { "---", "# Question", "original", "tail" })
+                        preserves_materialized_settings(before, text, "highlight", nil,
+                            { edits = complete and 0 or 1, submit_first = true })
+                    end)
+                end
+            end
+        end
+    end
+
+    local function skip_notice_count(before)
+        local count = 0
+        for _, message in ipairs(notices) do
+            local row = message:match("front matter left unchanged: not a simple header %(line (%d+)%)")
+            if row then
+                count = count + 1
+                row = tonumber(row)
+                local close
+                for index = 2, #before do if before[index] == "---" then close = index; break end end
+                assert.is_true(row >= 2 and row < close, "skip notice must name an original header row: " .. message)
+            end
+        end
+        return count
+    end
+
+    for _, case in ipairs({
+        { name = "unknown nested metadata", header = { "future:", "  nested: untouched" } },
+        { name = "unknown block scalar", header = { "future: |", "  literal metadata" } },
+        { name = "unknown flow collection", header = { "future: [one, two]" } },
+        { name = "unknown anchor", header = { "future: &original untouched" } },
+        { name = "unknown tag", header = { "future: !!str untouched" } },
+        { name = "indented nested metadata", header = { "  owner: business-team", "  presentation: direct",
+            "  future:", "    nested: untouched" } },
+        { name = "legacy collaboration map", header = { "collaboration-mode:", "  default: discussion" }, legacy_map = true },
+    }) do
+        it("skips optional fill for " .. case.name .. " and delivers exact bytes with one notice", function()
+            local before = { "---" }
+            vim.list_extend(before, case.header)
+            vim.list_extend(before, { "---", "# Question", "original", "tail" })
+            replace_file(before)
+            local tick = vim.api.nvim_buf_get_changedtick(buf)
+            press()
+            assert.same({}, edits, "unsupported convenience headers must never be partially edited")
+            assert.truthy(document.status(buf).operation or document.identity(buf),
+                "skipped fill must still proceed through ordinary Couch submission: " .. bar() .. " " .. vim.inspect(notices))
+            delivered()
+            assert.equals(1, skip_notice_count(before), vim.inspect(notices))
+            assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+            assert.same(before, lines())
+            assert.same(before, vim.fn.readfile(path))
+            assert.same(before, vim.fn.readfile(root .. "/sent-bytes"))
+            assert.same({ "ops:0|submitted: " .. path }, sends())
+            local registry = vim.json.decode(table.concat(vim.fn.readfile(root .. "/sent-registry"), "\n"))
+            assert.equals(1, vim.tbl_count(registry.paths))
+            assert.equals(document.identity(buf).ID, registry.paths[path].ID)
+            assert.equals("ops:0", registry.paths[path].Owner)
+            if case.legacy_map then
+                local value, err = require("parley.skills.review.collaboration_value").parse(vim.fn.readfile(path))
+                assert.is_nil(err)
+                assert.same({ default = "discussion" }, value, "legacy map interpretation remains available")
+            end
+            notices = {}
+            press()
+            await(function() return bar():find("nothing to submit", 1, true) ~= nil end)
+            assert.equals(1, skip_notice_count(before), "each accepted press reports its skipped convenience once")
+            assert.same({}, edits)
+            assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+            assert.same(before, lines())
+            assert.same(before, vim.fn.readfile(path))
+            assert.equals(registry.paths[path].ID, document.identity(buf).ID)
+            assert.equals(1, #sends())
+        end)
+    end
+
+    for _, case in ipairs({
+        { name = "known non-string scalar", header = { "processing-instruction: true" } },
+        { name = "duplicate known keys", header = { "processing-mode: free-form", "processing-mode: copy-editing" } },
+        { name = "legacy multi-selector", header = { 'process-instruction: "[copy-edit][fact-check] Verify names."' } },
+    }) do
+        it("keeps intentional refusal for flat " .. case.name .. " instead of treating it as a skip", function()
+            local before = { "---" }
+            vim.list_extend(before, case.header)
+            vim.list_extend(before, { "---", "# Question", "original", "tail" })
+            replace_file(before)
+            press()
+            assert.truthy(bar():find("not confirmed", 1, true), bar())
+            assert.equals(0, skip_notice_count(before))
+            assert.same({}, edits)
+            assert.same(before, lines())
+            assert.same(before, vim.fn.readfile(path))
+            no_send()
         end)
     end
 

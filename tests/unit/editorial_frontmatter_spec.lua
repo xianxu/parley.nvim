@@ -75,30 +75,48 @@ describe('editorial front matter', function()
         end
     end)
 
-    it('preserves generated unknown nested metadata and body literals without mistaking them for root keys', function()
-        local settings = module()
-        local atoms = { 'presentation-mode: direct', 'processing-mode: typo', 'collaboration-mode: chat', 'x: [1, 2]', '"quoted" # literal' }
+    local function skipped(document, semantic_readable)
+        local settings, captured = module(), vim.deepcopy(document)
+        local result, err = settings.fill(document, catalog)
+        assert.is_not_nil(result, tostring(err))
+        assert.is_nil(err)
+        assert.is_false(result.changed)
+        assert.is_string(result.skip_reason)
+        assert.truthy(result.skip_reason:match('line %d+'))
+        assert.is_nil(result.patch)
+        assert.is_nil(result.settings)
+        assert.same(captured, result.lines)
+        assert.same(captured, document)
+        if not semantic_readable then
+            local resolved, problem = settings.resolve(document, catalog)
+            assert.is_nil(resolved)
+            assert.is_string(problem)
+            assert.truthy(problem:match('line %d+'))
+            local shown, warnings = settings.presentation_value(document)
+            assert.is_nil(shown)
+            assert.truthy(table.concat(warnings, '\n'):match('line %d+'))
+        end
+        return result
+    end
+
+    it('skips nested and block metadata unchanged without shadowing hidden semantic keys', function()
+        local atoms = { 'presentation-mode: direct', 'processing-mode: typo', 'collaboration-mode: chat',
+            'x: [1, 2]', '"quoted" # literal' }
         for _, atom in ipairs(atoms) do
-            local document = { '---', 'future:', '  nested: ' .. vim.inspect(atom), 'literal: |', '  ' .. atom,
-                'review-mode: operator-private', '---', '# Body', atom }
-            local captured = vim.deepcopy(document)
-            local filled = assert(settings.fill(document, catalog))
-            assert.same(captured, document)
-            for row = 1, 6 do assert.equals(document[row], filled.lines[row]) end
-            assert.equals('collaboration-mode: discussion', filled.lines[7])
-            assert.equals('presentation-mode: highlight', filled.lines[8])
-            assert.equals('processing-mode: free-form', filled.lines[9])
-            assert.same({ '---', '# Body', atom }, { filled.lines[10], filled.lines[11], filled.lines[12] })
+            for _, root in ipairs({ { 'future:', '  nested: ' .. vim.json.encode(atom) },
+                { 'literal: |', '  ' .. atom }, { 'literal: >', '  ' .. atom } }) do
+                local document = { '---' }
+                vim.list_extend(document, root)
+                vim.list_extend(document, { 'review-mode: operator-private', '---', '# Body', atom })
+                skipped(document)
+            end
         end
     end)
 
-    it('refuses ambiguous relevant fields before any partial insertion', function()
+    it('refuses invalid flat relevant fields before any partial insertion', function()
         local settings = module()
         local headers = {
             { '---', 'processing-mode: free-form', 'processing-mode: proofreading', '---', '# Body' },
-            { '---', 'title: unclosed' },
-            { '---', '{processing-mode: free-form}', '---', '# Body' },
-            { '---', 'processing-mode: [free-form]', '---', '# Body' },
             { '---', 'processing-mode: absent-mode', '---', '# Body' },
         }
         for _, document in ipairs(headers) do
@@ -200,22 +218,40 @@ describe('editorial front matter', function()
         end
     end)
 
-    it('refuses generated malformed root metadata without producing a patch', function()
-        local settings = module()
+    it('skips unsupported root representations with a named line and no semantic defaults', function()
         local roots = { { '- processing-mode: free-form' }, { '<<: *defaults' },
             { '? processing-mode', ': free-form' }, { '"unclosed: value' },
             { 'future: [', 'processing-mode: free-form' }, { 'future: scalar', '  processing-mode: free-form' },
-            { '\tprocessing-mode: free-form' }, { 'future: {a: ]}' } }
-        for index, root in ipairs(roots) do
+            { '\tprocessing-mode: free-form' }, { 'future: {a: ]}' },
+            { 'future: [one, two]' }, { 'future: {a: one}' }, { 'future: &anchor text' },
+            { 'future: *alias' }, { 'future: !tag text' }, { '{processing-mode: free-form}' },
+            { 'processing-instruction: "unclosed' }, { 'processing-instruction: "text" trailing' },
+            { 'processing-instruction: "bad\\qescape"' } }
+        for _, root in ipairs(roots) do
             local document = { '---' }
             vim.list_extend(document, root)
             vim.list_extend(document, { '---', '# Body' })
-            local captured = vim.deepcopy(document)
-            local filled, err = settings.fill(document, catalog)
-            assert.is_nil(filled, 'malformed root ' .. index)
-            assert.is_string(err)
-            assert.same(captured, document)
+            skipped(document)
         end
+        skipped({ '---', 'title: unclosed' })
+    end)
+
+    it('keeps legacy collaboration maps semantically readable while skipping their fill', function()
+        local settings = module()
+        for _, root in ipairs({ { 'collaboration-mode: {default: chat}' },
+            { 'collaboration-mode:', '  default: chat' },
+            { 'collaboration-mode:', '  default: discussion', '  chat: [Body]' } }) do
+            local document = { '---' }
+            vim.list_extend(document, root)
+            vim.list_extend(document, { '---', '# Body' })
+            local resolved = assert(settings.resolve(document, catalog))
+            assert.equals('chat', resolved.collaboration.mode_by_row[#document])
+            assert.truthy(table.concat(resolved.warnings, '\n'):find('deprecated', 1, true))
+            skipped(document, true)
+        end
+        local invalid = { '---', 'collaboration-mode: {default: invalid}', '---', '# Body' }
+        assert.is_nil(settings.resolve(invalid, catalog))
+        skipped(invalid, true)
     end)
 
     it('keeps all legacy modes readable in order but refuses every multi-mode fill unchanged', function()
@@ -252,10 +288,14 @@ describe('editorial front matter', function()
                 local document = { '---', key .. ': ' .. value, '---', '# Body' }
                 local resolved = assert(settings.resolve(document, catalog))
                 assert.equals('chat', resolved.collaboration.mode_by_row[4], key .. ': ' .. value)
-                local filled = assert(settings.fill(document, catalog))
-                assert.equals(document[2], filled.lines[2])
-                local after = assert(settings.resolve(filled.lines, catalog))
-                assert.equals('chat', after.collaboration.mode_by_row[#filled.lines])
+                if value:sub(1, 1) == '{' then
+                    skipped(document, true)
+                else
+                    local filled = assert(settings.fill(document, catalog))
+                    assert.equals(document[2], filled.lines[2])
+                    local after = assert(settings.resolve(filled.lines, catalog))
+                    assert.equals('chat', after.collaboration.mode_by_row[#filled.lines])
+                end
             end
         end
     end)
@@ -325,9 +365,8 @@ describe('editorial front matter', function()
         for width = 1, 4 do
             local indent = string.rep(' ', width)
             for _, legacy in ipairs({ false, true }) do
-                local document = { '---', indent .. '# root comment', indent .. 'future:',
-                    indent .. '  nested: "processing-mode: typo"', indent .. 'literal: |',
-                    indent .. '  presentation-mode: direct', indent .. 'unknown: retained # exact' }
+                local document = { '---', indent .. '# root comment', indent .. 'future: retained',
+                    indent .. 'literal: "presentation-mode: direct"', indent .. 'unknown: retained # exact' }
                 if legacy then
                     document[#document + 1] = indent .. 'presentation: propose # exact alias'
                     document[#document + 1] = indent .. 'process-instruction: "[copy-edit] Preserve legacy intent."'
@@ -354,6 +393,14 @@ describe('editorial front matter', function()
                 assert.is_false(again.changed)
                 assert.same(filled.lines, again.lines)
             end
+        end
+    end)
+
+    it('skips uniformly indented nested counterparts without changing their root layout', function()
+        for width = 1, 4 do
+            local indent = string.rep(' ', width)
+            skipped({ '---', indent .. '# root comment', indent .. 'future:',
+                indent .. '  processing-mode: typo', indent .. 'presentation: direct', '---', '# Body' })
         end
     end)
 
@@ -397,7 +444,9 @@ describe('editorial front matter', function()
             end
             if failed then failures[#failures + 1] = case[1] end
         end
-        assert.equals(0, #failures, 'failed scalar spellings: ' .. table.concat(failures, ' | '))
+        local sample = {}
+        for i = 1, math.min(8, #failures) do sample[i] = failures[i] end
+        assert.equals(0, #failures, 'failed scalar spellings (first 8): ' .. table.concat(sample, ' | '))
     end
 
     it('round trips root plain flow punctuation across canonical and legacy partial and complete headers', function()
@@ -443,6 +492,41 @@ describe('editorial front matter', function()
         instruction_roundtrips(cases)
     end)
 
+    it('treats every embedded root-plain quote as literal across punctuation and comment contexts', function()
+        local cases = {}
+        for _, punctuation in ipairs({ ',', '[', '{', ']', '}', ':', '-', '?', '/', '=', ' ', '' }) do
+            for _, quote in ipairs({ '"', "'" }) do
+                for _, matched in ipairs({ false, true }) do
+                    local text = 'Keep ' .. punctuation .. quote .. 'voice' .. (matched and quote or '')
+                    cases[#cases + 1] = { text, text }
+                    cases[#cases + 1] = { text .. '#literal', text .. '#literal' }
+                    cases[#cases + 1] = { text .. ' # comment', text, text .. ' # comment' }
+                    cases[#cases + 1] = { text .. '\\path', text .. '\\path' }
+                end
+            end
+        end
+        instruction_roundtrips(cases)
+    end)
+
+    it('keeps unquoted legacy selectors in the flat raw-scalar compatibility path', function()
+        local settings = module()
+        for _, tail in ipairs({ 'Keep voice, fix typos', 'Keep ,"unmatched', "Keep ['unmatched", 'Keep {"matched"#literal' }) do
+            local document = { '---', 'process-instruction: [copy-edit] ' .. tail, '---', '# Body' }
+            local before, err = settings.resolve(document, catalog)
+            assert.is_not_nil(before, tostring(err))
+            assert.equals('copy-editing', before.modes[1].name)
+            assert.equals(tail, before.instruction)
+            local filled = assert(settings.fill(document, catalog))
+            assert.is_nil(filled.skip_reason)
+            assert.equals(document[2], filled.lines[2])
+            assert.equals(tail, assert(settings.resolve(filled.lines, catalog)).instruction)
+            assert.is_false(assert(settings.fill(filled.lines, catalog)).changed)
+        end
+        local multi = { '---', 'process-instruction: [copy-edit][proof] Keep voice', '---', '# Body' }
+        assert.equals(2, #assert(settings.resolve(multi, catalog)).modes)
+        assert.is_nil(settings.fill(multi, catalog))
+    end)
+
     it('keeps actual collections and implicit non-string known fields invalid in root scalar context', function()
         local settings = module()
         for _, key in ipairs({ 'processing-instruction', 'processing-mode', 'presentation-mode' }) do
@@ -454,9 +538,14 @@ describe('editorial front matter', function()
                 local document = { '---', key .. ': ' .. value, '---', '# Body' }
                 local captured = vim.deepcopy(document)
                 local result, err = settings.fill(document, catalog)
-                assert.is_nil(result, key .. ': ' .. value)
-                assert.is_string(err)
-                assert.same(captured, document)
+                if value:match('^[%[%]{}&*!|>%%@`,?]') or value == '- text' or value == ': text'
+                    or value == '"text" trailing' or value == 'word: nested' then
+                    skipped(document)
+                else
+                    assert.is_nil(result, key .. ': ' .. value)
+                    assert.is_string(err)
+                    assert.same(captured, document)
+                end
             end
         end
     end)
@@ -510,5 +599,39 @@ describe('editorial front matter', function()
         local n, doubled = work(128), work(256)
         assert.is_true(doubled <= n * 2.3, ('counted work %d -> %d'):format(n, doubled))
     end)
+
+    for _, kind in ipairs({ 'punctuation-rich flat metadata', 'skipped nested metadata' }) do
+        it('keeps counted VM work linear for ' .. kind .. ' at N and 2N', function()
+            local settings = module()
+            local function work(n)
+                local document = { '---' }
+                if kind == 'skipped nested metadata' then document[#document + 1] = 'future:' end
+                for row = 1, n do
+                    document[#document + 1] = (kind == 'skipped nested metadata' and '  ' or '')
+                        .. 'unknown-' .. row .. ': Keep ,"voice" [tone] {words}:literal#hash'
+                end
+                vim.list_extend(document, { '---', '# Body' })
+                local ticks = 0
+                -- Cached JIT traces bypass instruction hooks even after jit.off().
+                -- Flush them and count every instruction for comparable N/2N work.
+                jit.off()
+                jit.flush()
+                debug.sethook(function() ticks = ticks + 1 end, '', 1)
+                local ok, result = pcall(settings.fill, document, catalog)
+                debug.sethook()
+                jit.on()
+                assert.is_true(ok)
+                assert.is_not_nil(result)
+                if kind == 'skipped nested metadata' then
+                    assert.is_false(result.changed)
+                    assert.is_string(result.skip_reason)
+                    assert.same(document, result.lines)
+                end
+                return ticks
+            end
+            local n, doubled = work(128), work(256)
+            assert.is_true(doubled <= n * 2.3, ('counted work %d -> %d'):format(n, doubled))
+        end)
+    end
 
 end)

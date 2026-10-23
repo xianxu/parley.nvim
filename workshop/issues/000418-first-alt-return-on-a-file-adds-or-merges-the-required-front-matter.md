@@ -206,6 +206,14 @@ Change-code plan-quality round 4 passed at f4536fe8; PQ-1/PQ-2 remain addressed,
 
 The obsolete queued suite lease-208842730 was cancelled through local-check before admission; terminal 75738 returned context-cancelled with no record. No recorded check remains active. Hub receipt 49471483 is submitted. Three bounded helpers now own only pure scalar tests, native submission tests and local-review/presentation tests; parent retains all runtime code. Production has not changed since the round-3 stop. Next: observe the final-shape RED, implement the narrow root scanner correction plus explicit skip/semantic boundary, verify both runtimes, checkpoint and enqueue one final-head check.
 
+### 2026-10-23 — final-shape implementation and focused verification
+
+Observed final-shape RED before the relevant fixes: pure editorial 17 pass/9 failures and collaboration parser 20 pass/2 failures; native complex-header skip 51 pass/7 failures; local review/presentation tests reproduced unwanted save/invoke/default behavior, followed by two precise REDs for flat non-string presentation and a header becoming unsupported before a deferred round reply. All had zero errors and clean censuses. Native embedded-quote cases loaded the already-corrected scanner and were green; their RED is the pure/parser matrix, not a fabricated native run.
+
+Implemented the admitted narrow root-value rule, explicit flat-fill eligibility, unchanged skip projection, named semantic refusals and unchanged legacy-map reading. No general lexer, new state or dependency is added. Both Neovim 0.12.5 and 0.11.7 pass pure editorial 26 + collaboration parser 22, native submission 58 + lifecycle 57, local review 31 + edit-round 13 + presentation 17, and architecture guards 40. Preferred modes/review map also passes. Censuses are clean, luacheck reports zero warnings/errors on all 12 updated Lua files, Python export tests pass 25, the source snapshot check against ariadne main is clean, and diff whitespace passes. Producer fixture bytes/digests remain unchanged.
+
+Counted N/2N guard uses JIT cache flush and one-instruction hooks rather than an unreliable 100-instruction sample: punctuation-rich flat metadata 565016 to 1126680; skipped nested metadata 159121 to 319889. Both are below the unchanged 2.3x limit. README and atlas document the optional-fill boundary and named semantic refusal. Exact next step: commit/push, stage the corrected head, enqueue one recorded suite, run close round 4; after final record/SHIP close #322 and merge. Existing operator plain/partial live acceptance remains recorded; no new live send was made.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

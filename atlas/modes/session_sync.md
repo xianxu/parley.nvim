@@ -3,7 +3,9 @@
 In a Couch pane, the first Alt+Return in a named Markdown document saves it,
 registers it with Couch, attaches the existing session-sync turn engine and sends
 `submitted: <absolute path>` (#332). Registration supplies a stable document ID;
-missing editorial mode keys are filled before save (#418), preserving existing values.
+missing editorial mode keys in flat headers are filled before save (#418), preserving existing values.
+More complex headers stay unchanged and continue through save/register/send,
+with a short notice naming the line where convenience fill was skipped.
 No type or owner metadata is injected. Opening a
 registered file restores that identity through a bounded registry lookup. A
 positive null lookup proves a file plain; lookup failure leaves membership

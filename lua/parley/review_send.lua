@@ -65,6 +65,12 @@ M.submit = function(buf)
         require("parley.session_sync").submit(buf)
         return
     end
+    if projection.skip_reason then
+        local settings, problem = require("parley.editorial_frontmatter").resolve(
+            vim.api.nvim_buf_get_lines(buf, 0, -1, false), modes())
+        if not settings then notify(problem, vim.log.levels.ERROR); return end
+        projection.settings = settings
+    end
     local saved, save_error = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent write") end)
     if not saved or not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].modified then
         notify("save failed: " .. tostring(save_error or "document remains modified"), vim.log.levels.ERROR)

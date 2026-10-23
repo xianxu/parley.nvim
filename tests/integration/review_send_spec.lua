@@ -191,6 +191,65 @@ describe("review_send", function()
         assert.same({}, sent())
     end)
 
+    for _, case in ipairs({
+        { name = "nested metadata", header = { "metadata:", "  topic: notes" } },
+        { name = "block metadata", header = { "metadata: |", "  retained text" } },
+        { name = "flow metadata", header = { "metadata: [one, two]" } },
+        { name = "anchored metadata", header = { "metadata: &named retained" } },
+        { name = "tagged metadata", header = { "metadata: !text retained" } },
+    }) do
+        it("outside Couch refuses " .. case.name .. " before saving or invoking", function()
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+            local notices, writes = {}, 0
+            vim.notify = function(message) notices[#notices + 1] = message end
+            local document = { "---" }
+            vim.list_extend(document, case.header)
+            vim.list_extend(document, { "processing-mode: proofreading", "processing-instruction: retain voice",
+                "---", "disk body" })
+            open(document)
+            vim.api.nvim_buf_set_lines(buf, #document - 1, #document, false, { "unsaved body" })
+            local before = lines()
+            vim.api.nvim_create_autocmd("BufWritePre", { buffer = buf, callback = function() writes = writes + 1 end })
+            alt_return()
+            assert.is_nil(invoked)
+            assert.equals(0, writes, "semantic refusal must precede saving")
+            assert.same(before, lines())
+            assert.same(document, vim.fn.readfile(file))
+            assert.is_true(vim.bo[buf].modified)
+            assert.truthy(table.concat(notices, "\n"):find("line 2", 1, true), vim.inspect(notices))
+            assert.same({}, sent())
+        end)
+    end
+
+    for _, text in ipairs({ 'Keep A, "unfinished', "Keep [brackets], Bob's {notes}" }) do
+        it("outside Couch preserves literal root plain quotes in " .. text, function()
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+            local document = { "---", "collaboration-mode: discussion", "presentation-mode: direct",
+                "processing-mode: proofreading", "processing-instruction: " .. text, "---", "body" }
+            open(document)
+            alt_return()
+            assert.is_not_nil(invoked)
+            assert.same({ modes = { "proofreading" }, instruction = text }, invoked.args)
+            assert.same(document, lines())
+            assert.same(document, vim.fn.readfile(file))
+            assert.same({}, sent())
+        end)
+    end
+
+    it("outside Couch reads a legacy collaboration map without filling it or changing the route", function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+        local document = { "---", "collaboration-mode:", "  default: discussion", "  chat: [Questions]",
+            "couch-owner: ops:0", "processing-mode: proofreading", "processing-instruction: retain voice",
+            "---", "# Questions", "body" }
+        open(document)
+        alt_return()
+        assert.is_not_nil(invoked)
+        assert.same({ modes = { "proofreading" }, instruction = "retain voice" }, invoked.args)
+        assert.same(document, lines())
+        assert.same(document, vim.fn.readfile(file))
+        assert.same({}, sent())
+    end)
+
     it("outside pair: no couch call; the review round runs here with the instruction", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         open(doc)

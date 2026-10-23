@@ -11,11 +11,12 @@ end
 local function fail(message) error(message, 0) end
 
 -- Comments start only outside quotes and after separation whitespace.
-local function uncomment(s)
+local function uncomment(s, root_scalar)
     local i, previous = 1, nil
     while i <= #s do
         local c = s:sub(i, i)
-        if (c == '"' or c == "'") and (not previous or previous:match("[%[{,:%-]")) then
+        if (c == '"' or c == "'") and (root_scalar and i == 1
+            or not root_scalar and (not previous or previous:match("[%[{,:%-]"))) then
             local span = frontmatter.quoted_span(s, i)
             if not span then fail("unclosed quoted value") end
             i = i + #span
@@ -204,14 +205,18 @@ local function flow_balance(text, stack)
     end
 end
 
-local function root_fields(lines, close)
+local function root_fields(lines, close, diagnostic)
     local entries, current, base, stack = {}, nil, nil, {}
     for row = 2, close - 1 do
+        if diagnostic then diagnostic.row = row end
         local line = lines[row]
         local prefix = line:match("^(%s*)") or ""
         if prefix:find("\t", 1, true) then fail("tabs in root indentation are unsupported") end
         local literal = current and base and #prefix > base and current.value:match('^[|>]')
-        local content = literal and trim(line) or uncomment(line)
+        local raw_line = trim(line)
+        local root = #stack == 0 and (not base or #prefix == base)
+        local content = (literal or root) and raw_line or uncomment(line)
+        if content:sub(1, 1) == "#" and not literal then content = "" end
         if content ~= "" then
             local indent = #prefix
             base = base or indent
@@ -220,11 +225,15 @@ local function root_fields(lines, close)
                 current.children[#current.children + 1] = { indent = indent - base, text = content }
                 flow_balance(content, stack)
             elseif indent == base then
-                local key, value = field_line(content)
-                local _, raw = field_line(trim(line))
+                local key, raw = field_line(content)
+                -- A plain root value has already started after its first
+                -- character. Interior quotes/punctuation cannot open a node.
+                -- Existing legacy flow maps keep their separate old grammar.
+                local legacy_instruction = key:lower() == "process-instruction"
+                local value = uncomment(raw, legacy_instruction or not raw:match("^[%[{]"))
                 current = { key = key, value = value, raw = raw, row = row, children = {} }
                 entries[#entries + 1] = current
-                if value:match("^[%[{]") then flow_balance(value, stack) end
+                if not legacy_instruction and value:match("^[%[{]") then flow_balance(value, stack) end
             else
                 -- Nested mappings belong only to a block collection, not to
                 -- an unrelated scalar followed by a misindented declaration.
@@ -249,13 +258,15 @@ function M.header(lines)
     for row = 2, #lines do
         size = size + #lines[row] + 1
         if row > 8192 or size > 1024 * 1024 then
-            return nil, "frontmatter exceeds 8192 lines or 1 MiB; shorten the header before submitting"
+            return nil, "frontmatter line " .. row .. ": exceeds 8192 lines or 1 MiB; shorten the header before submitting",
+                { kind = "limit", row = row }
         end
         if lines[row] == "---" then close = row; break end
     end
-    if not close then return nil, "frontmatter is not closed" end
-    local ok, entries = pcall(root_fields, lines, close)
-    if not ok then return nil, "frontmatter: " .. tostring(entries) end
+    if not close then return nil, "frontmatter line 1: is not closed", { kind = "unsupported", row = 1 } end
+    local diagnostic = { kind = "unsupported", row = 1 }
+    local ok, entries = pcall(root_fields, lines, close, diagnostic)
+    if not ok then return nil, "frontmatter line " .. diagnostic.row .. ": " .. tostring(entries), diagnostic end
     local fields = {}
     for _, entry in ipairs(entries) do
         local key = entry.key:lower()
