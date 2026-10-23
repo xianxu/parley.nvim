@@ -54,6 +54,12 @@ One bounded isolated reproduction on unchanged product code and installed0.11.7:
 
 Filed unclaimed at hub direction be6c21ea-6e38-4fe8-9e3d-3a2481a5da1a after #410's integration suite completed. Related #412 and #414 concern native timing under load; no shared root cause is proven. No code change, blanket budget increase, or automatic flake registration made.
 
+### 2026-10-23 — Approved diagnostics in progress
+
+Hub approved the evidence-gathering plan (delivery ab3693ad-04a0-4e9a-abe8-ac0af78e3bc4). Entered quick change-code. Added a shared test-only reporter and stage/work witnesses in the two original native fixtures; the fixture still uses one RPC and keeps the original fold/view assertions and operation order. The reporter owns a private temporary folder, atomically replaces one bounded stage snapshot, reads evidence before teardown, and reuses jit_watch for bounded VM profile output. It does not change compiler policy or any deadline. Repair progress writes happen at powers of two (at most18 under the existing200000-step cap).
+
+The initial TDD run failed at module load before the reporter existed; this hit the runner's200s watchdog, so it is not evidence of the historical fold defect. The next run waited on the checkout's test lease, then passed2/0/0: unchanged RPC result and actual500ms child-kill evidence survival/cleanup, /Volumes/TestScratch/parley420-check.c9bqtj0q/trace-green.log. Added4/8-repair counted controls for logarithmic progress writes; their verification is next in the bounded fan-out. No root cause or correction selected. Next: one eight-worker, nine-file native cohort per runtime, retaining each spec's full log under the diagnostic root; stop/classify any failure, otherwise report non-reproduction and leave #420 open.
+
 ## Revisions
 
 ### 2026-10-23 — Dispatched investigation
