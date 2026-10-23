@@ -70,6 +70,10 @@ Authenticated TL approval 7acabe36-c3b8-4c2a-b70f-33d8f62d5788 accepts the share
 
 Authenticated TL delivery a5452e45-2afd-4b84-a9a1-a397a1f26214 confirms ariadne#562 landed and directs fixture pin/change-code. Git resolves its merge as `4f10a45d038acb2324c5a19e74a78f4a593571e6`, proven ancestor of freshly fetched producer main. Copied all 24 source files across eight editorial-fill cases into `tests/fixtures/editorial_fill/`; `provenance.json` records repository, exact commit, source path, byte length and SHA256 for each immutable oracle. Every copied byte digest verified against that pinned Git blob. These are source reference fixtures, not export-manifest members or an executable producer resolver. Next: full-flow change-code plan-quality gate, then its estimate gate before runtime implementation. No test/runtime code has changed.
 
+### 2026-10-23 — plan-quality round 1 refinement
+
+The gate recorded PQ-1 (owned-edit-operation-validity) and PQ-2 (function-test-strategy). Verified PQ-1 against production: on_lines dispatches changed while busy, and document_session cancels save, so the original inside-save insertion would strand its own submit. The plan now specifies one witnessed preparation stage before ordinary save on the same model operation, recognizing only its exact before/after edit and retaining invalidation for unrelated edits/reload/detach. No observer mute flag or second owner. Added named function strategies with generated malformed metadata and deterministic real-observer interruption coverage, replacing test inventories. This design delta is pending TL approval before rerunning change-code; no runtime code has started. TL b47c8af9 confirms mixed per-span presentation is #419, and pair:9 has been told.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
