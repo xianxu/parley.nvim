@@ -182,6 +182,12 @@ Round 2 confirms BR-1/BR-2/BR-3 addressed and adds Critical BR-4, the second per
 
 The retained recorded suite lease-2325139789 on 46d9d0d1 remains queued (terminal 23477, FIFO 6 at last observation), so no continuation/restart is taken. After the correction is verified and pushed, cancel this obsolete queued lease via supported local-check control and enqueue the corrected head once, as TL authorized. The previous recovery screen is unavailable; Git, current gate sidecars, issue Log and retained runner output supply recovery evidence.
 
+### 2026-10-23 — close round 2 correction verified
+
+BR-4 now decodes owned root scalar values outside flow context, preserving commas/interior brackets/braces and valid indicator/numeric-prefixed instruction strings. Complete implicit type recognition retains strict known-field refusal, and the bounded quoted decoder accepts all named YAML double-quoted escapes. The controlled writer from BR-1 is unchanged: ordinary safe fixture bytes remain plain and unsafe values use its tested JSON-compatible quoting. Writer-only changes cannot repair existing complete headers without violating byte preservation; this reasoning was sent to the hub (receipt 6ea83df5, submitted).
+
+After the observed RED, both installed runtimes pass editorial pure 20, existing collaboration-value 20, collaboration resolver 10 and instruction 9 cases; native submission 24 and operation lifecycle 57 also pass on both runtimes. All censuses are clean. Architecture guards (arrival budget, mutation seam and source inventory), targeted luacheck and diff whitespace pass. Exact next step: commit/push corrected bytes, cancel the obsolete queued lease via local-check, stage the corrected head, enqueue its recorded suite once and run close round 3. Operator live plain/partial evidence remains recorded; final suite, close and landing remain outstanding.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

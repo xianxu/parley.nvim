@@ -357,6 +357,110 @@ describe('editorial front matter', function()
         end
     end)
 
+    -- Run every spelling through both readers and both fill paths before
+    -- reporting a bounded summary, so one failing punctuation does not hide its class.
+    local function instruction_roundtrips(cases)
+        local settings, failures = module(), {}
+        for _, case in ipairs(cases) do
+            local failed = false
+            for _, key in ipairs({ 'processing-instruction', 'process-instruction' }) do
+                for _, complete in ipairs({ false, true }) do
+                    local document = { '---', key .. ': ' .. case[1] }
+                    if complete then
+                        vim.list_extend(document, { 'collaboration-mode: discussion',
+                            'presentation-mode: highlight', 'processing-mode: free-form' })
+                    end
+                    vim.list_extend(document, { '---', '# Body', 'unchanged' })
+                    local captured = vim.deepcopy(document)
+                    local expected = key == 'process-instruction' and (case[3] or case[2]) or case[2]
+                    local ok = pcall(function()
+                        local before = assert(settings.resolve(document, catalog))
+                        assert.equals(expected, before.instruction)
+                        local filled = assert(settings.fill(document, catalog))
+                        assert.same(captured, document)
+                        if complete and key == 'processing-instruction' then
+                            assert.is_false(filled.changed)
+                            assert.same(document, filled.lines)
+                        else
+                            local first, count = filled.patch.first, #filled.patch.lines
+                            for row = 1, #document do
+                                assert.equals(document[row], filled.lines[row <= first and row or row + count])
+                            end
+                        end
+                        assert.equals(expected, assert(settings.resolve(filled.lines, catalog)).instruction)
+                        local again = assert(settings.fill(filled.lines, catalog))
+                        assert.is_false(again.changed)
+                        assert.same(filled.lines, again.lines)
+                    end)
+                    failed = failed or not ok
+                end
+            end
+            if failed then failures[#failures + 1] = case[1] end
+        end
+        assert.equals(0, #failures, 'failed scalar spellings: ' .. table.concat(failures, ' | '))
+    end
+
+    it('round trips root plain flow punctuation across canonical and legacy partial and complete headers', function()
+        local cases = {}
+        for _, text in ipairs({ 'Keep voice, fix typos', 'Keep [voice] intact', 'Keep {voice} intact',
+            'Keep ] and } literal', 'Keep [ unbalanced', 'Keep { unbalanced',
+            'Keep closing ] literal', 'Keep closing } literal', 'a,b[c]{d}',
+            '-voice, keep [tone]', '?voice, keep {tone}', ':voice, keep [tone]',
+            'https://example.test/a,b?q=[tone]', 'Use hash#inside, keep voice',
+            'Use colon:inside, keep voice', 'Use back\\slash, keep voice' }) do
+            cases[#cases + 1] = { text, text }
+            cases[#cases + 1] = { vim.json.encode(text), text }
+            cases[#cases + 1] = { "'" .. text:gsub("'", "''") .. "'", text }
+        end
+        instruction_roundtrips(cases)
+    end)
+
+    it('round trips non-flow root plain string prefixes without guessing their scalar type', function()
+        local cases = {}
+        for _, text in ipairs({ '-voice', '?voice', ':voice', '-[voice]', '?{voice}', ':"voice"',
+            '1st pass', '2026 release', '123abc', '+12points', '-12points', '.5style',
+            '0xvoice', '1evoice', '_123', '+_123', '._5', '._inf', '2026-10-23 notes', '---voice', '...voice',
+            'true story', 'null result', 'on purpose', 'ordinary "quote" text',
+            "ordinary 'quote' text", 'ordinary:colon', 'ordinary#hash', 'ordinary\\slash' }) do
+            cases[#cases + 1] = { text, text }
+            cases[#cases + 1] = { vim.json.encode(text), text }
+            cases[#cases + 1] = { "'" .. text:gsub("'", "''") .. "'", text }
+        end
+        instruction_roundtrips(cases)
+    end)
+
+    it('round trips quoted punctuation comments and YAML escape spellings without normalizing existing bytes', function()
+        local cases = { { 'Keep voice # canonical comment', 'Keep voice', 'Keep voice # canonical comment' },
+            { '"Keep [voice], {tone}: # literal" # comment', 'Keep [voice], {tone}: # literal' },
+            { "'Keep [voice], {tone}: # literal' # comment", 'Keep [voice], {tone}: # literal' },
+            { "'Don''t change, [voice] or {tone}'", "Don't change, [voice] or {tone}" },
+            { '"Keep \\"voice\\", [tone] and \\\\path"', 'Keep "voice", [tone] and \\path' } }
+        for _, escape in ipairs({ { '0', string.char(0) }, { 'a', string.char(7) },
+            { 'v', string.char(11) }, { 'e', string.char(27) }, { 'N', '\194\133' },
+            { '_', '\194\160' }, { 'L', '\226\128\168' }, { 'P', '\226\128\169' } }) do
+            cases[#cases + 1] = { '"left\\' .. escape[1] .. 'right"', 'left' .. escape[2] .. 'right' }
+        end
+        instruction_roundtrips(cases)
+    end)
+
+    it('keeps actual collections and implicit non-string known fields invalid in root scalar context', function()
+        local settings = module()
+        for _, key in ipairs({ 'processing-instruction', 'processing-mode', 'presentation-mode' }) do
+            for _, value in ipairs({ '[free-form]', '{default: free-form}', 'true', 'false', 'null', '~',
+                '42', '-17', '+17', '1.5', '.5', '1.', '1e3', '-2.5e-3', '0xFE', '0o17', '0b101',
+                '1_000', '.inf', '-.Inf', '.NaN', '12:30', '2026-10-23', '2001-12-15T02:59:43Z',
+                ']', '}', ',start', '&anchor text', '*alias', '!tag text', '|', '>', '%directive', '@text',
+                '`text', '? text', '- text', ': text', '"text" trailing', 'word: nested' }) do
+                local document = { '---', key .. ': ' .. value, '---', '# Body' }
+                local captured = vim.deepcopy(document)
+                local result, err = settings.fill(document, catalog)
+                assert.is_nil(result, key .. ': ' .. value)
+                assert.is_string(err)
+                assert.same(captured, document)
+            end
+        end
+    end)
+
     it('bounds the complete input and projected header while allowing a large body', function()
         local settings = module()
         local fixed = { '---', 'collaboration-mode: discussion', 'presentation-mode: highlight',

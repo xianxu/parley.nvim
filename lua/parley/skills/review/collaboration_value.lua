@@ -36,7 +36,9 @@ local function utf8_char(n)
     if n < 0x10000 then return string.char(0xe0 + math.floor(n / 4096), 0x80 + math.floor(n / 64) % 64, 0x80 + n % 64) end
     return string.char(0xf0 + math.floor(n / 262144), 0x80 + math.floor(n / 4096) % 64, 0x80 + math.floor(n / 64) % 64, 0x80 + n % 64)
 end
-local escapes = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", n = "\n", r = "\r", t = "\t", b = "\b", f = "\f", [" "] = " " }
+local escapes = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", n = "\n", r = "\r", t = "\t", b = "\b", f = "\f", [" "] = " ",
+    ["0"] = string.char(0), a = string.char(7), v = string.char(11), e = string.char(27),
+    N = utf8_char(0x85), _ = utf8_char(0xa0), L = utf8_char(0x2028), P = utf8_char(0x2029) }
 local function unquote(span)
     if span:sub(1, 1) == "'" then return frontmatter.unquote(span) end
     local out, i = {}, 2
@@ -60,6 +62,27 @@ local function unquote(span)
     return table.concat(out)
 end
 
+-- Recognize complete implicit non-string spellings, never a prefix such as
+-- "1st pass". Retain the existing conservative YAML 1.1 boolean/date policy.
+local function non_string(value)
+    local lower = value:lower()
+    if ({ null = true, ["~"] = true, ["true"] = true, ["false"] = true,
+        yes = true, no = true, on = true, off = true, y = true, n = true })[lower] then return true end
+    local number = lower:gsub("^[+-]", "")
+    if number == ".inf" or number == ".nan" then return true end
+    if not number:match("^%d") and not number:match("^%.%d") then return false end
+    number = number:gsub("_", "")
+    if number:match("^0x[%da-f]+$")
+        or number:match("^0o[0-7]+$") or number:match("^0b[01]+$") then return true end
+    local mantissa = number:match("^(.-)e[+-]?%d+$") or number
+    if mantissa:match("^%d+$") or mantissa:match("^%d+%.%d*$") or mantissa:match("^%.%d+$") then return true end
+    -- Legacy YAML sexagesimal numbers and timestamps are not instructions.
+    if number:match("^%d+:%d[%d:]*%.?%d*$") then return true end
+    if value:match("^%d%d%d%d%-%d%d%-%d%d$")
+        or value:match("^%d%d%d%d%-%d%d?%-%d%d?[Tt ]%s*%d%d?:%d%d:%d%d[%d%.Zz+:%s%-]*$") then return true end
+    return false
+end
+
 local function decode(text, block_scalar)
     local i = 1
     local function skip() local _, last = text:find("^%s*", i); i = (last or i - 1) + 1 end
@@ -80,9 +103,12 @@ local function decode(text, block_scalar)
             i = i + 1
         end
         local value = trim(text:sub(start, i - 1))
-        if value == "" or value:match("^[&*!|>%%@`?%-]") or value:find(":%s")
-            or value:match("^%d") or value:match("^[+.]%d")
-            or ({ null = true, ["~"] = true, ["true"] = true, ["false"] = true, yes = true, no = true, on = true, off = true })[value:lower()] then
+        -- Outside flow collections, commas/brackets/braces are literal after
+        -- the first character. '-', '?' and ':' may begin a plain scalar when
+        -- followed by a non-space character (YAML 1.2.2, section 7.3.3).
+        local indicator = value:match("^[%[%]{},&*!|>%%@`]")
+            or (value:match("^[?:%-]") and (#value == 1 or value:sub(2, 2):match("%s")))
+        if value == "" or indicator or value:find(":%s") or value:sub(-1) == ":" or non_string(value) then
             fail("expected a string; unsupported YAML value: " .. value)
         end
         return value
@@ -254,7 +280,7 @@ function M.scalar(entry, legacy)
         return value
     end
     if legacy then return text end
-    local ok, value = pcall(decode, text)
+    local ok, value = pcall(decode, text, true)
     if not ok or type(value) ~= "string" then return nil, "expected a scalar string" end
     return value
 end

@@ -131,27 +131,37 @@ describe("editorial submit preparation through the native observer", function()
         assert.equals(1, #edits)
     end)
 
-    local function preserves_materialized_settings(before, expected_instruction, expected_presentation, indent)
+    local function preserves_materialized_settings(before, expected_instruction, expected_presentation, indent, options)
+        options = options or {}
+        local expected_edits = options.edits or 1
         replace_file(before)
-        local projection, projection_error = require("parley.editorial_prepare").project(buf)
-        assert.is_not_nil(projection, "the original settings must be valid: " .. tostring(projection_error))
-        assert.equals(expected_instruction, projection.settings.instruction)
-        assert.equals(expected_presentation, projection.settings.presentation)
+        if not options.submit_first then
+            local projection, projection_error = require("parley.editorial_prepare").project(buf)
+            assert.is_not_nil(projection, "the original settings must be valid: " .. tostring(projection_error))
+            assert.equals(expected_instruction, projection.settings.instruction)
+            assert.equals(expected_presentation, projection.settings.presentation)
+        end
         press()
-        assert.equals(1, #edits, "the real submit must make one authorized insertion: " .. bar()
+        assert.equals(expected_edits, #edits, "the real submit must make only the needed insertion: " .. bar()
             .. " " .. vim.inspect(notices))
-        assert.equals(edits[1].first, edits[1].last, "existing metadata is never replaced")
-        for _, line in ipairs(edits[1].lines) do
-            assert.is_nil(line:find("[%z\1-\31\127]"),
-                "a native insertion entry must contain one printable physical line: " .. vim.inspect(line))
-            if indent then
-                assert.equals(indent, line:match("^ *"), "additions must retain the root mapping indentation")
+        assert.truthy(document.status(buf).operation or document.identity(buf),
+            "valid root instruction must proceed through submission: " .. bar() .. " " .. vim.inspect(notices))
+        if expected_edits > 0 then
+            assert.equals(edits[1].first, edits[1].last, "existing metadata is never replaced")
+            for _, line in ipairs(edits[1].lines) do
+                assert.is_nil(line:find("[%z\1-\31\127]"),
+                    "a native insertion entry must contain one printable physical line: " .. vim.inspect(line))
+                if indent then
+                    assert.equals(indent, line:match("^ *"), "additions must retain the root mapping indentation")
+                end
             end
         end
         delivered()
         local after = lines()
         local retained = vim.deepcopy(after)
-        for _ = 1, #edits[1].lines do table.remove(retained, edits[1].first + 1) end
+        if expected_edits > 0 then
+            for _ = 1, #edits[1].lines do table.remove(retained, edits[1].first + 1) end
+        end
         assert.same(before, retained, "all original metadata and body bytes must remain exact")
         local saved_lines = vim.fn.readfile(path)
         assert.same(after, saved_lines)
@@ -171,7 +181,7 @@ describe("editorial submit preparation through the native observer", function()
         local tick = vim.api.nvim_buf_get_changedtick(buf)
         press()
         await(function() return bar():find("nothing to submit", 1, true) ~= nil end)
-        assert.equals(1, #edits, "the repeated press must not prepare another edit")
+        assert.equals(expected_edits, #edits, "the repeated press must not prepare another edit")
         assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
         assert.same(after, lines())
         assert.same(after, vim.fn.readfile(path))
@@ -201,6 +211,43 @@ describe("editorial submit preparation through the native observer", function()
         preserves_materialized_settings({ "---", "  owner: business-team", "  presentation: direct",
             "  future:", "    nested: untouched", "---", "# Question", "original", "tail" }, "", "direct", "  ")
     end)
+
+    for _, case in ipairs({
+        { name = "commas", text = "Keep commas, please." },
+        { name = "interior brackets", text = "Keep [asides] intact." },
+        { name = "interior braces", text = "Keep {details} intact." },
+    }) do
+        for _, complete in ipairs({ true, false }) do
+            it("submits plain canonical instruction with " .. case.name .. " from a "
+                .. (complete and "complete" or "partial") .. " header without changing intent", function()
+                local before = { "---", "future: untouched" }
+                if complete then
+                    vim.list_extend(before, { "collaboration-mode: discussion", "presentation-mode: highlight",
+                        "processing-mode: free-form" })
+                end
+                vim.list_extend(before, { "processing-instruction: " .. case.text,
+                    "---", "# Question", "original", "tail" })
+                preserves_materialized_settings(before, case.text, "highlight", nil,
+                    { edits = complete and 0 or 1, submit_first = true })
+            end)
+        end
+    end
+
+    for _, legacy in ipairs({ false, true }) do
+        it("preserves " .. (legacy and "legacy" or "quoted canonical") .. " punctuation instruction intent on submit", function()
+            local text = "Keep commas, [asides] and {details} intact."
+            local before = { "---", "future: untouched" }
+            if legacy then
+                before[#before + 1] = "process-instruction: " .. text
+            else
+                vim.list_extend(before, { "collaboration-mode: discussion", "presentation-mode: highlight",
+                    "processing-mode: free-form", "processing-instruction: " .. vim.json.encode(text) })
+            end
+            vim.list_extend(before, { "---", "# Question", "original", "tail" })
+            preserves_materialized_settings(before, text, "highlight", nil,
+                { edits = legacy and 1 or 0, submit_first = true })
+        end)
+    end
 
     it("does not edit a complete header or repeat the preparation on the next press", function()
         replace_file(filled)
