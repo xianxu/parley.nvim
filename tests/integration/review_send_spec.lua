@@ -1,5 +1,5 @@
 -- #332: pane Alt+Return saves, registers and submits unchanged Markdown.
--- Outside a pane the existing instruction-driven review stays local.
+-- #322: outside Couch the mode-free review stays local without rewriting metadata.
 local arrival = require("tests.helpers.arrival")
 local rs = require("parley.review_send")
 local review = require("parley.skills.review")
@@ -50,6 +50,7 @@ describe("review_send", function()
         saved = {
             path = vim.env.PATH, scope = vim.env.COUCH_THREAD_SCOPE, tag = vim.env.COUCH_THREAD_TAG,
             input = vim.ui.input, invoke = review.run_via_invoke, notify = vim.notify,
+            skill_invoke = require("parley.skill_invoke").invoke,
             registry = vim.env.FAKE_COUCH_REGISTRY, registry_mode = vim.env.FAKE_COUCH_REGISTRY_MODE,
             actors = vim.env.FAKE_COUCH_ACTORS, exit = vim.env.FAKE_COUCH_EXIT,
             isolated = vim.env.COUCH_ISOLATED_ROOT, state_dir = p.config.state_dir,
@@ -78,6 +79,7 @@ describe("review_send", function()
         vim.env.PATH = saved.path
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = saved.scope, saved.tag
         vim.ui.input, review.run_via_invoke, vim.notify = saved.input, saved.invoke, saved.notify
+        require("parley.skill_invoke").invoke = saved.skill_invoke
         vim.fn.delete(root, "rf")
     end)
 
@@ -161,13 +163,42 @@ describe("review_send", function()
         assert.same({ "---", "type: journal", "---", "# private notes" }, lines())
     end)
 
-    it("outside pair: no couch call; the review round runs here with the instruction", function()
+    for _, case in ipairs({
+        { name = "plain Markdown", document = { "# notes", "🤖[fix this]" } },
+        { name = "partial header", document = { "---", "title: t", "---", "🤖[fix this]" } },
+        { name = "retired instruction", document = { "---", "process-instruction: [unknown] old instruction", "---", "🤖[fix this]" } },
+    }) do
+        it("outside Couch requests mode-free local review for " .. case.name, function()
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+            local prompted, notices, count = false, {}, 0
+            vim.ui.input = function() prompted = true end
+            vim.notify = function(msg) notices[#notices + 1] = msg end
+            review.run_via_invoke = function(b, args)
+                count = count + 1
+                invoked = { buf = b, args = args }
+            end
+            open(case.document)
+            alt_return()
+            assert.is_false(prompted)
+            assert.equals(1, count)
+            assert.equals(buf, invoked.buf)
+            assert.same({}, invoked.args)
+            assert.same(case.document, lines())
+            assert.same(case.document, vim.fn.readfile(file))
+            assert.same({}, sent())
+            assert.truthy(table.concat(notices, "\n"):find("review: local review requested", 1, true))
+        end)
+    end
+
+    it("outside Couch preserves a retired instruction and requests mode-free review", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         open(doc)
         alt_return()
         assert.is_true(vim.wait(arrival.MS, function() return invoked ~= nil end))
         assert.equals(buf, invoked.buf)
-        assert.same({ modes = { "copy-editing" }, instruction = "keep the voice" }, invoked.args)
+        assert.same({}, invoked.args)
+        assert.same(doc, lines())
+        assert.same(doc, vim.fn.readfile(file))
         assert.same({}, sent())
     end)
 
@@ -213,42 +244,65 @@ describe("review_send", function()
         assert.is_nil(invoked)
     end)
 
-    it("an unknown stock prompt is refused outside a pane, naming the known ones", function()
+    local function use_local_owner()
+        review.run_via_invoke = saved.invoke
+        require("parley.skill_invoke").invoke = function(b, manifest, args)
+            invoked = { buf = b, args = args, manifest = manifest }
+        end
+    end
+
+    it("real local admission invokes ready comments without a standing instruction", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
-        local errors = {}
-        vim.notify = function(msg) errors[#errors + 1] = msg end
-        open({ "---", "process-instruction: [nope] x", "---" })
+        vim.ui.input = function() error("local review must not prompt") end
+        use_local_owner()
+        local document = { "# notes", "🤖[fix this]" }
+        open(document)
         alt_return()
-        assert.is_true(has(table.concat(errors, "\n"), "[nope] is not a stock prompt"))
-        vim.wait(100)
+        assert.equals(buf, invoked.buf)
+        assert.equals("review", invoked.manifest.name)
+        assert.same({}, invoked.args)
+        assert.same(document, lines())
+        assert.same(document, vim.fn.readfile(file))
         assert.same({}, sent())
     end)
 
-    it('refuses bad collaboration routing without prompting or rewriting frontmatter', function()
-        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
-        local messages, prompted = {}, false
-        vim.notify = function(msg) messages[#messages + 1] = msg end
-        vim.ui.input = function() prompted = true end
-        local document = { '---', 'collaboration-mode: bad', '---', '🤖[why?]' }
-        open(document)
-        alt_return()
-        assert.is_false(prompted)
-        assert.is_nil(invoked)
-        assert.same(document, lines())
-        assert.same(document, vim.fn.readfile(file))
-        assert.truthy(table.concat(messages, '\n'):find('unknown collaboration mode bad', 1, true))
-    end)
+    for _, case in ipairs({
+        { name = "no markers", document = { "# notes" }, notice = "no markers found" },
+        { name = "pending reply", document = { "🤖{please clarify}" }, notice = "pending agent turns await your reply" },
+        { name = "chat document", document = { "---", "collaboration-mode: chat", "---", "🤖[why?]" }, notice = "hub agent answers chat" },
+        { name = "malformed routing", document = { "---", "collaboration-mode: bad", "---", "🤖[why?]" }, notice = "unknown collaboration mode bad" },
+    }) do
+        it("real local admission visibly handles " .. case.name, function()
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+            vim.ui.input = function() error("local review must not prompt") end
+            local notices = {}
+            vim.notify = function(msg) notices[#notices + 1] = msg end
+            use_local_owner()
+            open(case.document)
+            alt_return()
+            assert.is_true(vim.wait(arrival.MS, function()
+                return table.concat(notices, "\n"):find(case.notice, 1, true) ~= nil
+            end))
+            assert.is_nil(invoked)
+            assert.same(case.document, lines())
+            assert.same(case.document, vim.fn.readfile(file))
+            assert.same({}, sent())
+        end)
+    end
 
-    it('reports invalid review and collaboration modes together outside Couch', function()
+    it("an unnamed local document reports save-first without prompting", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
-        local messages = {}
-        vim.notify = function(msg) messages[#messages + 1] = msg end
-        open({ '---', 'process-instruction: [nope]', 'collaboration-mode: bad', '---', '🤖[why?]' })
+        local notices = {}
+        vim.notify = function(msg) notices[#notices + 1] = msg end
+        vim.ui.input = function() error("unnamed review must not prompt") end
+        vim.cmd("enew")
+        buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "🤖[fix this]" })
+        p.setup_markdown_keymaps(buf)
         alt_return()
         assert.is_nil(invoked)
-        local text = table.concat(messages, '\n')
-        assert.truthy(text:find('[nope] is not a stock prompt', 1, true))
-        assert.truthy(text:find('unknown collaboration mode bad', 1, true))
+        assert.truthy(table.concat(notices, "\n"):find("save the file first", 1, true))
+        assert.same({}, sent())
     end)
 
     it("no process-instruction submits unchanged Markdown without prompting", function()
@@ -266,16 +320,6 @@ describe("review_send", function()
         alt_return()
         delivered(1)
         assert.same({ "---", "title: t", "---", "body" }, lines())
-    end)
-
-    it("a cancelled outside-pane prompt changes nothing and sends nothing", function()
-        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
-        vim.ui.input = function(_, cb) cb(nil) end
-        open({ "# notes" })
-        alt_return()
-        vim.wait(100)
-        assert.same({ "# notes" }, lines())
-        assert.same({}, sent())
     end)
 
     it("[ in the value completes the stock prompt names; the value ends up quoted", function()
@@ -309,12 +353,6 @@ describe("review_send pure helpers", function()
         assert.equals(29, rs.completion_start("process-instruction: [a][b]["))
         assert.is_nil(rs.completion_start("process-instruction: x ["))
         assert.is_nil(rs.completion_start("title: ["))
-    end)
-
-    it("a quoted instruction may carry a trailing comment; a plain one keeps its #", function()
-        assert.equals("[copy-edit] y", rs.instruction_value({ "---", 'process-instruction: "[copy-edit] y" # note', "---" }))
-        assert.equals("fix #3 please", rs.instruction_value({ "---", "process-instruction: fix #3 please", "---" }))
-        assert.is_nil(rs.instruction_value({ "---", "title: t", "---" }))
     end)
 
     it("requote closes a quote the operator opened", function()

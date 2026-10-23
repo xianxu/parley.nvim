@@ -809,6 +809,7 @@ atlas:
       - tests/unit/frontmatter_spec.lua
       - tests/unit/couch_spec.lua
       - tests/integration/review_send_spec.lua
+      - tests/integration/review_send_native_spec.lua
       - tests/unit/comment_codec_spec.lua
       - tests/unit/comment_view_spec.lua
       - tests/unit/comment_thread_spec.lua
