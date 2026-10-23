@@ -19,6 +19,25 @@ reviewer_runs:
       finished_at: "2026-10-23T10:26:54.627529Z"
       session_id: 01a1684c-19d5-7ea1-b48f-ce5bd7992a9a
       outcome: returned
+    - version: 1
+      intent:
+        id: 9cec9c6c-a6db-41b6-8bb4-abbed43abaa3
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000418"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        reviewed_head: 26db39f88d250fcf6fd9e517470b8414402a7627
+        slot: parley.nvim:3
+        requested_at: "2026-10-23T17:12:56.642454Z"
+      phase: finished
+      pid: 29727
+      started_at: "2026-10-23T17:12:56.820412Z"
+      finished_at: "2026-10-23T17:13:26.532136Z"
+      session_id: 01a169c0-5e6b-7520-a04e-7cbcd9b2bd03
+      outcome: returned
 gate: plan-quality
 issue: 418
 id_prefix: PQ
@@ -129,7 +148,41 @@ rounds:
           note: Named function strategies replace test inventories with adversarial classes and mechanical guards.
           round: 3
       blocked: false
-content_hash: 6f844dc0bab6cf3321a08fd4146b5bdc03636e90e24a862370710cb12c6b198b
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: f5a2a7de-0834-4bd7-b253-2f926c4602ff
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000418"
+            recipe: plan-quality
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+            reviewed_head: 26db39f88d250fcf6fd9e517470b8414402a7627
+            slot: parley.nvim:3
+            requested_at: "2026-10-23T17:12:22.452314Z"
+          phase: finished
+          pid: 18100
+          started_at: "2026-10-23T17:12:22.566543Z"
+          finished_at: "2026-10-23T17:12:54.842203Z"
+          session_id: 01a169bf-d875-7182-b889-3ea4cc4dc503
+          outcome: returned
+      "n": 4
+      timestamp: "2026-10-23T10:12:55-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: Witnessed preparation remains on the existing operation; skipped fill uses its established no-op path.
+          round: 4
+        - id: PQ-2
+          disposition: addressed
+          note: Named risky functions have adversarial strategies and mechanical guards covering the revised boundary.
+          round: 4
+      blocked: false
+content_hash: f6511c76d93da83830c1767ed82fd8544dd9a1c91406d44f08c120e596ea3f30
 ---
 
 # Gate ledger — parley.nvim#418 (plan-quality)
@@ -159,6 +212,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - PQ-1 — addressed — Witnessed preparation precedes ordinary save and preserves invalidation for unrelated edits.
 - PQ-2 — addressed — Named function strategies replace test inventories with adversarial classes and mechanical guards.
+
+## Round 4 — 2026-10-23T10:12:55-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — Witnessed preparation remains on the existing operation; skipped fill uses its established no-op path.
+- PQ-2 — addressed — Named risky functions have adversarial strategies and mechanical guards covering the revised boundary.
 
 ## Open findings
 
