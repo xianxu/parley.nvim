@@ -1,13 +1,13 @@
 ---
 id: 000420
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'a0c76520481242289cef71c26bc591ca08cc904a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'ae935cde0e61be8c7c221574fa951af678b4b828' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T09:28:51-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "e5e0b872", done: "241b8a59"}
+actual_hours: 0.46
 ---
 
 # Investigate embedded fold-retirement timeout under native suite load
