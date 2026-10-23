@@ -5,9 +5,9 @@ deps: [parley.nvim#408]
 github_issue:
 created: 2026-10-21
 updated: 2026-10-23
-estimate_hours: 1.987
+estimate_hours: 1.346
 collaboration-mode: collaboration
-card_mirror: 'c53bb59e15c8fa1e1f7b2daaf3b007ad889c1de8' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '1b3c0149a78558aa0837955c4722028b25212005' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T11:48:38-07:00
 claimant:
     operator: Xian Xu
@@ -73,13 +73,13 @@ design-buffer: 0.15
 total: 1.752
 ```
 
-## Estimate
+## Prior estimate (RETIRE implementation and acceptance)
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only; calibration source remains marked stale/provisional.*
 
 Prospective remaining RETIRE implementation and acceptance after fresh plan-quality round 4 accepted the design, not a backfill of earlier attempts. One focused Lua/Neovim feature covers the pure warning/refusal policy, native deadline/restart regressions and both-runtime verification: v2 design 2.0 × thorough-plan discount 0.2 = 0.4; impl 1.5 × v3.1 scale 0.4 = 0.6. One cross-cutting-refactor primitive covers S1-first wiring and removal of the dual-protocol consumers: design 0.6 × 0.2 = 0.12; impl 0.5 × 0.4 = 0.2. Docs use raw 0.2 design/0.2 impl, review raw 0.1/0.5, and disposable conformance/copied-profile acceptance raw 0/0.6. Existing controller, owner, fake, native harness and statically prepared profile fixture are reused; no novel library, producer protocol or generic unlock is being built. Familiarity is 1.0; thorough design buffer 15%. Verification execution is included; suite FIFO and operator turnaround are excluded. Whole-issue actuals include the superseded quick-flow/re-plan work and are not a matching window for this remaining-work estimate.
 
-```estimate
+```text
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: lua-neovim design=0.4 impl=0.6
@@ -89,6 +89,22 @@ item: milestone-review design=0.02 impl=0.2
 item: real-api-discovery design=0 impl=0.24
 design-buffer: 0.15
 total: 1.987
+```
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only; calibration source remains stale/provisional.*
+
+Prospective remaining scope after the 2026-10-23 clean harness plan-quality review: one focused Lua/Neovim feature covers the shared case deadline, bounded stderr diagnostics, exact pre-kill observations, real-child adversarial regressions, atomic fold instrumentation and both-runtime targeted/full verification. Reuse the existing RPC timer, child helper, fixture and make harness; no new library, adapter or product mechanism. Its existing v2 Lua/Neovim primitive is design2.0 × thorough-plan0.2 =0.4 and implementation1.5 × v3.1scale0.4 =0.6. Atlas documentation uses raw0.1/0.1 →0.02/0.04. One fresh re-close review uses raw0.1/0.5 →0.02/0.2. Design subtotal0.44 plus15% buffer0.066; implementation0.84; total1.346 hours. Familiarity1.0. Real-child and suite execution are included in feature verification; queue wait/operator turnaround excluded. Completed RETIRE implementation, copied-profile acceptance, past review and already-spent failed/rerun suites are historical actuals, not re-estimated current work. No new real-API discovery allocation is needed.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.6
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0.02 impl=0.2
+design-buffer: 0.15
+total: 1.346
 ```
 
 ## Log
@@ -278,3 +294,7 @@ Reopened codecomplete→working with the status setter because this is new autho
 ### 2026-10-23 — concrete diagnostic design approved
 
 Authenticated TLea15775b-d4d5-4a4d-b107-a03db461d646 approves the exact one-RPC/six-checkpoint/4096-byte-tail design, one absolute case deadline through the existing sole timer, liveness captured before exact kill, honest last-known mode, and no extra blocking probe/watchdog. Proceed through fresh plan-quality, then implementation. Existing SHIP remains conditioned on the new-code suite and fresh close.
+
+### 2026-10-23 — harness plan-quality clean; prospective estimate refreshed
+
+Fresh change-code completed exit0. Plan-quality CLEAN, prior PQ-1/PQ-2 addressed, no new findings. The tool accepted its verdict token because the empty findings block was not considered a valid findings payload; no absent finding is claimed disposed. Estimate-quality INFO correctly identified that the historical RETIRE forecast was not a forecast for this new scope. Preserved it as prior history and derived a new prospective1.346-hour forecast only for the accepted harness revision, targeted/full verification, atlas and fresh re-close. Update the card with its setter and reconcile before code.
