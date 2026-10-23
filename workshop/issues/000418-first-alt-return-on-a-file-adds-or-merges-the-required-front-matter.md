@@ -196,6 +196,10 @@ Sent the hub a single lexical-context owner alternative, then received authentic
 
 Retained runner: terminal 75738, lease-208842730 on pushed 2617a3b471acf68263b917b341d32d34c7963d69; last observed FIFO 7 with two Pair suites admitted. Its log is .git/sdlc/test-stats/inflight/779fe1f22435f79e2109774432306e3a/run.log. Do not restart/continue-checkpoint while it is live. Exact next step: receive the contract decision, append the approved re-plan and its full enumeration, commit it and rerun change-code before implementation. Retain or cancel the known-obsolete queued suite only through supported local-check control as coordinated with the hub.
 
+### 2026-10-23 — final shape approved; re-enter plan-quality
+
+Authenticated TL 3424bf0f approves only the existing flat-root lexical correction plus skipped convenience fill for unsupported headers and named semantic refusals; 05736e05 explicitly keeps legacy collaboration-mode maps readable through their existing parser, because a live Brain chat document still uses one. The durable plan now records the final subset, exact skip/read outcomes, line diagnostics, state table, full test enumeration, unchanged owner and alternatives. No new general scanner is authorized or implemented. Next: commit this plan, run change-code's plan-quality gate, then implement only after it admits the revised design.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
@@ -222,3 +226,7 @@ total: 3.61
 ### 2026-10-23 — acceptance checklist separates subsequent gates
 
 The acceptance checklist now records the completed automated/live proof and names close review/landing as subsequent workflow gates. This avoids marking those gates complete before running them; no acceptance or scope was removed.
+
+### 2026-10-23 — approved convenience-fill boundary
+
+TL 3424bf0f/05736e05 narrows automatic fill to flat supported key/value headers. Unsupported representations remain byte-identical and Couch submission proceeds with one short skip notice; actual semantic consumers refuse unreadable settings with a named line rather than guessing defaults. Existing legacy collaboration-mode maps remain readable through their original parser, while fill skips them. This explicitly supersedes earlier nested/block/flow convenience-fill behavior; the new/plain/partial-flat Done-when and canonical/legacy precedence remain unchanged.

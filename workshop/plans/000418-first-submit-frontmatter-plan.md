@@ -205,3 +205,58 @@ BR-3 corrects both Core-concepts inventory rows for instruction.lua: the selecto
 ### 2026-10-23 — close round 2: root scalar context and complete spellings
 
 BR-4's class includes existing complete canonical headers, so writer-only quoting cannot repair it without breaking the original-byte preservation contract. Keep the controlled JSON-compatible writer from BR-1; correct its shared reader to use root scalar context outside flow collections. Enumerate plain, single-quoted and double-quoted punctuation, valid indicator/numeric prefixes, every named YAML double-quoted escape, canonical/legacy component selection, partial/complete fill and repeated fill. Recognize complete implicit non-string forms rather than rejecting every digit-prefixed string; retain collection/anchor/tag/block-value and non-string refusals. The existing collection grammar still owns flow delimiters. No new parser dependency, state, cache or metadata rewrite is added (ARCH-DRY, ARCH-EVOLVE). Source grammar checked against YAML 1.2.2 section 7.3.3; the reader retains its existing conservative legacy boolean/date policy.
+
+### 2026-10-23 — final re-plan after close round 3: flat convenience fill
+
+Authenticated TL 3424bf0f approves the existing scanner's narrow root-plain correction plus an explicit convenience-fill subset; 05736e05 preserves exactly one semantic compatibility exception, existing legacy collaboration-mode maps through their unchanged map parser. This supersedes the earlier promise to fill unknown nested/block/flow metadata. It does not change canonical/legacy component precedence, semantic invalid-value checks, registration/delivery ownership, header bounds or the pinned producer fixtures (all flat). No new general lexical scanner or YAML dependency is introduced.
+
+**Alternatives considered:** writer-only quoting cannot fix an already-complete header requiring no edit. A general lexical scanner grows the YAML surface and is rejected. Strict refusal in preparation blocks ordinary Couch delivery for an optional convenience. Instead, preparation may skip that convenience with exact bytes retained, while actual semantic consumers continue to validate the settings they use.
+
+#### Core-concept delta
+
+| Name | Lives in | Status |
+|---|---|---|
+| Root scalar lexical context; `header` diagnostic row/kind | `lua/parley/skills/review/collaboration_value.lua` | modified |
+| Header eligibility, `resolve`, `fill`, `presentation_value` | `lua/parley/editorial_frontmatter.lua` | modified |
+| Legacy collaboration map parser | `lua/parley/skills/review/collaboration_value.lua` | unchanged grammar, reused |
+
+| Integration | Lives in | Status | Wraps |
+|---|---|---|---|
+| `project`, `prepare` skipped no-edit projection | `lua/parley/editorial_prepare.lua` | modified | Native identity/hashes and existing edit seam |
+| Outside-Couch semantic resolution before save/invoke | `lua/parley/review_send.lua` | modified | Existing local review/typed session submit |
+| Presentation refusal | `lua/parley/presentation.lua`, `lua/parley/edit_round.lua` | existing consumers, verify | A nil mode clears/does not draw; a named warning explains refusal |
+
+No change to document_session's owner or preparation transitions is required: a skipped fill is an unchanged before/after projection and follows the existing no-op preparation path. Its compact settings contain the skip notice, without guessed modes/instruction/presentation. Settings are resolved only where a consumer needs them.
+
+#### Exact subset and outcomes
+
+- Fill eligibility: recognizable closed front matter with uniformly indented flat root key/value lines, blank/comment lines, ordinary plain scalars or the already-supported complete single/double quoted scalar spellings. Quotes inside an already-started root plain value are literal, including unmatched quotes after commas, brackets, braces, colons and dashes. Ordinary whitespace-separated comments retain their current meaning. Existing legacy process-instruction selector text remains its historical raw scalar reading. Unknown flat metadata remains byte-identical and opaque.
+- No header: ordinary default insertion. Flat header: keep exact original lines and add missing effective components; original duplicate relevant keys, invalid known types/modes and multi-selector canonical-fill refusal remain errors with no edit.
+- Unsupported representation (nested unknown metadata, flow collections, block scalars, anchors/tags, root shapes or quoting outside the supported scalar subset): fill returns the identical lines, changed=false and a skip notice, never a partial patch. Notice: front matter left unchanged: not a simple header (line N). A structurally unreadable/unterminated header also skips fill and names its row; exceeding the approved interactive header budget remains a hard preparation refusal.
+- Semantic resolution: unsupported representation returns an explicit error naming its row. Never replace unreadable intent with default settings. Exception: a legacy collaboration-mode map remains readable via the existing parser, with the existing warning; convenience fill still skips that map. Invalid maps remain semantic errors.
+- Couch submission does not require Parley to interpret every setting: a skipped projection goes through the same ordinary save/register/send state with the exact bytes. Outside-Couch plain local review resolves settings before saving/invoking and reports a named refusal if unreadable. Typed legacy session submission keeps its existing dedicated transport path.
+- Presentation reader returns no mode plus a named diagnostic for an unsupported header; it does not pretend the header selected highlight. Existing missing/empty/unknown scalar presentation still follows the approved warned-highlight policy. Repaint's existing non-highlight branch clears/defer decorations without interpreting an unknown mode.
+
+Actions: Alt+Return, edit header, undo, retry.
+
+| Internal state / failure | Visible state | Recovery action | Possible loss |
+|---|---|---|---|
+| Flat valid projection | Normal prepared/save/submitted result | Edit header or ordinary retry | None; additive edit is undoable |
+| Unsupported header in Couch | One skip notice, normal save/submission receipt | Edit header to flat form before a later retry if fill is desired | Convenience fill only; document bytes retained |
+| Unsupported header outside Couch | Named line cannot be interpreted; no local invocation | Edit named line then retry | No saved/unsaved text or mode intent lost |
+| Legacy collaboration map | Fill skip; existing map semantics retained by actual readers | Operator-requested migration separately, or retry unchanged | Convenience fill only |
+| Invalid known scalar/duplicate/multi-mode or budget | Existing explicit refusal, now row-qualified where applicable | Edit header then retry | No partial insertion or send |
+| Reload/edit/detach/stale completion at any stage | Existing cancellation outcome | Retry after the new state is stable | No stale save/send |
+
+#### Implementation tasks (one atomic close boundary)
+
+- [ ] Add RED flat-root embedded-quote cases to tests/unit/editorial_frontmatter_spec.lua and tests/unit/review_collaboration_value_spec.lua. Enumerate single/double quotes after each punctuation, matched/unmatched quotes, literal hashes versus true comments, canonical/legacy, partial/complete, exact instruction and second-fill no-op. Existing true quoted scalars, unsupported escapes/tails and collection/type controls remain covered.
+- [ ] Correct only root value comment scanning in collaboration_value.lua: split the root key/value using its existing field parser, then recognize a quoted scalar only at the value's first character. Preserve the legacy flow/map parser; add no flow/block grammar. Attach row/kind evidence to bounded header errors.
+- [ ] Add/verify pure header eligibility in editorial_frontmatter.lua from the existing root-entry scan. Unsupported fill produces an unchanged result and typed skip notice before semantic resolution; supported flat invalid values still refuse. resolve/presentation_value reject unsupported representations with named rows, except existing legacy collaboration maps. Keep the controlled writer and original-byte/idempotence controls.
+- [ ] Adapt editorial_prepare.project to retain an unchanged skipped projection without fabricating semantic settings; review_send resolves skipped plain local-review settings before save/invoke and preserves the dedicated typed session path. Verify edit_round's existing nil/non-highlight branch exposes the named warning and clears decorations.
+- [ ] Add native complete/partial embedded-quote tests and unsupported-header Couch delivery tests in tests/integration/editorial_submit_spec.lua. Assert zero edits, exact saved/register/send bytes, normal receipt and repeat no-op on skipped headers. Add outside-Couch named refusal/no invocation in tests/integration/review_send_spec.lua, plus readable legacy-map controls. Keep lifecycle cancellation, hashing, reentrancy, lock and write-failure assertions.
+- [ ] Update earlier nested/literal fill tests to the explicitly revised skip contract; preserve no-shadowing and exact-byte assertions. Keep root-indentation insertion regressions using a flat uniformly indented header, and add the nested version as an unchanged skip control. Immutable producer fixtures and their digests stay unchanged. Update README/atlas with the flat-fill boundary, skip notice and semantic line refusal.
+- [ ] Run targeted maps for pure readers, native submit + document_session, local review/presentation and architecture guards on Neovim 0.12.5 and 0.11.7, plus lint, snapshot checks and diff whitespace. Constant-number header scans remain O(H); existing body routing/hashes remain O(B). Extend counted N/2N work with punctuation-rich scalar lines and skipped flat-boundary cases; no repeated per-key rescan. No new durable artifacts or caches.
+- [ ] Commit/push correction, replace the obsolete queued suite through supported local-check cancellation once, restage via sdlc stage --build, retain one recorded final-head suite, rerun the binary-owned close for #418 then #322 and merge. Never restart while the owned recorded check is live; third-round approval does not waive any gate.
+
+Covered: new/plain/partial/repeated fill, flat free-text settings, intentional refusal, optional-fill skip and existing legacy-map reader compatibility. Not covered: new YAML forms, automatic map migration, section modes, completion or mixed-span rendering; those remain outside #418 and no default is invented for them. The existing persistent fake registry/transport remains the native external-service seam; live plain/partial acceptance is already recorded, with any expanded live check coordinated through the hub.
