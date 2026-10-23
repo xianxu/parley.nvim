@@ -1,4 +1,24 @@
 ---
+reviewer_runs:
+    - version: 1
+      intent:
+        id: 4345dc7d-726a-45e9-badd-efaa8e255653
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000418"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        reviewed_head: 0f8a35d03fd1183ec669055783673eac93e48a96
+        slot: parley.nvim:3
+        requested_at: "2026-10-23T10:26:19.886494Z"
+      phase: finished
+      pid: 13033
+      started_at: "2026-10-23T10:26:19.978397Z"
+      finished_at: "2026-10-23T10:26:54.627529Z"
+      session_id: 01a1684c-19d5-7ea1-b48f-ce5bd7992a9a
+      outcome: returned
 gate: plan-quality
 issue: 418
 id_prefix: PQ
@@ -75,7 +95,41 @@ rounds:
           note: Function strategies replace case inventories with adversarial generators, independent mechanical guards and reproducible production-event ordering.
           round: 2
       blocked: false
-content_hash: 7b6add5d21668bff182b625d28ee07981aa55e8698e717f14364373d4fd9eac1
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: 328d8967-9898-42b7-96c7-47d069e3e861
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000418"
+            recipe: plan-quality
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+            reviewed_head: 0f8a35d03fd1183ec669055783673eac93e48a96
+            slot: parley.nvim:3
+            requested_at: "2026-10-23T10:25:46.675481Z"
+          phase: finished
+          pid: 96573
+          started_at: "2026-10-23T10:25:46.803762Z"
+          finished_at: "2026-10-23T10:26:18.832823Z"
+          session_id: 01a1684b-98a5-7ae1-8392-3526214286d4
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-23T03:26:19-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: Witnessed preparation precedes ordinary save and preserves invalidation for unrelated edits.
+          round: 3
+        - id: PQ-2
+          disposition: addressed
+          note: Named function strategies replace test inventories with adversarial classes and mechanical guards.
+          round: 3
+      blocked: false
+content_hash: 6f844dc0bab6cf3321a08fd4146b5bdc03636e90e24a862370710cb12c6b198b
 ---
 
 # Gate ledger — parley.nvim#418 (plan-quality)
@@ -98,6 +152,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - PQ-1 — addressed — Explicit witnessed preparation recognizes only its exact observed edit before save; unrelated edits still cancel, with deterministic real-observer verification required.
 - PQ-2 — addressed — Function strategies replace case inventories with adversarial generators, independent mechanical guards and reproducible production-event ordering.
+
+## Round 3 — 2026-10-23T03:26:19-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — Witnessed preparation precedes ordinary save and preserves invalidation for unrelated edits.
+- PQ-2 — addressed — Named function strategies replace test inventories with adversarial classes and mechanical guards.
 
 ## Open findings
 
