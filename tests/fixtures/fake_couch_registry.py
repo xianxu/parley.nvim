@@ -129,11 +129,11 @@ def deliver(op, code, reply):
 
 def main():
     args = sys.argv[1:]
-    # FAKE_COUCH_REGISTRY_TRACE (a path): one line per request, its verb (#414).
+    # FAKE_COUCH_REGISTRY_TRACE (a path): one JSON argv per request (#414).
     trace = os.environ.get("FAKE_COUCH_REGISTRY_TRACE")
     if trace:
         with open(trace, "a") as output:
-            output.write((args[1] if len(args) > 1 else "") + "\n")
+            output.write(json.dumps(args) + "\n")
     mode = os.environ.get("FAKE_COUCH_REGISTRY_MODE", "")
     if mode == "unsupported":
         print("unknown session-sync verb", file=sys.stderr)

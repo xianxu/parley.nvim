@@ -70,3 +70,11 @@ TL permits #410 to proceed with its retained queued suite; if that recorded suit
   - Rows 3 and 4 failed at :230 and :306, "Couch did not answer within 1 s" instead of the background refusal.
   - Reverted: 48/0/0 on nvim 0.12.5 and 48/0/0 on 0.11.7 (agentic_document_spec).
 
+
+2026-10-23: The first 20 reps under load (3 CPU spinners plus an fsync loop) passed 14 and failed 6, all on row 2. The trace was not empty: it held one lookup. Tracing the full argv showed that the lookup is for the new path, the renamed buffer's ordinary background identification. It is not a request made by the rename. Under load that lookup landed before the check, and the first version expected no requests at all.
+
+Fixes:
+- The trace records the full argv as JSON.
+- Row 2 asserts that every request is a lookup of the target.
+
+What row 2 still misses: a plain rename that waits on its own lookup of the target. That would need a product seam it doesn't have.

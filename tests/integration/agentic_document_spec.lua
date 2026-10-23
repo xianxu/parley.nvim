@@ -282,7 +282,12 @@ describe("agentic markdown admission", function()
             gate_couch(); vim.env.FAKE_COUCH_REGISTRY_TRACE = trace
             assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
             assert.equals(1, vim.fn.filereadable(target))
-            assert.same({}, vim.fn.filereadable(trace) == 1 and vim.fn.readfile(trace) or {}, "the plain rename asked Couch")
+            -- The renamed buffer is identified in the background, like any file
+            -- opened at that path; the rename itself asks Couch nothing.
+            for _, line in ipairs(vim.fn.filereadable(trace) == 1 and vim.fn.readfile(trace) or {}) do
+                local argv = vim.json.decode(line)
+                assert.same({ "--session-sync", "lookup", vim.fn.resolve(target), "--json" }, argv, "the plain rename asked Couch")
+            end
         end)
 
         it("a legacy session file registers in the background; the move refuses at once, then the rerun moves it (row 4)", function()
