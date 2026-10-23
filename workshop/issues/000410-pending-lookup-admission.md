@@ -274,3 +274,7 @@ Authenticated TL90ab1620-1401-411b-9e32-cb251b2c3dbb authorizes a genuine bounde
 ### 2026-10-23 — authorized harness revision planned; code remains unchanged
 
 Reopened codecomplete→working with the status setter because this is new authorized harness scope, then re-entered start-plan. Appended the concrete #420 revision to the durable plan: preserve one child RPC, report six nonblocking stderr stages, reuse one existing timer with absolute per-case residual budget, capture bounded stderr and exact timeout process observations before kill, and describe last-known mode honestly. Add real-child wedge/residual/oversize and ordinary-success coverage before implementation. No product admission or suite-gate configuration change. Await TL concrete design approval and fresh change-code plan-quality before code.
+
+### 2026-10-23 — concrete diagnostic design approved
+
+Authenticated TLea15775b-d4d5-4a4d-b107-a03db461d646 approves the exact one-RPC/six-checkpoint/4096-byte-tail design, one absolute case deadline through the existing sole timer, liveness captured before exact kill, honest last-known mode, and no extra blocking probe/watchdog. Proceed through fresh plan-quality, then implementation. Existing SHIP remains conditioned on the new-code suite and fresh close.
