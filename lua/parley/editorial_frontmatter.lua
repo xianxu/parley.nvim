@@ -82,7 +82,19 @@ function M.resolve(lines, modes)
 end
 
 local function line(key, value)
-    return key .. ': ' .. (frontmatter.needs_quote(value) and frontmatter.quote(value) or value)
+    -- Prove a conservative plain spelling round-trips through the reader.
+    -- JSON strings are YAML double-quoted scalars and escape native newlines.
+    local decoded = declarations.scalar({ value = value, raw = value, children = {} })
+    local controls = value:find('[%z\1-\31\127]') or value:find('\194[\128-\159]')
+        or value:find('\226\128[\168\169]')
+    if value:match('^[%a_]') and not value:match('^[yYnN]$') and not controls
+        and not frontmatter.needs_quote(value) and decoded == value then
+        return key .. ': ' .. value
+    end
+    local encoded = vim.json.encode(value):gsub('\127', '\\u007f')
+        :gsub('\194([\128-\159])', function(byte) return ('\\u%04x'):format(byte:byte()) end)
+        :gsub('\226\128\168', '\\u2028'):gsub('\226\128\169', '\\u2029')
+    return key .. ': ' .. encoded
 end
 
 --- Return the unchanged snapshot or one insertion plus its complete postimage.
@@ -103,6 +115,10 @@ function M.fill(lines, modes)
     local result = { changed = #added > 0, lines = {}, settings = settings }
     for _, value in ipairs(lines) do result.lines[#result.lines + 1] = value end
     if #added == 0 then return result end
+    if parsed.entries[1] then
+        local indent = lines[parsed.entries[1].row]:match('^ *')
+        for index, value in ipairs(added) do added[index] = indent .. value end
+    end
     local first = parsed.close and parsed.close - 1 or 0
     local insertion = added
     if not parsed.close then

@@ -131,6 +131,77 @@ describe("editorial submit preparation through the native observer", function()
         assert.equals(1, #edits)
     end)
 
+    local function preserves_materialized_settings(before, expected_instruction, expected_presentation, indent)
+        replace_file(before)
+        local projection, projection_error = require("parley.editorial_prepare").project(buf)
+        assert.is_not_nil(projection, "the original settings must be valid: " .. tostring(projection_error))
+        assert.equals(expected_instruction, projection.settings.instruction)
+        assert.equals(expected_presentation, projection.settings.presentation)
+        press()
+        assert.equals(1, #edits, "the real submit must make one authorized insertion: " .. bar()
+            .. " " .. vim.inspect(notices))
+        assert.equals(edits[1].first, edits[1].last, "existing metadata is never replaced")
+        for _, line in ipairs(edits[1].lines) do
+            assert.is_nil(line:find("[%z\1-\31\127]"),
+                "a native insertion entry must contain one printable physical line: " .. vim.inspect(line))
+            if indent then
+                assert.equals(indent, line:match("^ *"), "additions must retain the root mapping indentation")
+            end
+        end
+        delivered()
+        local after = lines()
+        local retained = vim.deepcopy(after)
+        for _ = 1, #edits[1].lines do table.remove(retained, edits[1].first + 1) end
+        assert.same(before, retained, "all original metadata and body bytes must remain exact")
+        local saved_lines = vim.fn.readfile(path)
+        assert.same(after, saved_lines)
+        assert.same(after, vim.fn.readfile(root .. "/sent-bytes"), "send must observe the filled saved bytes")
+        local catalog_dir = assert(vim.api.nvim_get_runtime_file("lua/parley/skills/review/modes", false)[1])
+        local settings, err = require("parley.editorial_frontmatter").resolve(saved_lines,
+            require("parley.skills.review.mode").list(catalog_dir))
+        assert.is_not_nil(settings, "saved settings must remain readable: " .. tostring(err))
+        assert.equals(expected_instruction, settings.instruction, "materialization preserves decoded string intent")
+        assert.equals(expected_presentation, settings.presentation)
+        assert.equals("free-form", settings.modes[1].name)
+        local registry = vim.json.decode(table.concat(vim.fn.readfile(root .. "/sent-registry"), "\n"))
+        assert.equals(1, vim.tbl_count(registry.paths))
+        assert.equals(document.identity(buf).ID, registry.paths[path].ID)
+        assert.equals("ops:0", registry.paths[path].Owner)
+        assert.same({ "ops:0|submitted: " .. path }, sends())
+        local tick = vim.api.nvim_buf_get_changedtick(buf)
+        press()
+        await(function() return bar():find("nothing to submit", 1, true) ~= nil end)
+        assert.equals(1, #edits, "the repeated press must not prepare another edit")
+        assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+        assert.same(after, lines())
+        assert.same(after, vim.fn.readfile(path))
+        assert.equals(registry.paths[path].ID, document.identity(buf).ID)
+        assert.equals(1, #sends())
+    end
+
+    for _, text in ipairs({ "true", "123", "null" }) do
+        it("materializes legacy string " .. text .. " as a readable canonical string through native submit", function()
+            preserves_materialized_settings({ "---", "owner: business-team", "future: untouched",
+                'process-instruction: "' .. text .. '"', "---", "# Question", "original", "tail" }, text, "highlight")
+        end)
+    end
+
+    for _, case in ipairs({
+        { name = "newline", raw = [["Keep\nthis"]], decoded = "Keep\nthis" },
+        { name = "NUL", raw = [["Keep\x00this"]], decoded = "Keep" .. string.char(0) .. "this" },
+        { name = "control byte", raw = [["Keep\x01this"]], decoded = "Keep" .. string.char(1) .. "this" },
+    }) do
+        it("materializes decoded legacy " .. case.name .. " as one native-safe escaped scalar", function()
+            preserves_materialized_settings({ "---", "owner: business-team", "future: untouched",
+                "process-instruction: " .. case.raw, "---", "# Question", "original", "tail" }, case.decoded, "highlight")
+        end)
+    end
+
+    it("retains a valid indented root mapping while materializing missing settings", function()
+        preserves_materialized_settings({ "---", "  owner: business-team", "  presentation: direct",
+            "  future:", "    nested: untouched", "---", "# Question", "original", "tail" }, "", "direct", "  ")
+    end)
+
     it("does not edit a complete header or repeat the preparation on the next press", function()
         replace_file(filled)
         local tick = vim.api.nvim_buf_get_changedtick(buf)

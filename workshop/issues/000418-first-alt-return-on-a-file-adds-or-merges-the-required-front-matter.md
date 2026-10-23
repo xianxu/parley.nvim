@@ -169,6 +169,13 @@ Authenticated TL delivery 3b3b276e-1cdf-4742-a9b1-0476de1d51e3 reports operator 
 
 Binary-owned close review returned REWORK, leaving the card working. BR-1 persisted-scalar-roundtrip identifies materialized legacy text such as true/123/null emitted as YAML non-string scalars and decoded newlines emitted inside a native insertion entry. BR-2 preserve-root-mapping-layout identifies valid root indentation lost by new column-zero additions, which then fail projected shape validation. BR-3 core-concept-inventory-accuracy identifies the unchanged instruction.lua module incorrectly classified as modified. Sidecar and gate ledger retain exact findings. Two bounded helpers are adding pure/native RED regressions; parent owns codec/layout fixes and corrected plan inventory. No close is finalized and no merge is started. Runtime changes will need new recorded verification; previous suite and live evidence remain historical baseline proof.
 
+
+### 2026-10-23 — close round 1 corrections verified
+
+BR-1 now tests whether a conservative plain spelling round-trips through the authoritative scalar reader; otherwise it emits a JSON-compatible YAML double-quoted string, escaping ASCII controls, DEL, C1/NEL and Unicode line/paragraph separators. It keeps ordinary safe producer fixture bytes unchanged. BR-2 prefixes new keys with indentation from the existing scanner's first root row; original lines and body remain exact. No new parser, state, watcher or serialization of existing metadata was introduced. BR-3's two instruction.lua inventory rows now explicitly mark unchanged reuse.
+
+Observed RED before implementation: pure suite 13 pass/3 assertion failures/0 errors (implicit true, literal NUL, root indentation), native suite 9 pass/7 failures/0 errors. After codec only, pure output was 15 pass with only indentation failing; after layout correction, pure suite is 16/16 and native 16/16 on Neovim 0.12.5 and 0.11.7, with clean censuses. Extended implicit spellings include signed special floats and legacy single-letter boolean spellings. Updated Lua files pass luacheck, and diff whitespace is clean. Next: commit/push, restage the corrected writer, run one new recorded suite and rerun close's owned review; do not reuse the earlier runtime-head suite for these code fixes.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

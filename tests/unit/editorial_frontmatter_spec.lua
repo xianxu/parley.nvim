@@ -260,6 +260,103 @@ describe('editorial front matter', function()
         end
     end)
 
+    it('materializes generated YAML implicit-type spellings as strings without changing their meaning', function()
+        local settings = module()
+        local spellings = { 'true', 'false', 'null', 'yes', 'no', 'on', 'off', '~',
+            'True', 'FALSE', 'NULL', 'Yes', 'NO', 'ON', 'Off', '0', '42', '-17', '+12',
+            '1.5', '.5', '1e3', '0xFF', '0123', '.inf', '+.Inf', '-.INF', '.NaN', 'y', 'Y', 'n', 'N',
+            '2026-10-23', '2001-12-15T02:59:43Z' }
+        for _, text in ipairs(spellings) do
+            local document = { '---', 'process-instruction: ' .. vim.json.encode(text), '---', '# Body' }
+            local captured = vim.deepcopy(document)
+            assert.equals(text, assert(settings.resolve(document, catalog)).instruction)
+            local filled = assert(settings.fill(document, catalog))
+            assert.same(captured, document)
+            local inserted = filled.patch.lines[#filled.patch.lines]
+            assert.is_true(inserted:match('^processing%-instruction: ["\']') ~= nil,
+                'implicit-type spelling must be quoted: ' .. text)
+            local after, err = settings.resolve(filled.lines, catalog)
+            assert.is_not_nil(after, 'round trip ' .. text .. ': ' .. tostring(err))
+            assert.equals(text, after.instruction)
+            local again = assert(settings.fill(filled.lines, catalog))
+            assert.is_false(again.changed, text)
+            assert.same(filled.lines, again.lines)
+        end
+    end)
+
+    it('escapes generated decoded controls and line separators when materializing legacy free text', function()
+        local settings = module()
+        local cases, forbidden = {}, { '\226\128\168', '\226\128\169' }
+        for code = 0, 31 do
+            cases[#cases + 1] = { ('ASCII %02X'):format(code), ('\\x%02X'):format(code), string.char(code) }
+        end
+        cases[#cases + 1] = { 'DEL', '\\x7F', string.char(127) }
+        for code = 128, 159 do
+            local value = string.char(194, code)
+            cases[#cases + 1] = { ('C1 %02X'):format(code), ('\\u%04X'):format(code), value }
+            forbidden[#forbidden + 1] = value
+        end
+        cases[#cases + 1] = { 'Unicode line separator', '\\u2028', forbidden[1] }
+        cases[#cases + 1] = { 'Unicode paragraph separator', '\\u2029', forbidden[2] }
+        for _, case in ipairs(cases) do
+            local expected = 'left' .. case[3] .. 'right'
+            local document = { '---', 'process-instruction: "left' .. case[2] .. 'right"', '---', '# Body' }
+            local captured = vim.deepcopy(document)
+            assert.equals(expected, assert(settings.resolve(document, catalog)).instruction, case[1])
+            local filled = assert(settings.fill(document, catalog))
+            assert.same(captured, document)
+            for _, line in ipairs(filled.patch.lines) do
+                assert.is_nil(line:find('[%z\1-\31\127]'), 'literal ASCII control in insertion: ' .. case[1])
+                for _, value in ipairs(forbidden) do
+                    assert.is_nil(line:find(value, 1, true), 'literal Unicode control/separator in insertion: ' .. case[1])
+                end
+            end
+            local after, err = settings.resolve(filled.lines, catalog)
+            assert.is_not_nil(after, case[1] .. ': ' .. tostring(err))
+            assert.equals(expected, after.instruction, case[1])
+            local again = assert(settings.fill(filled.lines, catalog))
+            assert.is_false(again.changed, case[1])
+            assert.same(filled.lines, again.lines)
+        end
+    end)
+
+    it('fills generated root-indented headers at their original indentation without changing existing bytes', function()
+        local settings = module()
+        for width = 1, 4 do
+            local indent = string.rep(' ', width)
+            for _, legacy in ipairs({ false, true }) do
+                local document = { '---', indent .. '# root comment', indent .. 'future:',
+                    indent .. '  nested: "processing-mode: typo"', indent .. 'literal: |',
+                    indent .. '  presentation-mode: direct', indent .. 'unknown: retained # exact' }
+                if legacy then
+                    document[#document + 1] = indent .. 'presentation: propose # exact alias'
+                    document[#document + 1] = indent .. 'process-instruction: "[copy-edit] Preserve legacy intent."'
+                end
+                vim.list_extend(document, { '---', '# Body', 'processing-mode: body literal', '' })
+                local captured = vim.deepcopy(document)
+                local before = assert(settings.resolve(document, catalog))
+                local filled, err = settings.fill(document, catalog)
+                assert.is_not_nil(filled, ('root indentation %d, legacy %s: %s'):format(width, tostring(legacy), tostring(err)))
+                assert.same(captured, document)
+                for _, line in ipairs(filled.patch.lines) do
+                    assert.equals(indent, line:match('^ *'))
+                end
+                local added = #filled.patch.lines
+                local insertion = #document - 4
+                for row = 1, #document do
+                    assert.equals(document[row], filled.lines[row <= insertion and row or row + added])
+                end
+                local after = assert(settings.resolve(filled.lines, catalog))
+                assert.equals(before.presentation, after.presentation)
+                assert.equals(before.modes[1].name, after.modes[1].name)
+                assert.equals(before.instruction, after.instruction)
+                local again = assert(settings.fill(filled.lines, catalog))
+                assert.is_false(again.changed)
+                assert.same(filled.lines, again.lines)
+            end
+        end
+    end)
+
     it('bounds the complete input and projected header while allowing a large body', function()
         local settings = module()
         local fixed = { '---', 'collaboration-mode: discussion', 'presentation-mode: highlight',
