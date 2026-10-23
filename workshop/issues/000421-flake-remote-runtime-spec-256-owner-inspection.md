@@ -1,13 +1,22 @@
 ---
 id: 000421
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '84e0208544282d5402b41266cbd25103eccad2ca' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd2d93f55f6370ed3ee851a96129dd836d6d3b05b' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-23T15:07:22-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flake_tests: [lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership keeps inspection bounded when all 256 marked directory owners differ from this editor, lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership retains a directory whose inode changes after inspection begins]
 ---
 
 # flake: lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership keeps inspection bounded when all 256 marked directory owners differ from this editor, lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership retains a directory whose inode changes after inspection begins
@@ -21,13 +30,26 @@ Known flaky tests (#394), registered with same-head fail→pass evidence:
 
 ## Spec
 
+Measured (2026-10-23, nvim 0.12.5, disposable clone; acquire to result / to the first source read):
+- Idle: case 1 (256 owners) 525 ms against its 15 s deadline; case 2 (inode change) reaches the fake read in 4 ms against the default 2 s deadline.
+- Under capped load (3 CPU spinners plus an fsync dd loop, 10 reps): case 1 288 to 464 ms, case 2 1.3 to 3.6 ms. Neither failed.
+- The runtime code is unchanged since the failing head a63c4360. So the 10-22 run needed a filesystem/event-loop stall of at least 15 s spanning both cases (case 1 hit its 15 s deadline; case 2 hit the 2 s default before its first read); the next tests passed. No jetsam or memory-pressure event in the system log for 23:08 to 23:13. The stall's cause is not established and does not reproduce.
+- The same family's reproducible flake: under the same load, 1 of 10 reps failed 'gives later listeners a fresh operation budget' with runtime deadline. It injects a 1500 ms fsync delay inside listen's fixed 2000 ms budget, leaving 500 ms for real fsyncs. The two 'shares the acquisition deadline' cases and delayed_acquire (800 ms burned of a 2000 ms acquire) use the same wall-clock margin construction.
+
+Design (test-only; product deadlines unchanged):
+- Causal deadline tests: the held fsync callback is released only after the deadline under test has passed (the startup deadline the resource carries; for the fresh budget, the acquisition deadline recorded before the first publication). A regression that uses the wrong budget fails deterministically; no injected delay competes with real IO. delayed_acquire's 800 ms burn goes.
+- Tests that do not test a deadline pass timeout_ms=arrival.MS to acquire (await_start's default, and case 2's direct acquire), so a stall shorter than the suite's arrival budget cannot fail them (#370 doctrine). Later listen/stop/close keep their fixed 2000 ms product budgets; those are not injectable and stay as today.
+
 ## Done when
 
 - The root cause is fixed (never a retry loop or a longer timeout); closing this issue unregisters the tests.
 
 ## Plan
 
-- [ ]
+- [ ] Rewrite the three margin tests causally (hold fsync until the deadline under test has passed); drop the 800 ms burn.
+- [ ] await_start and case 2 acquire with timeout_ms=arrival.MS where the deadline is not under test.
+- [ ] Negative controls: listen reusing the startup deadline for s2, and listen ignoring the startup deadline, each fail their row.
+- [ ] Both nvim versions; 20 reps under capped load; then the suite.
 
 ## Log
 
