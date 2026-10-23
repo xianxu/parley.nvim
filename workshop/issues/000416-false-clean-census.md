@@ -7,7 +7,7 @@ created: 2026-10-22
 updated: 2026-10-22
 estimate_hours: 2.68
 collaboration-mode: collaboration
-card_mirror: '51807bcab9fec54bc033f4974a1d0bab75022304' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '1c4e8776bd6bcf3128baefbb2ab5f70d28c786d9' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T16:14:29-07:00
 claimant:
     operator: Xian Xu
@@ -17,7 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: operator}
-actual_hours: 1.88
+actual_hours: 1.96
 ---
 
 # Test census reports clean while an orphaned embedded Neovim survives
