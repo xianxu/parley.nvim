@@ -3,6 +3,7 @@
 ## 2026-10-23 (#414 — "it did not wait" as a fact, not a time)
 
 - A wall-clock bound that equals the timeout it guards has no margin. The regression it targets (a wait cut off by that timeout) and a scheduling stall on a loaded machine give the same reading. Assert the cause instead: hold the fake's answer behind a gate the spec opens, then check that the operation is still pending when the call returns.
+- A causal check proves something only when every shape of the regression changes what it observes. With the gate held longer than the caller's timeout, a wait cut off by that timeout looked the same as no wait. Keep the fake's bound below the caller's timeout, have the fake record each answer it gives, and run one control per shape: a wait that uses the answer, one that ignores it, and one that a timeout cuts off (#414 BR-1).
 - A gated fake must also bound itself and release when the spec's directory goes away, so a spec that never opens the gate cannot leave a process behind.
 - A background load generator gets a hard time cap inside its own loop and a trap that kills it on every exit. A probe whose setup step failed once left four load loops spinning for nearly four hours, because the cleanup was the last command of a chain that never ran.
 
