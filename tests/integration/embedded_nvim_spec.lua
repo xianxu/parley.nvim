@@ -19,6 +19,7 @@ describe("embedded nvim helper", function()
 
     it("fails a request the child never answers, naming it, and kills the child", function()
         child = Embedded.start()
+        local fixture=child:exec("return require('parley.remote_runtime').default_parent()")
         Embedded.REQUEST_MS = 500
         local started = uv.hrtime()
         local ok, err = pcall(child.exec, child, "while true do end")
@@ -29,6 +30,49 @@ describe("embedded nvim helper", function()
         assert.is_true(vim.wait(require("tests.helpers.arrival").MS, function()
             return vim.fn.jobwait({ child.channel }, 0)[1] ~= -1
         end), "the wedged child is still running")
+        assert.is_nil(uv.fs_lstat(fixture),'request timeout left its private fixture behind')
+    end)
+
+    it('joins an intentionally killed child before removing its private fixture',function()
+        child=Embedded.start()
+        local fixture=child:exec("return require('parley.remote_runtime').default_parent()")
+        assert(uv.kill(child.pid,'sigkill'))
+        child:stop()
+        assert.is_nil(uv.fs_lstat(fixture),'stopped child left its private fixture behind')
+    end)
+
+    it('retains and names its private fixture when the child exit is not confirmed',function()
+        child=Embedded.start()
+        local fixture=child:exec("return require('parley.remote_runtime').default_parent()")
+        child:exec([[vim.api.nvim_create_autocmd('VimLeavePre',{callback=function() while true do end end})]])
+        local jobwait=vim.fn.jobwait
+        vim.fn.jobwait=function() return {-1} end
+        local ok,err=child:stop()
+        vim.fn.jobwait=jobwait
+        assert.is_nil(ok)
+        assert.is_not_nil(tostring(err):find(fixture,1,true),tostring(err))
+        assert.is_not_nil(uv.fs_lstat(fixture))
+        assert(uv.kill(child.pid,'sigkill'))
+        assert.is_true(child:stop())
+        assert.is_nil(uv.fs_lstat(fixture))
+    end)
+
+    it('retains a replaced fixture using the identity captured before child actions',function()
+        child=Embedded.start()
+        local fixture=child:exec("return require('parley.remote_runtime').default_parent()")
+        local witness=assert(uv.fs_lstat(fixture))
+        assert(uv.kill(child.pid,'sigkill'))
+        vim.fn.jobwait({child.channel},1000)
+        local original=fixture..'-original'
+        assert(uv.fs_rename(fixture,original))
+        assert(uv.fs_mkdir(fixture,448))
+        vim.fn.writefile({'replacement'},fixture..'/sentinel')
+        local ok,err=child:stop()
+        assert.is_nil(ok)
+        assert.is_not_nil(tostring(err):find(fixture,1,true),tostring(err))
+        assert.same({'replacement'},vim.fn.readfile(fixture..'/sentinel'))
+        assert.is_true(require('tests.helpers.remote_runtime_fixture').cleanup(original,witness))
+        vim.fn.delete(fixture,'rf')
     end)
 
     it("bounds a request at half the spec's idle budget, which the runner passes", function()

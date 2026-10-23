@@ -1369,7 +1369,11 @@ M.setup = function(opts)
 	-- crash of Neovim itself leaves orphans, which then run to their own end.
 	vim.api.nvim_create_autocmd("VimLeavePre", {
 		group = vim.api.nvim_create_augroup("ParleyLeave", { clear = true }),
-		callback = function() require("parley.tasker").leave() end,
+		callback = function()
+			local remote = package.loaded["parley.remote_session"]
+			if remote then remote.exit() end
+			require("parley.tasker").leave()
+		end,
 	})
 	-- Toggle keymaps (web_search, raw request/response) now registered via kb_registry.register_global above
 
@@ -3187,6 +3191,7 @@ M.setup_markdown_keymaps = function(buf)
 	require("parley.comment").attach(buf, "markdown")
 	-- #384: typeahead for frontmatter enum values (collaboration-mode, …).
 	require("parley.frontmatter_enum").attach(buf)
+	require("parley.remote_session").observe(buf)
 	session_sync.attach(buf)
 	require("parley.agentic_document").attach(buf)
 	if review_cbs.review_next then

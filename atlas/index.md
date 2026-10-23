@@ -92,6 +92,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [Raw Mode](modes/raw_mode.md)
 - [Document Review](modes/review.md)
 - [Session-Sync Files](modes/session_sync.md)
+- [Private Editor Endpoints](modes/remote_session.md): Listener ownership, typed publication and conservative startup cleanup.
 - [Super-Repo Mode](modes/super_repo.md)
 
 ## 9. Export

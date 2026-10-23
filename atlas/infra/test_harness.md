@@ -57,7 +57,20 @@ spec that needs the real behavior clears the variable for its case:
 `file_tracker_spec` exercises real persistence, and `tests/helpers/sidecars.lua`
 does one tracked open.
 
-`tests/arch/scratch_placement_spec.lua` is the guard: it asserts
+`scripts/test-placement.sh` checks the same rule first. It is the opening step of
+`PREP_TEST_ENV`, so it runs once per make target, before anything is created. It
+refuses when `TEST_ENV_ROOT` resolves inside the checkout, or when it or any
+ancestor carries the `.parley` marker (#422). An inside-checkout `sdlc` review
+put `TMPDIR` in the review clone. The zero-config spec then found the clone's
+marker and wrote a chat into the clone's `workshop/parley`. In-process, the
+spec-level guard would have reported the problem only after other specs had
+already written into the tree. The guard also refuses a `TEST_ENV_ROOT/tmp`
+longer than 189 bytes (#423). Neovim ignores a `$TMPDIR` that long, and
+`tempname()` silently falls back to `/tmp/nvim.<user>`. The in-process spec pins
+that limit against the running Neovim. It also asserts that `tempname()` lies
+under `$TMPDIR`, which catches a fallback for any other reason.
+
+`tests/arch/scratch_placement_spec.lua` is the in-process guard: it asserts
 `vim.fn.tempname()`, `'directory'`, `$HOME`, and the `$XDG_*` dirs all resolve
 outside `getcwd()`. It guards the *writer*, which — unlike a lint over spec
 traversal roots — has no false-positive problem. It asserts the produced paths
@@ -111,6 +124,12 @@ fake shadows records the call in the target's own `$(TEST_ENV_ROOT)/sentinel-<ta
 and every target fails afterwards on a non-empty log (`SENTINEL_CHECK`, beside
 the orphan gate). That's the proof no spec reached the real CLI or its registry
 socket. A spec that wants Couch installs a fake bin ahead of the sentinel.
+Ordinary outside-pane Markdown discovery has one harness default: when Couch
+resolves to the sentinel, the exact read-only registry lookup runs through the
+existing persisted registry fake with a private empty store. Explicit spec fakes
+win. The shared bootstrap installs this boundary in parent and embedded editors;
+it changes neither PATH nor ambient registry variables. Direct CLI calls and
+all other verbs still reach the sentinel.
 Pinned by `test_isolation_spec`: `ambient()` is empty in a spec process, the
 launcher's output is exactly the list, the sentinel refuses and logs, and no
 Makefile nvim launch bypasses the launcher.
@@ -442,6 +461,21 @@ elapsed time, mode, notification, runtime and load. Native timeout/refusal contr
 and `couch_spec` retain the production 500 ms policy: a completed timeout remains
 editable, whereas an explicit refusal blocks editing. Waiting for mode alone or
 longer for `modifiable=false` cannot distinguish those outcomes.
+
+### Fold retirement investigation (#420)
+
+The two native suspended-retirement fixtures retain a single synchronous RPC
+and their original preference/view assertions. Their test-only
+`fold_retirement_trace` reporter atomically replaces one stage/work snapshot in
+a private temporary folder, and reuses `jit_watch` for VM profile evidence.
+A timeout error includes that snapshot before teardown removes the folder;
+successful runs print `FOLD_RETIREMENT` with runtime, load, elapsed wall/CPU time
+and counted work. Repair progress snapshots occur at powers of two, at most
+18 under the fixture's 200,000-step cap. This is diagnostic instrumentation;
+no request deadline or compiler policy changes. `fold_retirement_trace_spec`
+checks that evidence survives a killed child and is then cleaned, and counts
+writes for 4/8 repair events. The historical timeout's cause remains unproven;
+#424 owns recurrence analysis and the active flake registration.
 
 ### Waiting on work that converges (#293)
 

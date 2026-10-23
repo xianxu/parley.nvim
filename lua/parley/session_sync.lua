@@ -729,6 +729,7 @@ M.attach = function(buf, identity, observed, restoring_move)
         local current = state[buf].identity
         if identity and identity.File == current.File and (not current.ID or current.ID == identity.ID) then
             state[buf].identity = vim.deepcopy(identity)
+            if not state[buf].moving and not restoring_move then require("parley.remote_session").attach(buf, identity) end
         end
         if observed then M.acquire_observed(buf, observed) end
         return
@@ -966,11 +967,13 @@ M.attach = function(buf, identity, observed, restoring_move)
     if vim.api.nvim_get_current_buf() == buf and vim.fn.mode():match("^[iR]") then
         if restoring_move then s.inserting = true else insert_enter() end
     end
+    if not restoring_move then require("parley.remote_session").attach(buf, s.identity) end
 end
 
 -- Restore only the values this attachment still owns; never release a turn.
 M.detach = function(buf)
     buf = buffer_id(buf)
+    require("parley.remote_session").detach(buf)
     native_reads[buf] = nil
     local s = state[buf]
     if not s then return end
@@ -1190,6 +1193,7 @@ M.begin_move = function(buf)
     close_timer(s.watch)
     close_timer(s.idle)
     s.watch, s.idle = nil, nil
+    require("parley.remote_session").pause(buf)
     return token
 end
 
@@ -1296,6 +1300,7 @@ M.restore_move = function(buf, old_identity, new_path, protection, finalization)
     close_timer(s.watch)
     close_timer(s.idle)
     s.watch, s.idle = nil, nil
+    require("parley.remote_session").pause(buf)
     return token
 end
 
@@ -1456,6 +1461,7 @@ M.retire_move = function(buf, token, identity)
     s.attach_edits()
     refresh(buf)
     restart_idle(buf)
+    require("parley.remote_session").resume(buf, identity)
     return true
 end
 
@@ -1482,6 +1488,7 @@ M.finish_move = function(buf, token, identity)
     s.attach_edits() -- owned native acknowledgement may reload while moving
     refresh(buf)
     restart_idle(buf)
+    require("parley.remote_session").resume(buf, identity)
     return true
 end
 
@@ -1499,6 +1506,7 @@ M.abort_move = function(buf, token)
     s.moving = nil
     refresh(buf)
     restart_idle(buf)
+    require("parley.remote_session").resume(buf, s.identity)
     return true
 end
 

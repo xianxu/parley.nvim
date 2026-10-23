@@ -14,7 +14,8 @@ describe('zero-config setup', function()
 
     local function run(probe, cwd, extra_env)
         local command = {vim.v.progpath, '--headless', '-n', '-i', 'NONE', '-u', 'NONE',
-            '-c', 'lua vim.opt.runtimepath:prepend(' .. string.format('%q', runtime) .. ')',
+            '-c', 'lua local root=' .. string.format('%q', runtime) .. '; vim.opt.runtimepath:prepend(root); package.path=root.."/?.lua;"..package.path',
+            '-c', [[lua local fixture=require('tests.helpers.remote_runtime_fixture').install(); require('tests.helpers.exit_with_parent').install(nil,function() assert(fixture.cleanup()) end)]],
             '-c', 'lua local ok, err = pcall(function() ' .. probe .. ' end); if not ok then io.stderr:write(tostring(err)); vim.cmd("cquit 1") end',
             '-c', 'qa!'}
         local result = vim.system(command, {cwd = cwd or scratch .. '/work', text = true, clear_env = true, env = {
@@ -30,14 +31,22 @@ describe('zero-config setup', function()
 
     it('boots with setup({}) and no keys, without warnings, and creates a chat', function()
         run([[
+            local selected=require('parley.remote_runtime').default_parent()
+            local fixture=require('tests.helpers.remote_runtime_fixture').install()
+            assert(selected~=fixture.native_default_parent(),'clean bootstrap did not isolate the runtime')
             local notes = {}
             vim.notify = function(message, level)
                 if (level or 0) >= vim.log.levels.WARN then notes[#notes + 1] = tostring(message) end
             end
+            -- #422: a marked ancestor of the scratch would select repo mode and
+            -- write the chat into that tree. Fail on the precondition instead.
+            local marked = require('parley.repo_mode').detect_root(vim.fn.getcwd(), require('parley.config').repo_marker)
+            assert(marked == nil, 'scratch sits under a marked project: ' .. tostring(marked))
             local p = require('parley')
             p.setup({})
             vim.cmd('ParleyChatNew')
             local name = vim.api.nvim_buf_get_name(0)
+            assert(name:sub(1, #vim.env.HOME + 1) == vim.env.HOME .. '/', 'chat outside the scratch HOME: ' .. name)
             local chats = vim.fn.stdpath('data') .. '/parley/chats/'
             assert(name:sub(1, #chats) == chats, 'chat outside default dir: ' .. name)
             assert(p.not_chat(vim.api.nvim_get_current_buf(), name) == nil, 'new buffer is not a chat')

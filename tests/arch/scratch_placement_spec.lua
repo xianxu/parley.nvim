@@ -20,11 +20,16 @@ local function canonical(path)
     return (resolved:gsub("/+$", ""))
 end
 
+-- Whether path lies strictly below dir (both already canonical).
+local function is_under(dir, path)
+    return path:sub(1, #dir + 1) == dir .. "/"
+end
+
 local function assert_outside_repo(label, path)
     local repo = canonical(vim.fn.getcwd())
     local target = canonical(path)
     assert.is_not_nil(target, label .. " must be set")
-    assert.is_false(target == repo or target:sub(1, #repo + 1) == repo .. "/",
+    assert.is_false(target == repo or is_under(repo, target),
         ("%s resolves to %s, inside the repo at %s — the suite traverses this tree while writing (#202)")
             :format(label, target, repo))
 end
@@ -35,6 +40,15 @@ describe("arch: harness scratch stays out of the repo tree", function()
         -- follows $TMPDIR. Asserting the produced path (not the env var) also
         -- covers nvim's fallback chain, whose last resort is the cwd.
         assert_outside_repo("vim.fn.tempname()", vim.fn.tempname())
+    end)
+
+    it("nvim's temp directory is the harness TMPDIR, not a fallback (#423)", function()
+        -- A $TMPDIR nvim refuses (too long, unusable) silently becomes /tmp/nvim.<user>.
+        local tmp = canonical(vim.env.TMPDIR)
+        assert.is_not_nil(tmp, "$TMPDIR must be set")
+        local made = canonical(vim.fn.fnamemodify(vim.fn.tempname(), ":h"))
+        assert.is_true(is_under(tmp, made),
+            ("vim.fn.tempname() is under %s, not $TMPDIR %s"):format(made, tmp))
     end)
 
     it("nvim's swap directory is outside the repo", function()
@@ -162,5 +176,125 @@ describe("arch: harness scratch stays out of the repo tree", function()
             local ext = hit:match("x%.(%a+):")
             assert.is_true(n <= #refused[ext], "an allowed fallback was refused: " .. hit)
         end
+    end)
+end)
+
+-- #422: the same rule, checked once before PREP_TEST_ENV creates anything. An
+-- inside-checkout review put TMPDIR in the clone; the zero-config spec then
+-- found the clone's marker and wrote a chat into its workshop/parley.
+describe("arch: the pre-write placement guard", function()
+    -- Every root is relative to base (the guard runs with cwd = base), so the
+    -- fixtures stay short however long the accepted harness TMPDIR is (#423).
+    local marker = require("parley.config").repo_marker
+    local script = vim.fn.getcwd() .. "/scripts/test-placement.sh"
+    local base
+    before_each(function()
+        base = vim.fn.tempname()
+        vim.fn.mkdir(base .. "/checkout", "p")
+        base = vim.uv.fs_realpath(base)
+    end)
+    after_each(function() vim.fn.delete(base, "rf") end)
+
+    local function guard(root)
+        return vim.system({ script, root, "checkout", marker }, { cwd = base, text = true }):wait()
+    end
+
+    it("refuses a root under a marked tree and creates nothing there", function()
+        vim.fn.mkdir(base .. "/clone", "p")
+        vim.fn.writefile({}, base .. "/clone/" .. marker)
+        local result = guard("clone/.sdlc-review/tmp/parley-test-env/key")
+        assert.equals(1, result.code, result.stderr)
+        assert.matches("is under " .. vim.pesc(base .. "/clone") .. ", which carries " .. vim.pesc(marker), result.stderr)
+        assert.equals(0, vim.fn.isdirectory(base .. "/clone/.sdlc-review"))
+    end)
+
+    it("refuses a root that carries the marker itself", function()
+        vim.fn.mkdir(base .. "/root", "p")
+        vim.fn.writefile({}, base .. "/root/" .. marker)
+        assert.equals(1, guard("root").code)
+    end)
+
+    it("ignores a marker-named directory, as repo detection does", function()
+        vim.fn.mkdir(base .. "/scratch/" .. marker, "p")
+        assert.equals(0, guard("scratch/" .. marker .. "/env").code)
+        assert.is_nil(require("parley.repo_mode").detect_root(base .. "/scratch/" .. marker, marker))
+    end)
+
+    it("refuses a root inside the checkout even without a marker", function()
+        local result = guard("checkout/.test-env")
+        assert.equals(1, result.code, result.stderr)
+        assert.matches("inside the checkout", result.stderr)
+    end)
+
+    it("accepts an unmarked root outside the checkout, existing or not", function()
+        assert.equals(0, guard("scratch/not/yet").code)
+        vim.fn.mkdir(base .. "/scratch/now", "p")
+        assert.equals(0, guard("scratch/now").code)
+    end)
+
+    local function limit()
+        for _, line in ipairs(vim.fn.readfile(script)) do
+            local n = line:match("^TMPDIR_MAX=(%d+)$")
+            if n then return tonumber(n) end
+        end
+    end
+    -- A relative root whose TMPDIR (root .. "/tmp") is exactly n bytes, built from unit.
+    local function root_of(n, unit)
+        unit = unit or "a"
+        local body = n - #"/tmp"
+        assert(body % #unit == 0, "length must be a multiple of the unit")
+        return string.rep(unit, body / #unit)
+    end
+
+    it("refuses a root whose TMPDIR Neovim would ignore, and creates nothing (#423)", function()
+        local max = limit()
+        assert.equals(0, guard(root_of(max)).code)
+        local result = guard(root_of(max + 1))
+        assert.equals(1, result.code, result.stderr)
+        assert.matches(("is %d bytes; Neovim ignores a TMPDIR over %d bytes"):format(max + 1, max), result.stderr)
+        assert.equals(0, vim.fn.isdirectory(base .. "/" .. root_of(max + 1)))
+    end)
+
+    it("counts the TMPDIR limit in bytes, not characters (#423)", function()
+        -- "é" is two bytes: fewer characters than the limit, more bytes.
+        local max = limit()
+        local root = root_of(max + 1 + (max + 1 - #"/tmp") % 2, "é")
+        local result = guard(root)
+        assert.equals(1, result.code, result.stderr)
+        assert.matches(("is %d bytes"):format(#root + #"/tmp"), result.stderr)
+    end)
+
+    it("reports a marker before the TMPDIR length", function()
+        vim.fn.mkdir(base .. "/clone", "p")
+        vim.fn.writefile({}, base .. "/clone/" .. marker)
+        local result = guard("clone/" .. root_of(limit() + 1 - #"clone/"))
+        assert.equals(1, result.code, result.stderr)
+        assert.matches("which carries", result.stderr)
+    end)
+
+    it("pins the TMPDIR limit to the running Neovim (#423)", function()
+        -- Neovim checks $TMPDIR as given, then separately limits its absolute
+        -- path to about 234 bytes. The probe pads a relative "t" with "./" to an
+        -- exact raw length. Its absolute path stays base/t, inside that second
+        -- limit at any base the harness accepts.
+        local max = limit()
+        vim.fn.mkdir(base .. "/t", "p")
+        local function used(n)
+            local dir = string.rep("./", math.floor((n - 1) / 2)) .. (n % 2 == 1 and "t" or "t/")
+            assert(#dir == n)
+            local out = vim.system({ vim.v.progpath, "--clean", "--headless", "-i", "NONE",
+                "-c", "lua io.stdout:write(vim.fn.tempname())", "-c", "qa!" },
+                { cwd = base, text = true, env = { TMPDIR = dir } }):wait(10000)
+            assert.equals(0, out.code, out.stderr)
+            return is_under(base .. "/t", out.stdout)
+        end
+        assert.is_true(used(max), "Neovim refused a TMPDIR of the guard's limit, " .. max .. " bytes")
+        assert.is_false(used(max + 1), "Neovim accepted a TMPDIR over the guard's limit, " .. max .. " bytes")
+    end)
+
+    it("is wired into PREP_TEST_ENV with the configured marker", function()
+        local makefile = table.concat(vim.fn.readfile("Makefile.parley"), "\n")
+        assert.matches("\nREPO_MARKER := " .. vim.pesc(marker) .. "\n", makefile)
+        assert.matches('define PREP_TEST_ENV\n"%$%(CURDIR%)/scripts/test%-placement%.sh" "%$%(TEST_ENV_ROOT%)" "%$%(CURDIR%)" "%$%(REPO_MARKER%)" &&', makefile)
     end)
 end)
