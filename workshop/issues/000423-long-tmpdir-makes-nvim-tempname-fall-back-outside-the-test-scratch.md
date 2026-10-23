@@ -54,6 +54,7 @@ Tests:
 Filed from #422, at the TL's request (ops:0).
 
 ### 2026-10-23 — implemented (47a12d69)
+- 2026-10-23: closed — R1 addressed: bytes count (non-ASCII case), marker walk before length (case), relative length-proof fixtures incl. lease test nested roots; infra/test_harness 235/0/0 clean at 185-byte root and on 0.12.5 + 0.11.7; lease 27 OK at default + long TMPDIR; counterfactual fails exactly bytes + marker-first cases; review verdict: SHIP
 
 The TL approved the plan. The guard holds `TMPDIR_MAX=189` and refuses `ROOT/tmp` over it before any write. In scratch_placement_spec:
 - in-process: tempname() lies under $TMPDIR;
