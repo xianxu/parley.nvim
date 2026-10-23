@@ -1,6 +1,6 @@
 ---
 id: 000405
-status: working
+status: codecomplete
 created: 2026-10-20
 updated: 2026-10-22
 estimate_hours: 5.41
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 14.12
+tracker:
+    version: 1
+    completion:
+        token: close-c0ae336dbdc7
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: fcde202739ba3364c3015c1d0da9724a6a4f700d
+        evidence_commit: e14f730a71bf2c6c371c81783fd6a202e16f926a
 ---
 
 # remote-session: start a private RPC server when attached to a registered session file or side doc, and register its address with Couch
