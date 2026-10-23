@@ -1,12 +1,12 @@
 ---
 id: 000322
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-23
 estimate_hours:
-card_mirror: '06bec2a32000bebe13d7746d9360479a6e7912f3' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd23dd52108997e5a0bbcce9896a0f4401e923233' # card fields mirrored from issue-cards; edit via sdlc
 claimant:
     operator: Xian Xu
     machine: 4716879978a7b90f6b583da1716fd0e9
@@ -15,6 +15,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "b73075b9", done: "d5ed7ad5"}
+actual_hours: N/A
 ---
 
 # Alt+Return on a plain markdown file silently sends nothing after the process-instruction prompt (no 'sent' or error notice)
