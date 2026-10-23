@@ -374,3 +374,63 @@ dispose:
 7. **Plan revision recommendations:** None. The existing `## Revisions` entries accurately describe the final implementation.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"78e860ff-81be-498d-b7c7-5b36256618f4","repository":"github.com/xianxu/parley.nvim","issue_id":"000418","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/93a704f35f7a74a4","reviewed_head":"197c3fb608f39e83cfbe73db6a4c2c37fbe0aee5","slot":"parley.nvim:3","requested_at":"2026-10-23T17:24:54.285719Z"},"phase":"finished","pid":12433,"started_at":"2026-10-23T17:24:54.417871Z","finished_at":"2026-10-23T17:31:37.019952Z","session_id":"01a169cb-51c6-7aa1-babb-b1faa1f272b5","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-23T10:48:45-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 418 — First Alt+Return on a file adds or merges the required front matter |
+| repo | parley.nvim |
+| issue file | workshop/issues/000418-first-alt-return-on-a-file-adds-or-merges-the-required-front-matter.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | e11d044633ccd0eb00908ff15de048eeb8f33ad0..d2c41539377d246d50cda527312d979ab77789bf |
+| command | sdlc close --issue 418 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-23T10:48:45-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The interdiff removes an overbroad scalar classifier and adds meaningful regression coverage. The correction preserves the existing issue contract; no new blocking defects were found. No prior findings remain open. This review does not override the recorded merge hold.
+
+```findings
+{}
+```
+
+1. **Strengths**
+   - The correction stays in the shared scalar decoder (`collaboration_value.lua:80`), avoiding divergent reader behavior.
+   - Regression coverage checks canonical/legacy instructions, partial/complete headers, exact preservation and repeated-fill idempotence (`editorial_frontmatter_spec.lua:582`).
+   - Restoring the removed check in memory makes the new regression fail.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - Neovim 0.12.5: all 27 editorial tests and 22 parser tests passed.
+   - Mutation control: 26 passed, one failed on both colon-separated spellings.
+   - Whitespace check passed; repository files remained unchanged.
+   - Full-suite and alternate-runtime tests were not rerun.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** one shared classification rule.
+   - **ARCH-PURE — pass:** deterministic decoding; no added IO.
+   - **ARCH-PURPOSE — pass:** removes erroneous instruction rejection across shared consumers.
+   - **ARCH-EVOLVE — pass:** existing bytes remain preserved; no persisted-format rewrite was added.
+
+   No new architectural or user-facing surface requires an atlas or README update.
+
+7. **Plan revision recommendations:** None. The appended correction records the implementation accurately; Spec and Done-when remain unchanged.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e9ce1381-9e59-4320-a1c5-02e0f1543f8f","repository":"github.com/xianxu/parley.nvim","issue_id":"000418","recipe":"fix-review","round":5,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/d9f9862105c9cbc4","reviewed_head":"d2c41539377d246d50cda527312d979ab77789bf","slot":"parley.nvim:3","requested_at":"2026-10-23T17:47:08.618723Z"},"phase":"finished","pid":8802,"started_at":"2026-10-23T17:47:08.72501Z","finished_at":"2026-10-23T17:48:45.175136Z","session_id":"01a169df-ada2-75e3-ab48-4118723c6ec4","outcome":"returned"}] -->

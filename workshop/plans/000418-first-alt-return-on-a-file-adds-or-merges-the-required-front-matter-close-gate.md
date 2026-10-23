@@ -712,6 +712,189 @@ rounds:
       isolation: fenced
       reviewed: 197c3fb608f39e83cfbe73db6a4c2c37fbe0aee5
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: e9ce1381-9e59-4320-a1c5-02e0f1543f8f
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000418"
+            recipe: fix-review
+            round: 5
+            attempt: 1
+            agent: codex
+            root: /Volumes/TestScratch/review-checkouts/d9f9862105c9cbc4
+            reviewed_head: d2c41539377d246d50cda527312d979ab77789bf
+            slot: parley.nvim:3
+            requested_at: "2026-10-23T17:47:08.618723Z"
+          phase: finished
+          pid: 8802
+          started_at: "2026-10-23T17:47:08.72501Z"
+          finished_at: "2026-10-23T17:48:45.175136Z"
+          session_id: 01a169df-ada2-75e3-ab48-4118723c6ec4
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: d2c41539377d246d50cda527312d979ab77789bf
+        tracker_head: 9e040a3677d691149327b7f6eb518e4731b98874
+        branch_point: 3bec977814f3648275f9e2f3f2fcb4f9aea8dcc9
+        since: "2026-10-23T00:21:40-07:00"
+        until: "2026-10-23T10:46:38-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-23T00:21:40-07:00"
+              end: "2026-10-23T10:46:38-07:00"
+              began: "2026-10-23T00:21:40-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a15a7c-a7ef-7492-9684-887d55dc4a8d
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 70713c3c8962b6c134270b42213d5a761d763f08abce4d7346706e0189c9744c
+              started: "2026-10-20T18:04:41.786Z"
+              spawned: false
+              bytes: 26314596
+              windows:
+                - start: "2026-10-23T00:21:40-07:00"
+                  end: "2026-10-23T10:46:38-07:00"
+            - harness: codex
+              id: 01a16843-aea0-7920-96a7-5d9a440c147c
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 8f79c41cd5bb21ffaf35eee1b1e0133988a51ad6b991961f9ed0216b13c4d589
+              started: "2026-10-23T10:17:09.366Z"
+              spawned: false
+              bytes: 646947
+              windows:
+                - start: "2026-10-23T10:17:09.366Z"
+                  end: "2026-10-23T10:46:38-07:00"
+            - harness: codex
+              id: 01a16849-e2e5-78e3-b96e-38f5a790946e
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: ea5c452d1147954f1a55e0d3cbb571cb88f19aa8b31dcc090960ff3e59dade0b
+              started: "2026-10-23T10:23:55.493Z"
+              spawned: false
+              bytes: 469439
+              windows:
+                - start: "2026-10-23T10:23:55.493Z"
+                  end: "2026-10-23T10:46:38-07:00"
+            - harness: codex
+              id: 01a1684b-98a5-7ae1-8392-3526214286d4
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 1d936e6a2efbb27a483bbc55ce6d9a2c8df1283167abefb67f7310455ebd33f7
+              started: "2026-10-23T10:25:47.68Z"
+              spawned: false
+              bytes: 438077
+              windows:
+                - start: "2026-10-23T10:25:47.68Z"
+                  end: "2026-10-23T10:46:38-07:00"
+            - harness: codex
+              id: 01a1684c-19d5-7ea1-b48f-ce5bd7992a9a
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: e55a55bf67be9c833ea10e4aaa06eef28c469ea88b42c3853329de37b8e1ce54
+              started: "2026-10-23T10:26:20.787Z"
+              spawned: false
+              bytes: 445683
+              windows:
+                - start: "2026-10-23T10:26:20.787Z"
+                  end: "2026-10-23T10:46:38-07:00"
+            - harness: codex
+              id: 01a1684d-cb40-7fc3-885d-86d14a401f1e
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              parent_id: 01a15a7c-a7ef-7492-9684-887d55dc4a8d
+              digest: 5b02d01c14d42a4c55331e04c6f296a0d9e2ba47421995a8506efb282a68ec91
+              started: "2026-10-23T10:28:11.397Z"
+              spawned: true
+              bytes: 3371399
+              windows:
+                - start: "2026-10-23T10:28:11.397Z"
+                  end: "2026-10-23T10:46:38-07:00"
+            - harness: codex
+              id: 01a16859-5a99-75d2-b544-c30a65629d39
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              parent_id: 01a15a7c-a7ef-7492-9684-887d55dc4a8d
+              digest: 2a603e818965713bc1e9f57c9ed561acdf4002e77de3d3dafa5a1a84a459e320
+              started: "2026-10-23T10:40:48.896Z"
+              spawned: true
+              bytes: 1114016
+              windows:
+                - start: "2026-10-23T10:40:48.896Z"
+                  end: "2026-10-23T10:46:38-07:00"
+            - harness: codex
+              id: 01a169bf-d875-7182-b889-3ea4cc4dc503
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 8c292ce2216d05f098b1dc4d50c0d4fbb3cd5b4e937433b740ff56d4542b30c3
+              started: "2026-10-23T17:12:23.665Z"
+              spawned: false
+              bytes: 531740
+              windows:
+                - start: "2026-10-23T17:12:23.665Z"
+                  end: "2026-10-23T10:46:38-07:00"
+            - harness: codex
+              id: 01a169c0-5e6b-7520-a04e-7cbcd9b2bd03
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: c350194da582a5f62f4f40b717a07dcaeb3ee4fce04a62ff2ac7afc1d43a157c
+              started: "2026-10-23T17:12:57.569Z"
+              spawned: false
+              bytes: 425628
+              windows:
+                - start: "2026-10-23T17:12:57.569Z"
+                  end: "2026-10-23T10:46:38-07:00"
+        queue_waits:
+            - attempt_id: 781b67e502e28036977da46605addba4
+              slot: parley.nvim:3
+              record_digest: b6a93e7ac5a0b3e3cac87b6fff8f7355ae730d2c0faecec0202ba45427182473
+              start: "2026-10-23T10:54:03.236141Z"
+              end: "2026-10-23T11:34:53.777074Z"
+              queue_seconds: 2450.540933
+              raw_seconds: 2450.540933
+              exact: true
+            - attempt_id: 3bf568b5469d463898dc0993c1acdcb9
+              slot: parley.nvim:3
+              record_digest: 1ec2820680a4d19f80e2b897eba31787a9cff2439e1f65f4065bc1268f721a4c
+              start: "2026-10-23T11:44:18.516335Z"
+              end: "2026-10-23T12:26:26.799999Z"
+              queue_seconds: 2528.283664
+              raw_seconds: 2528.283664
+              exact: true
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 15.241266666666666
+        cuts:
+            - dispatched: "2026-10-23T09:28:53-07:00"
+              finalized: "2026-10-23T09:36:47-07:00"
+              finalizing: false
+            - dispatched: "2026-10-23T09:45:29-07:00"
+              finalized: "2026-10-23T09:49:13-07:00"
+              finalizing: false
+            - dispatched: "2026-10-23T10:00:56-07:00"
+              finalized: "2026-10-23T10:05:03-07:00"
+              finalizing: false
+            - dispatched: "2026-10-23T10:24:54-07:00"
+              finalized: "2026-10-23T10:31:38-07:00"
+              finalizing: true
+      "n": 5
+      timestamp: "2026-10-23T10:48:45-07:00"
+      dispatched: "2026-10-23T10:47:08-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      recipe: fix-review
+      isolation: fenced
+      reviewed: d2c41539377d246d50cda527312d979ab77789bf
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#418 (boundary-review)
@@ -760,6 +943,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-1 — addressed — editorial_frontmatter.lua:130-143 guards plain output by round-trip decoding and escapes unsafe string contents. Pure and native tests pass for implicit-type spellings, newlines, NUL and control bytes.
 - BR-2 — addressed — editorial_frontmatter.lua:173-175 preserves existing root indentation. Widths 1–4 and native submission are covered; nested counterparts follow the explicitly revised unchanged-skip contract.
 - BR-3 — addressed — Both original Core-concepts rows classify instruction.lua as unchanged and reused. Its pinned diff is empty; the implementation-ownership revision correctly places canonical selection in editorial_frontmatter.lua.
+
+## Round 5 — 2026-10-23T10:48:45-07:00 (codex) — passed
 
 ## Open findings
 
