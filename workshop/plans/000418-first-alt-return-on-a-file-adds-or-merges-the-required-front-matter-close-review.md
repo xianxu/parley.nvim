@@ -434,3 +434,87 @@ The interdiff removes an overbroad scalar classifier and adds meaningful regress
 7. **Plan revision recommendations:** None. The appended correction records the implementation accurately; Spec and Done-when remain unchanged.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e9ce1381-9e59-4320-a1c5-02e0f1543f8f","repository":"github.com/xianxu/parley.nvim","issue_id":"000418","recipe":"fix-review","round":5,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/d9f9862105c9cbc4","reviewed_head":"d2c41539377d246d50cda527312d979ab77789bf","slot":"parley.nvim:3","requested_at":"2026-10-23T17:47:08.618723Z"},"phase":"finished","pid":8802,"started_at":"2026-10-23T17:47:08.72501Z","finished_at":"2026-10-23T17:48:45.175136Z","session_id":"01a169df-ada2-75e3-ab48-4118723c6ec4","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-23T11:23:31-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 418 — Legacy chat reader tolerates quotes in unrelated plain metadata |
+| repo | parley.nvim |
+| issue file | workshop/issues/000418-first-alt-return-on-a-file-adds-or-merges-the-required-front-matter.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 3bec977814f3648275f9e2f3f2fcb4f9aea8dcc9..b1b34cb9761bfc7aa0fbe5fbe8139cde6e7ed44c |
+| command | sdlc close --issue 418 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-23T11:23:31-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned diff matches the issue’s active, narrowed Spec: correct legacy collaboration parsing without adding frontmatter or changing submission ownership. No blocking defects found. This review validates the code; it does not replace the separately required recorded full-suite gate.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The approved scope pivot removes scalar materialization entirely; the pinned runtime diff contains no writer. Native tests preserve buffer and saved bytes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Frontmatter insertion was removed by the approved pivot, eliminating the layout-changing path. Native plain, partial and existing-header submissions preserve their original lines.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Plan lines 53 and 73 classify instruction.lua as unchanged reuse, matching its empty pinned diff. Lines 311–317 explicitly distinguish historical tables from the current parser inventory.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Root values now receive distinct lexical context. The regression matrix passes on both runtimes; loading the pinned base parser in memory reproduces the unclosed-quote failure for the same fixture that head reads as chat.
+```
+
+1. **Strengths**
+
+   - The correction stays in the existing parser and preserves its API: `lua/parley/skills/review/collaboration_value.lua:191–203`.
+   - Regression coverage crosses punctuation, three unrelated keys, scalar/flow/block declarations, and both field orders: `tests/unit/review_collaboration_value_spec.lua:16`.
+   - Native tests verify actual buffer bytes, saved bytes and registered owner: `tests/integration/agentic_document_spec.lua:332`.
+   - Atlas documents the lexical distinction; the active plan inventory accurately reflects the narrowed delivery.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None requiring action.
+
+5. **Test coverage notes**
+
+   - Neovim **0.12.5 and 0.11.7**: parser **22/22** and native admission **51/51** on each.
+   - Architecture checks: **40 passing**, with three branch-dependent checks reporting pending; the active inventory was inspected manually.
+   - Changed Lua files pass luacheck with zero warnings/errors.
+   - Final native validation reports no surviving test processes.
+   - Repository-wide recorded-suite completion was not verified in this review.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** reuses the existing parser and quote-span helper.
+   - **ARCH-PURE — pass:** lexical logic remains deterministic and directly tested without IO.
+   - **ARCH-PURPOSE — pass:** delivers the active Spec; obsolete fill machinery is absent from the runtime diff.
+   - **ARCH-MOCK — pass:** native tests use the existing stateful registry/transport fake; no new external dependency.
+   - **ARCH-CONSTRAINTS — pass:** counted N/2N coverage checks linear scan work.
+   - **ARCH-SECURE — pass:** malformed collaboration declarations retain explicit error coverage; tests use isolated storage.
+   - **ARCH-ORDER — pass:** no new inter-event state; existing retry, stale-completion and delivery-sequencing tests pass.
+   - **ARCH-FUNERAL — pass:** no new runtime artifact, cache or background resource.
+   - **ARCH-EVOLVE — pass:** metadata is read without rewriting; unknown fields and document bytes survive native submission.
+
+7. **Plan revision recommendations:** None. The final revision and active inventory adequately supersede the historical fill plan.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"084e69f8-6da9-4282-84ab-97b05c157a98","repository":"github.com/xianxu/parley.nvim","issue_id":"000418","recipe":"milestone-review","round":6,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/9044f32cd801b55f","reviewed_head":"b1b34cb9761bfc7aa0fbe5fbe8139cde6e7ed44c","slot":"parley.nvim:3","requested_at":"2026-10-23T18:20:08.760432Z"},"phase":"finished","pid":18093,"started_at":"2026-10-23T18:20:08.909992Z","finished_at":"2026-10-23T18:23:30.003617Z","session_id":"01a169fd-e4ab-7491-a475-0f349d02be4a","outcome":"returned"}] -->
