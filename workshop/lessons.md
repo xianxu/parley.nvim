@@ -2,6 +2,8 @@
 
 - #418 plan review: an authorized preparation edit is still an edit to native observers. Trace the production observer into the current operation's invalidation before putting a buffer mutation inside save/submit. Model a narrowly witnessed preparation stage on that operation; never mute all changed events, since a reentrant unrelated edit must still cancel stale work. Test the real observer and exact projected before/after content through controlled interruptions.
 
+- #418 generated properties: when the shared presence scanner normalizes key case, every downstream reader must use that same identity; otherwise filling can preserve a present setting while routing as if it were missing. Test quoted and mixed-case keys through both resolution and fill. Header byte budgets include fences and must also validate the projected additions.
+
 ## 2026-10-22 (#409 — a census is not run ownership)
 
 - Persistence and a recognizable command prove that a process exists, not that

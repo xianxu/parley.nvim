@@ -10,7 +10,7 @@ updated: 2026-10-09
 
 A single markup grammar that lets humans and robots converse, propose, and resolve changes inside a markdown file — the file itself stays the editing surface. The operator keeps narrative ownership; the robot contributes via inline markers the operator can accept or reject with one editor gesture each.
 
-The same grammar covers every human-centric document across the ariadne family — targets, plans, atlas drafts, pensives, parley chats. Parley.nvim provides the human editing interface (marking, navigation, Alt+a / Alt+r). Coding environments like Claude Code (and `pair`, a peer-repo wrapper around Claude Code / Codex) participate in the same convention — appending `{}` to an existing chain, opening their own `🤖{}` proposals, or resolving chains under operator instruction per §5 and §6. The grammar is the contract between those tools and any other agent that later joins the conversation.
+The same grammar covers every human-centric document across the ariadne family — targets, plans, atlas drafts, pensives, parley chats. Parley.nvim provides the human editing interface (marking, navigation, Alt+a / Alt+r). Coding environments like Claude Code (and `pair`, a peer-repo wrapper around Claude Code / Codex) participate in the same convention — opening their own `🤖{}` proposals, resolving an operator's marker, or linking a side doc for a longer exchange. The grammar is the contract between those tools and any other agent that later joins the conversation.
 
 ## Why now
 
@@ -21,7 +21,7 @@ Pieces of the convention already live in `construct/datatype/target.md` and are 
 - Not a parser specification — tokenization details belong in the implementations (parley.nvim and xx-fix), not here.
 - Not a UI framework — only the markup grammar is canonical; rendering, keymaps, and editor integration are tool-specific.
 - Not a replacement for git-diff review — these markers iterate inside the file the operator is already editing; diff review remains a separate, complementary safety net.
-- Not a turn-tracking protocol — `[]{}` chains express turn order positionally, but the file does not record identity, timestamps, or threading.
+- Not a turn-tracking protocol — old `[]{}` chains express turn order positionally, but the file does not record identity, timestamps, or threading.
 
 ## Grammar
 
@@ -42,25 +42,24 @@ Two kinds of enclosures, used in two roles:
 
 ### 3. Combinations
 
-A marker is `🤖` followed by an optional reference (`<X>` or `~X~`), then a chain of zero or more alternating `[]`/`{}` commentary blocks. Common forms:
+A marker is `🤖` followed by an optional reference (`<X>` or `~X~`), then **at most one** `[]` or `{}` commentary block when written. A bare `🤖~D~` has none. Readers still accept older chains with multiple blocks and use the last one to find the pending ask. Common new forms:
 
 - `🤖[H]` — human commentary, unanchored.
 - `🤖<X>[H]` — human commentary anchored to referenced text X.
 - `🤖<X>{R}` — robot proposes replacing quoted text X with R.
 - `🤖{R}` — robot suggestion, typically an insertion of new text.
-- `🤖[H]{R}` — human asks, robot replies.
-- `🤖{R}[H]` — robot suggests, human replies.
 - `🤖~D~` — robot proposes deleting D.
 - `🤖~D~{N}` — robot proposes replacing D with N.
 - `🤖~D~[N]` — human-authored replacement of D with N. Asymmetric: humans normally just edit directly and skip this form; included for completeness.
-- `🤖[H₁]{R₁}[H₂]{R₂}…` — chains of dialogue can extend indefinitely. In practice they stay short.
+
+**One turn per marker.** An agent never appends a second block to an existing marker, even for a brief clarification or disagreement. Resolve a ready ask in place if it can be finished in one response. When it needs another exchange, open a side doc under the document's `<name>.side/` folder and replace the marker with `→ [discussion](path)`; include the matching `discussions:` index entry. Side docs use the same one-turn rule. Creation, including a further question inside a side doc, follows the shared naming, written-defaults and backlink contract in `../universal-review/collaboration-modes.md` §4: use the round's month under the common side root; preserve existing flat files and links. A legacy `🤖[H]{R}[H₂]` remains readable: answer its final human turn and replace the whole chain; a legacy chain ending in `{R}` stays pending until the operator responds.
 
 A marker proposes an edit only when its first content block carries the change:
 `🤖{N}` (insert), `🤖<X>{N}` or `🤖~D~{N}` (replace), `🤖~D~` (delete). Prefer
 `🤖<X>{N}` for ordinary copy-edit replacements where rejecting should leave the
 quoted text in place; use `🤖~D~{N}` when the deletion preview matters. Once a
-`[]` opens the chain — e.g., `🤖[H]{R}`, `🤖<X>[H]{R}` — the marker is
-commentary; accept and reject both discard the chain without touching
+`[]` opens commentary — e.g., `🤖[H]`, `🤖<X>[H]` — the marker is
+commentary; accept and reject both discard it without touching
 surrounding prose. The bare `🤖{N}` form is mildly ambiguous between "I'm
 commenting" and "please insert N"; the operator's accept/reject gesture is what
 disambiguates, and context tells the agent how to read it.
@@ -99,24 +98,23 @@ markdown table may legitimately contain `<br>`):
 | `🤖[H]` | *(empty — comment removed)* | *same* |
 | `🤖<X>[H]` | `X` | *same* |
 | `🤖<X>{R}` | `R` *(robot's replacement accepted)* | `X` |
-| `🤖<X>[H]{R}` | `X` *(commentary chain discarded, anchor preserved)* | *same* |
 | `🤖{R}` | `R` | *(empty)* |
-| `🤖[H]{R}` | *(empty)* | *same* |
-| `🤖{R}[H]` | *(empty)* | *same* |
 | `🤖~D~` | *(empty — deletion accepted)* | `D` |
 | `🤖~D~{N}` | `N` *(robot's replacement accepted)* | `D` |
 | `🤖~D~[N]` | `N` *(human's replacement accepted)* | `D` |
-| `🤖[]{}[]{}…[]{}` | *(empty — full conversation discarded, surrounding text untouched)* | same |
+
+For **legacy** commentary chains such as `🤖<X>[H]{R}`, `🤖[H]{R}`, or `🤖{R}[H]`, accept/reject discards the whole conversation and preserves any `<X>` anchor. These are reader cases, not forms to write.
 
 ### 6. Agentic resolution (Claude Code / xx-fix)
 
-When the operator asks an agent to resolve outstanding markers ("we're aligned, please resolve"), the agent walks each chain and reads the *last* commentary block — typically the trailing `[H]` if there's no further robot reply — interprets it as accept or reject, and applies §5. The agent does not unilaterally resolve markers the operator hasn't acknowledged; resolution is always operator-initiated.
+When the operator asks an agent to resolve outstanding markers ("we're aligned, please resolve"), the agent reads each marker's last commentary block — in a legacy chain, the final `[H]` if the operator has replied — interprets it as accept or reject, and applies §5. An agent-ended chain stays pending. The agent does not unilaterally resolve markers the operator hasn't acknowledged; resolution is always operator-initiated.
 
-One case *is* operator-initiated the moment it's written: a `🤖[H]` the operator authored **as a question or instruction directed at the agent** (per `AGENTS.base.md §1`). That marker is itself the operator's ask, so the agent answers it and resolves it in place *that same turn* — folding the answer into the prose and dropping the marker. This is not unilateral resolution of an unacknowledged marker; the operator's authored `[H]` *is* the acknowledgment.
+One case *is* operator-initiated the moment it's written: a `🤖[H]` the operator authored **as a question or instruction directed at the agent** (per `AGENTS.base.md §1`). That marker is itself the operator's ask, so the agent answers it and resolves the marker *that same turn*. The effective collaboration mode in `../universal-review/collaboration-modes.md` owns routing; follow its question, item and explicit-marker rules rather than assuming an in-place prose answer. Drop the ready marker after routing its answer. This is not unilateral resolution of an unacknowledged marker; the operator's authored `[H]` *is* the acknowledgment.
 
-**Fold into clean prose, not a narrated reply — the light-touch default.** When you resolve a `🤖[H]` by folding the answer in, the result must read as **clean documentation that stands on its own**, not as a reply to the operator: drop the meta ("a fair correction…", "this answers your question…", "as you noted…") — the reader of the finished document never saw the marker. This is the right default for any **light-touch review**: a document carrying a few `🤖[]` markers that is *not* going through xx-fix's full docflow (§ the heavier propose/review cycle). There the goal is simply a clean document, not a tracked review conversation — so resolve-and-fold, don't stage a dialogue.
+**Fold into clean prose, not a narrated reply — the light-touch default.** When you resolve a `🤖[H]` by folding the answer in, the result must read as **clean documentation that stands on its own**, not as a reply to the operator: drop the meta ("a fair correction…", "this answers your question…", "as you noted…") — the reader of the finished document never saw the marker. This is the right prose style when the effective collaboration mode calls for an in-place edit, including a **light-touch review**: a document carrying a few `🤖[]` markers that is *not* going through xx-fix's full docflow (§ the heavier propose/review cycle). Keep in-place edits clean rather than staging a dialogue; this style rule does not override question routing.
 
 ## Revisions
 
+- **2026-10-18** — new markers carry at most one commentary turn; continued exchange moves to a linked side doc. Readers keep old chains so existing documents and parley's parser remain valid (ariadne#444).
 - **2026-10-09** — markers are single-line; a line break inside a `[]`/`{}` turn is `<br>` (a literal one `\<br>`), decoded on resolve; anchors stay verbatim (§3 "One line", §5). Earned by parley.nvim#312, which renders markers compactly and opens chains in a thread view — both need a marker to be line-local, and agents write markers too, so the rule belongs here rather than in one editor.
 - **2026-07-22** — added the "fold into clean prose, not a narrated reply" light-touch default to §6 (earned resolving light `🤖[]` review markers on a framing doc outside the full docflow — the first-pass resolutions had leaked reply-narration into the documentation prose).

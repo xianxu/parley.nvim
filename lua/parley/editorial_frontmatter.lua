@@ -10,10 +10,10 @@ local presentations = { highlight = true, direct = true, propose = true }
 local relevant = { 'collaboration-mode', 'presentation-mode', 'presentation',
     'processing-mode', 'processing-instruction', 'process-instruction' }
 
-local function header(lines)
+local function header(lines, keys)
     local parsed, err = declarations.header(lines)
     if not parsed then return nil, err end
-    for _, key in ipairs(relevant) do
+    for _, key in ipairs(keys or relevant) do
         if parsed.fields[key] and #parsed.fields[key] > 1 then return nil, 'duplicate ' .. key .. ' field' end
     end
     return parsed
@@ -41,7 +41,7 @@ end
 
 --- Presentation can be read on repaint without loading a processing catalog.
 function M.presentation_value(lines)
-    local parsed, err = header(lines)
+    local parsed, err = header(lines, { 'presentation-mode', 'presentation' })
     if not parsed then return 'highlight', { err } end
     local value, warnings, problem = presentation(parsed)
     return value or 'highlight', warnings or { problem }
@@ -52,7 +52,6 @@ function M.resolve(lines, modes)
     local parsed, err = header(lines)
     if not parsed then return nil, err end
     local routing, route_err = collaboration.resolve(lines)
-    if not routing then return nil, route_err end
     local shown, warnings, shown_err = presentation(parsed)
     if not shown then return nil, shown_err end
     local legacy, legacy_err = scalar(parsed, 'process-instruction', true)
@@ -65,7 +64,12 @@ function M.resolve(lines, modes)
     if text_err then return nil, text_err end
     local names = selected ~= nil and { selected } or (#old.names > 0 and old.names or { instruction.DEFAULT_MODE })
     local resolved, resolve_err = instruction.resolve(names, modes)
-    if not resolved then return nil, 'processing-mode: ' .. resolve_err end
+    if not resolved or not routing then
+        local errors = {}
+        if resolve_err then errors[#errors + 1] = 'processing-mode: ' .. resolve_err end
+        if route_err then errors[#errors + 1] = route_err end
+        return nil, table.concat(errors, '; ')
+    end
     if #old.names > 1 then
         warnings[#warnings + 1] = 'legacy process-instruction has several modes; all briefs remain readable'
     end
@@ -108,6 +112,8 @@ function M.fill(lines, modes)
     end
     result.patch = { first = first, last = first, lines = insertion }
     for index = #insertion, 1, -1 do table.insert(result.lines, first + 1, insertion[index]) end
+    local projected, projected_error = declarations.header(result.lines)
+    if not projected then return nil, projected_error end
     return result
 end
 

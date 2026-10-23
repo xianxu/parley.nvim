@@ -84,7 +84,9 @@ end
 --- @param buf number
 function M.refresh(buf)
     if not vim.api.nvim_buf_is_valid(buf) then return end
-    if presentation.value(lines_of(buf)) ~= "highlight" then
+    local value, warnings = presentation.value(lines_of(buf))
+    for _, warning in ipairs(warnings) do vim.notify("parley: " .. warning, vim.log.levels.WARN) end
+    if value ~= "highlight" then
         M.clear(buf)
         return
     end

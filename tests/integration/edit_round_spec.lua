@@ -66,6 +66,19 @@ describe("edit_round", function()
         vim.fn.delete(root, "rf")
     end)
 
+    it("warns visibly and highlights for an unknown canonical presentation", function()
+        open({ '---', 'presentation-mode: typo', 'presentation: direct', '---', 'first change' })
+        seed({ span(4, 0, 'first') })
+        local notify, notices = vim.notify, {}
+        vim.notify = function(message) notices[#notices + 1] = message end
+        local ok, err = pcall(function()
+            assert.is_true(refreshed(1))
+            assert.truthy(table.concat(notices, ';'):find('unknown value typo', 1, true))
+        end)
+        vim.notify = notify
+        assert.is_true(ok, tostring(err))
+    end)
+
     it("draws each span with its reason, or 'changed by the agent' without one (rows 29, 33b)", function()
         open({ "# Doc", "first change", "second change" })
         seed({ span(1, 0, "first", "tighter"), span(2, 0, "second") })

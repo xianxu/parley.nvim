@@ -3,7 +3,8 @@
 In a Couch pane, the first Alt+Return in a named Markdown document saves it,
 registers it with Couch, attaches the existing session-sync turn engine and sends
 `submitted: <absolute path>` (#332). Registration supplies a stable document ID;
-no `type`, owner or instruction frontmatter is added or changed. Opening a
+missing editorial mode keys are filled before save (#418), preserving existing values.
+No type or owner metadata is injected. Opening a
 registered file restores that identity through a bounded registry lookup. A
 positive null lookup proves a file plain; lookup failure leaves membership
 unknown. Plain files take no session-sync lock or watcher before admission.
@@ -30,7 +31,7 @@ couch-owner: ops:0
 | Key | Action |
 |---|---|
 | `<M-CR>` in a Couch pane | Save and register on first submit; confirm identity, release the operator lock and send `submitted: <absolute path>` on later submits. An unresolved pane agent or uncertain mutation keeps submission pending. |
-| `<M-CR>` outside a Couch pane | Existing [review behavior](review.md#altreturn-process-instruction-and-the-slot-send-316), including the typed legacy session-sync path. |
+| `<M-CR>` outside a Couch pane | Existing [review behavior](review.md#altreturn-editorial-settings-and-submission-418-322), including the typed legacy session-sync path. |
 
 **Offline membership.** Unknown/unavailable Couch membership stays editable,
 with the exact band `Couch unavailable: agentic state unknown`. Parley never
@@ -376,13 +377,14 @@ remains the single edit-turn, watch, baseline/undo, ping and rendering engine.
 Dispatch and keys live in `setup_markdown_keymaps` (`lua/parley/init.lua`). The maintainer real/fake registry
 probe is documented in [TOOLING](../../TOOLING.md).
 
-### The agent's round and `presentation:` (#383)
+### The agent's round and presentation (#383, #418)
 
 Couch keeps the change an agent's last write made, as its round (pair#661).
 Spans hold 0-based `[line, byte column]` positions in the written file, the
-old and new text, and an optional `explain`. A document's `presentation:`
-frontmatter key (`direct` | `highlight` | `propose`; missing or unknown means
-`highlight`, as Couch reads it) says how parley shows the round. The pure
+old and new text, and an optional `explain`. A document's `presentation-mode:`
+frontmatter key selects direct, highlight or propose. Deprecated presentation is
+the fallback when the canonical key is absent. Missing, empty or unknown values
+mean highlight; unknown values warn. The pure
 `presentation.lua` reads the key and places the spans. It places a span where
 Couch says only when the buffer's hash is the round's `result_hash` and the
 text is there. Otherwise it re-finds the span by its new text, nearest its old

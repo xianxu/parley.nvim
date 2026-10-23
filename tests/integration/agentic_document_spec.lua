@@ -8,6 +8,12 @@ describe("agentic markdown admission", function()
         stream:close()
         return bytes
     end
+    local function body_row(content)
+        for index, line in ipairs(content or vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line == "# Question" then return index end
+        end
+        error("fixture question heading is missing")
+    end
     -- An end-to-end admission can include lookup, actor resolution, register,
     -- send and scheduled completions. Each production request keeps its own
     -- deadline; the test budget also permits suite-wide process contention.
@@ -119,7 +125,7 @@ describe("agentic markdown admission", function()
         it("a send past the deadline: not confirmed, a press joins it, and the identical resubmit sends nothing", function()
             with_timeouts(1000, 5000)
             local before = registered()
-            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "second thought" })
+            vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "second thought" })
             -- Past the 1 s submit deadline, inside the send's own three (#400).
             vim.env.FAKE_COUCH_SLEEP = "2"
             submit()
@@ -141,7 +147,7 @@ describe("agentic markdown admission", function()
             local before = registered()
             local logger, warn, logged = require("parley.logger"), nil, {}
             warn, logger.warning = logger.warning, function(msg) logged[#logged + 1] = msg end
-            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "wedged" })
+            vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "wedged" })
             vim.env.FAKE_COUCH_SLEEP = "30"
             local ok, err = pcall(function()
                 submit()
@@ -162,7 +168,7 @@ describe("agentic markdown admission", function()
         it("a registry stage past the deadline keeps the operator's lock; the next press submits once", function()
             with_timeouts(1000, 5000)
             local before = registered()
-            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "third thought" })
+            vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "third thought" })
             await(function() return vim.fn.filereadable(file .. ".lock") == 1 end)
             vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "3"
             submit()
@@ -329,16 +335,17 @@ describe("agentic markdown admission", function()
         end)
     end)
 
-    it("opens plain, then saves registers and submits without changing frontmatter", function()
+    it("opens plain, then fills missing editorial settings and saves registers and submits", function()
         await(function() return document.status(buf).phase == "plain" end)
         assert.equals(0, vim.fn.filereadable(file .. ".lock"))
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "edited question" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "edited question" })
         submit()
         await_submitted()
         assert.equals("submitted: " .. file, table.concat(vim.fn.readfile(root .. "/sent.last"), "\n"))
-        assert.same({ "---", "owner: business-team", "---", "# Question", "edited question", "tail" }, vim.fn.readfile(file))
+        assert.same({ "---", "owner: business-team", "collaboration-mode: discussion", "presentation-mode: highlight",
+            "processing-mode: free-form", "---", "# Question", "edited question", "tail" }, vim.fn.readfile(file))
         assert.equals("ops:0", document.identity(buf).Owner)
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "next edit" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "next edit" })
         await(function() return vim.fn.filereadable(file .. ".lock") == 1 end)
     end)
     it("leaves unknown editable then recovers outstanding auto-saved edits into a turn", function()
@@ -353,7 +360,7 @@ describe("agentic markdown admission", function()
         await(function() return document.status(buf).phase == "unknown" end)
         assert.is_true(vim.bo[buf].modifiable)
         assert.truthy(vim.wo.winbar:find("Couch unavailable: agentic state unknown", 1, true))
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "operator ahead" }); vim.cmd("silent write")
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "operator ahead" }); vim.cmd("silent write")
         assert.is_false(vim.bo[buf].modified)
         assert.equals(0, vim.fn.filereadable(file .. ".lock"))
         vim.env.FAKE_COUCH_REGISTRY_MODE = nil
@@ -369,7 +376,7 @@ describe("agentic markdown admission", function()
         vim.cmd("edit " .. vim.fn.fnameescape(file)); buf = vim.api.nvim_get_current_buf()
         require("parley").setup_markdown_keymaps(buf)
         assert.equals("ops:0", document.identity(buf).Owner)
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "offline edit" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "offline edit" })
         assert.equals(1, vim.fn.filereadable(file .. ".lock"))
     end)
     it("treats corrupt cached entries as unknown rather than blocking editing", function()
@@ -391,7 +398,7 @@ describe("agentic markdown admission", function()
         local side = root .. "/ordinary.side"
         vim.fn.mkdir(side, "p")
         vim.fn.writefile({ "---", "parent: ../ordinary.md", "---", "[up](../ordinary.md#question)", "unrelated" }, side .. "/child.md")
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "held edit" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "held edit" })
         assert.equals(1, vim.fn.filereadable(file .. ".lock"))
         local id = document.identity(buf).ID
         local new = root .. "/renamed.md"
@@ -406,7 +413,7 @@ describe("agentic markdown admission", function()
     it("recovers an uncertain published native move before admitting the reopened path", function()
         await(function() return document.status(buf).phase == "plain" end)
         submit(); await_submitted()
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "held edit" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "held edit" })
         local new = root .. "/recovered.md"
         vim.env.FAKE_COUCH_REGISTRY_MODE = "uncertain"
         vim.cmd("saveas " .. vim.fn.fnameescape(new))
@@ -428,7 +435,7 @@ describe("agentic markdown admission", function()
             local op = document.status(buf).operation
             return op and op.witness.operation == "register"
         end)
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "typed during registration" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "typed during registration" })
         await(function() return document.status(buf).phase == "pending" end)
         assert.equals(0, vim.fn.filereadable(root .. "/sent.last"))
         vim.env.FAKE_COUCH_REGISTRY_MODE = nil
@@ -441,7 +448,7 @@ describe("agentic markdown admission", function()
             return vim.fn.filereadable(root .. "/sent.last") == 1 and status.phase == "registered" and not status.operation
         end)
         assert.equals(1, #vim.fn.readfile(root .. "/sent"))
-        assert.equals("typed during registration", vim.fn.readfile(file)[5])
+        assert.equals("typed during registration", vim.fn.readfile(file)[body_row() + 1])
         assert.is_false(vim.bo[buf].modified)
     end)
     it("confirms a newly saved couch-owner override before routing a registered submit", function()
@@ -458,7 +465,7 @@ describe("agentic markdown admission", function()
     it("retires confirmed absent registration after preserving its existing operator lock", function()
         await(function() return document.status(buf).phase == "plain" end)
         submit(); await_submitted()
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "unsent edit" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "unsent edit" })
         local forgot = vim.system({ "couch", "--session-sync", "forget", file, "--json" }, { text = true }):wait(2000)
         assert.equals(0, forgot.code)
         document.recheck(buf)
@@ -569,16 +576,16 @@ describe("agentic markdown admission", function()
         vim.api.nvim_exec_autocmds("BufWinEnter",{buffer=buf})
         await(function() local status=document.status(buf); return status.phase == "registered" and not status.operation end)
         assert.equals(submitted_bar,feedback_bar():match("%%#DiagnosticOk#(.*)%%=$"),"refresh, lookup and plain write must retain submission feedback")
-        vim.api.nvim_buf_set_lines(buf,4,5,false,{"next operator edit"})
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1,false,{"next operator edit"})
         assert.is_false(success_feedback(),"operator edit must clear prior submission feedback")
         submit()
         await_submitted()
         assert.is_true(success_feedback(),feedback_bar())
         local answer=vim.fn.readfile(file)
-        answer[5]="agent reply after submission"
+        answer[body_row(answer) + 1]="agent reply after submission"
         vim.fn.writefile(answer,file)
         vim.cmd("checktime")
-        await(function() return vim.api.nvim_buf_get_lines(buf,4,5,false)[1] == answer[5] end)
+        await(function() return vim.api.nvim_buf_get_lines(buf, body_row(), body_row() + 1,false)[1] == answer[body_row(answer) + 1] end)
         assert.is_false(success_feedback(),"observed agent write must clear submission feedback")
     end)
 
@@ -599,7 +606,7 @@ describe("agentic markdown admission", function()
         await(function() return document.status(buf).phase == "plain" end)
         submit()
         await_submitted()
-        vim.api.nvim_buf_set_lines(buf,4,5,false,{"unsent owner-confirmation edit"})
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1,false,{"unsent owner-confirmation edit"})
         local old_payload=sent_payload()
         local old_deliveries=vim.fn.readfile(root .. "/sent")
         vim.env.FAKE_COUCH_REGISTRY_MODE="unsupported"
@@ -661,7 +668,7 @@ describe("agentic markdown admission", function()
         submit(); await(settled)
         assert.truthy(feedback_bar():find("resent to ops:0 · %d%d:%d%d"), feedback_bar())
         assert.equals(2, #deliveries())
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "changed after receipt" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "changed after receipt" })
         vim.cmd("silent write") -- immediate auto-save does not advance the receipt
         submit(); await(settled)
         assert.is_true(success_feedback(), feedback_bar())
@@ -742,7 +749,7 @@ describe("agentic markdown admission", function()
         end
         submit()
         await(function() return finish ~= nil end)
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "new unsent edit while delivery pending" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "new unsent edit while delivery pending" })
         finish(); await(settled)
         assert.is_false(success_feedback(), feedback_bar())
         assert.equals(1, vim.fn.filereadable(file .. ".lock"), "late delivery must not release a newer edit turn")
@@ -766,10 +773,10 @@ describe("agentic markdown admission", function()
         submit()
         await(function() return finish ~= nil end)
         local answer = vim.fn.readfile(file)
-        answer[5] = "agent wrote before delivery callback"
+        answer[body_row(answer) + 1] = "agent wrote before delivery callback"
         vim.fn.writefile(answer, file)
         vim.cmd("checktime")
-        await(function() return vim.api.nvim_buf_get_lines(buf, 4, 5, false)[1] == answer[5] end)
+        await(function() return vim.api.nvim_buf_get_lines(buf, body_row(), body_row() + 1, false)[1] == answer[body_row(answer) + 1] end)
         finish(); await(settled)
         assert.is_false(success_feedback(), feedback_bar())
         couch.run = production_run
@@ -899,7 +906,7 @@ describe("agentic markdown admission", function()
         local target=root .. "/membership-target.md"
         assert.is_false(pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target)))
         assert_refused_before_move(target,old_lines,side_lines)
-        vim.api.nvim_buf_set_lines(buf,4,5,false,{"editing remains available"})
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1,false,{"editing remains available"})
         assert.is_true(vim.bo[buf].modified)
         held.release()
     end)
@@ -934,7 +941,6 @@ describe("agentic markdown admission", function()
     it("cannot bypass an issued registration by native renaming before its completion", function()
         await(function() return document.status(buf).phase == "plain" end)
         local _,side_lines=side_fixture()
-        local old_lines=vim.fn.readfile(file)
         local held=hold_next_process_reply(function(argv)
             return argv[2] == "--session-sync" and argv[3] == "register" and argv[4] == file
         end)
@@ -942,6 +948,7 @@ describe("agentic markdown admission", function()
         await(function() return held.release ~= nil end)
         assert.is_nil(document.identity(buf))
         assert.equals("register",document.status(buf).operation.witness.operation)
+        local old_lines=vim.fn.readfile(file) -- preparation has already saved its additions
         local target=root .. "/membership-target.md"
         assert.is_false(pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target)))
         assert_refused_before_move(target,old_lines,side_lines)
@@ -952,11 +959,11 @@ describe("agentic markdown admission", function()
     it("cannot bypass an uncertain pending registration through native rename", function()
         await(function() return document.status(buf).phase == "plain" end)
         local _,side_lines=side_fixture()
-        local old_lines=vim.fn.readfile(file)
         vim.env.FAKE_COUCH_REGISTRY_MODE="uncertain"
         submit()
         await(function() return document.status(buf).phase == "pending" end)
         assert.is_nil(document.identity(buf))
+        local old_lines=vim.fn.readfile(file) -- preparation has already saved its additions
         local target=root .. "/membership-target.md"
         assert.is_false(pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target)))
         assert_refused_before_move(target,old_lines,side_lines)
@@ -1017,7 +1024,6 @@ describe("agentic markdown admission", function()
     it("public membership refuses an issued registration before the fake publishes it", function()
         await(function() return document.status(buf).phase == "plain" end)
         local _,side_lines=side_fixture()
-        local old_lines=vim.fn.readfile(file)
         local executable,delegate=root .. "/bin/couch",root .. "/bin/couch-unblocked"
         local started,release=root .. "/register-started",root .. "/allow-register"
         local process_uv=vim.uv or vim.loop
@@ -1037,6 +1043,7 @@ describe("agentic markdown admission", function()
         assert.equals("register",document.status(buf).operation.witness.operation)
         assert.is_nil(document.identity(buf))
         assert.equals("absent",registry_result("lookup",{file}).kind,"fixture must still be before publication")
+        local old_lines=vim.fn.readfile(file) -- preparation has already saved its additions
         local target=root .. "/membership-target.md"
         -- Always release the real child, including the expected RED assertion.
         local ok,err=pcall(function()
@@ -1051,12 +1058,12 @@ describe("agentic markdown admission", function()
     it("public membership does not discard an uncertain pending registration merely because lookup now confirms it", function()
         await(function() return document.status(buf).phase == "plain" end)
         local _,side_lines=side_fixture()
-        local old_lines=vim.fn.readfile(file)
         vim.env.FAKE_COUCH_REGISTRY_MODE="uncertain"
         submit()
         await(function() return document.status(buf).phase == "pending" end)
         assert.is_nil(document.identity(buf))
         assert.equals("registered",registry_result("lookup",{file}).kind)
+        local old_lines=vim.fn.readfile(file) -- preparation has already saved its additions
         local target=root .. "/membership-target.md"
         assert_public_move_busy(target)
         assert_refused_before_move(target,old_lines,side_lines)

@@ -11,6 +11,22 @@ local function round(spans)
 end
 
 describe("presentation.value", function()
+    it("reads canonical presence and reports unknown values without consulting a shadowed alias", function()
+        for _, value in ipairs({ 'direct', 'propose', '', 'unknown' }) do
+            local actual, warnings = presentation.value({ '---', 'presentation: propose',
+                'presentation-mode: ' .. value, '---' })
+            assert.equals((value == '' or value == 'unknown') and 'highlight' or value, actual)
+            assert.is_table(warnings)
+            if value == 'unknown' then assert.truthy(table.concat(warnings, ';'):find('unknown', 1, true)) end
+        end
+    end)
+
+    it("does not let an unrelated processing error change presentation", function()
+        local actual = presentation.value({ '---', 'presentation-mode: direct',
+            'processing-mode: free-form', 'processing-mode: copy-editing', '---' })
+        assert.equals('direct', actual)
+    end)
+
     it("reads the key, and highlights when it is missing, unknown or unclosed", function()
         assert.equals("highlight", presentation.value({ "# no frontmatter" }))
         assert.equals("propose", presentation.value({ "---", "presentation: propose", "---" }))

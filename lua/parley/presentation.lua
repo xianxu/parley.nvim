@@ -1,28 +1,24 @@
 -- Presentation (#383): how a document shows the agent's last round, read from
--- its `presentation:` key, and where that round's spans land in the buffer.
+-- its effective `presentation-mode:` key, and where that round's spans land in the buffer.
 -- PURE: plain line tables in, plain tables out; edit_round draws them.
 --
 -- A round is Couch's sidecar (pair#661): spans with 0-based [line, byte column]
 -- positions in the file the agent wrote. Couch's positions are untrusted input:
 -- a span that doesn't check out against the lines is re-found by its text or
 -- dropped, never clamped into a wrong place.
-local frontmatter = require("parley.frontmatter")
+local editorial = require("parley.editorial_frontmatter")
 
 local M = {}
 
 -- The most spans one round places; edit_round says so when a round has more.
 M.MAX_SPANS = 200
 
-local KNOWN = { direct = true, highlight = true, propose = true }
-
 --- The document's presentation: direct, highlight or propose. A missing or
 --- unknown value is highlight, as Couch reads it.
 --- @param lines string[]
 --- @return string
 function M.value(lines)
-    local fm = frontmatter.parse(lines)
-    local value = fm and fm.fields.presentation
-    return KNOWN[value] and value or "highlight"
+    return editorial.presentation_value(lines)
 end
 
 -- Byte offset of each line's first byte in the lines joined by "\n".

@@ -551,7 +551,7 @@ class ExportTest(unittest.TestCase):
         self.api.validate_manifest(manifest)
         self.assertEqual(['collaboration-modes.md'],
                          [m['path'] for m in manifest['members'] if m['role'] == 'collaboration-modes'])
-        self.assertEqual(2, manifest['version'])
+        self.assertEqual(3, manifest['version'])
         cases = {m['name'] for m in manifest['members'] if m['role'] == 'fixture'}
         self.assertEqual({'move-rename', 'move-orphan'}, cases)
         for case in cases:

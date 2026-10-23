@@ -1,5 +1,5 @@
 -- Alt+Return submits Couch documents through S1's registered coordinator.
--- Outside Couch, process-instruction selects the local inline review.
+-- Outside Couch, effective editorial settings select the local inline review.
 -- This module owns no peer transport, payload builder or diff baseline.
 
 local frontmatter = require("parley.frontmatter")
@@ -53,45 +53,36 @@ end
 
 --- <M-CR> in a markdown buffer.
 M.submit = function(buf)
-	if require("parley.agentic_document").submit(buf) then return end
-	if require("parley.session_sync").is_session_sync(buf) then
-		require("parley.session_sync").submit(buf)
-		return
-	end
-	if vim.api.nvim_buf_get_name(buf) == "" then
-		notify("save the file first: the agent reads it from disk", vim.log.levels.ERROR)
-		return
-	end
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local routing, routing_error = require('parley.skills.review.collaboration').resolve(lines)
-	local value = M.instruction_value(lines)
-	if value == nil then
-		if not routing then notify(routing_error, vim.log.levels.ERROR); return end
-		vim.ui.input({ prompt = M.KEY .. ": " }, function(answer)
-			if not answer or vim.trim(answer) == "" or not vim.api.nvim_buf_is_valid(buf) then
-				return
-			end
-			local p = M.placement(vim.api.nvim_buf_get_lines(buf, 0, -1, false), vim.trim(answer))
-			if not require("parley.buffer_edit").edit_user_lines("ReviewSend", buf, p.first, p.last, p.lines) then
-				return -- not written, so not sent (#265)
-			end
-			M.submit(buf)
-		end)
-		return
-	end
-	local expanded, err = instruction.expand(value, modes())
-	if not expanded or not routing then
-		local errors = {}
-		if err then errors[#errors + 1] = err end
-		if routing_error then errors[#errors + 1] = routing_error end
-		notify(table.concat(errors, '; '), vim.log.levels.ERROR)
-		return
-	end
-    local names = {}
-    for _, m in ipairs(expanded.modes) do
-        names[#names + 1] = m.name
+    if require("parley.agentic_document").submit(buf) then return end
+    if vim.api.nvim_buf_get_name(buf) == "" then
+        notify("save the file first: the agent reads it from disk", vim.log.levels.ERROR)
+        return
     end
-    require("parley.skills.review").run_via_invoke(buf, { modes = names, instruction = expanded.text })
+    local projection, err = require("parley.editorial_prepare").prepare(buf, "ReviewSend")
+    if not projection then notify(err, vim.log.levels.ERROR); return end
+    for _, warning in ipairs(projection.settings.warnings) do notify(warning, vim.log.levels.WARN) end
+    if require("parley.session_sync").is_session_sync(buf) then
+        require("parley.session_sync").submit(buf)
+        return
+    end
+    local saved, save_error = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent write") end)
+    if not saved or not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].modified then
+        notify("save failed: " .. tostring(save_error or "document remains modified"), vim.log.levels.ERROR)
+        return
+    end
+    local path = vim.api.nvim_buf_get_name(buf)
+    path = (vim.uv or vim.loop).fs_realpath(path) or path
+    if path ~= projection.path
+        or vim.fn.sha256(vim.json.encode(vim.api.nvim_buf_get_lines(buf, 0, -1, false))) ~= projection.after_hash then
+        notify("submit cancelled: document changed while saving", vim.log.levels.WARN)
+        return
+    end
+    local names = {}
+    for _, mode in ipairs(projection.settings.modes) do names[#names + 1] = mode.name end
+    notify("local review: using " .. table.concat(names, ", ") .. " (outside Couch)")
+    require("parley.skills.review").run_via_invoke(buf, {
+        modes = names, instruction = projection.settings.instruction,
+    })
 end
 
 --------------------------------------------------------------------------------

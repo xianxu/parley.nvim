@@ -351,13 +351,34 @@ local function execute(s, effects)
         elseif kind == "flush_queued" then
             -- #378: the model released a press it held; drop_queued needs nothing.
             M.submit(s.buf)
+        elseif kind == "prepare" then
+            local projection, err = require("parley.editorial_prepare").project(s.buf)
+            if projection then
+                for _, warning in ipairs(projection.settings.warnings or {}) do notify(warning) end
+            end
+            dispatch(s, { type = "projected", witness = effect.witness, ok = projection ~= nil, error = err,
+                projection = projection, before_hash = projection and projection.before_hash,
+                after_hash = projection and projection.after_hash, noop = projection and not projection.changed,
+                current_hash = hash(s.buf) })
+        elseif kind == "apply_preparation" then
+            local operation = s.model.snapshot().operation
+            if operation and vim.deep_equal(operation.witness, effect.witness)
+                and operation.preparation and operation.preparation.stage == "awaiting-edit"
+                and s.incarnation == effect.witness.incarnation then
+                local ok, err = require("parley.editorial_prepare").apply(s.buf, effect.projection, "submit")
+                if valid(s) and s.incarnation == effect.witness.incarnation then
+                    dispatch(s, { type = "prepared", witness = effect.witness, ok = not not ok,
+                        error = not ok and err or nil, current_hash = hash(s.buf) })
+                end
+            end
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
             if ss.is_session_sync(s.buf) then ok, err = ss.prepare_submit(s.buf)
             else ok, err = pcall(vim.api.nvim_buf_call, s.buf, function() vim.cmd("stopinsert"); vim.cmd("silent write") end) end
             if ok then s.saved_hash = hash(s.buf) end
-            dispatch(s, { type = "saved", witness = effect.witness, ok = not not ok, error = err, hash = s.saved_hash })
+            dispatch(s, { type = "saved", witness = effect.witness, ok = not not ok,
+                error = not ok and ("save failed: " .. tostring(err)) or nil, hash = s.saved_hash })
         elseif kind == "attach" then adopt(s, effect.registration)
         elseif kind == "resubmit" then
             end_submit(s)
@@ -424,6 +445,10 @@ local function execute(s, effects)
             notify(message)
         elseif kind == "cancel" then
             if s.request then s.request.cancel(); s.request = nil end
+            if effect.witness.operation == "prepare" then
+                end_submit(s)
+                show_feedback(s, "submit cancelled: document changed during preparation; Alt+Return retries", true)
+            end
         end
     end
 end
@@ -477,8 +502,16 @@ function M.attach(buf)
                         s.baseline = s.baseline or previous
                         s.outstanding = s.content ~= s.baseline
                     end
-                    local phase = s.model.snapshot().phase
-                    if phase == "busy" then dispatch(s, { type = "changed" }) end
+                    local snapshot = s.model.snapshot()
+                    if snapshot.phase == "busy" then
+                        local operation = snapshot.operation
+                        if operation and operation.witness.operation == "prepare" then
+                            dispatch(s, { type = "preparation_edit", witness = operation.witness,
+                                before_hash = previous, after_hash = s.content,
+                                path = canonical(vim.api.nvim_buf_get_name(buf)), namespace = namespace(),
+                                incarnation = s.incarnation })
+                        else dispatch(s, { type = "changed" }) end
+                    end
                 end
             end,
             on_reload = function()

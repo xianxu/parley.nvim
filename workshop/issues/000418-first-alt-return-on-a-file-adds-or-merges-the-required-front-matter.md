@@ -82,6 +82,20 @@ Authenticated TL delivery 464b8701-86f6-4d63-92fe-4a8d7893b928 approved the exac
 
 Recovery gap: previous TTY capture is unavailable. Git branch, this Log, gate ledger and the current diff establish the resumed state. Next: finish native exact-edit preparation, migrate whole-document presentation/local-review readers, extend malformed/limit/growth and interruption coverage, then run the required recorded check and close review. Live acceptance still needs the hub-scheduled operator session-document check. Authenticated pair:9 schema notice 7f759ac0-0451-4860-82a6-e2589d0103fc is reserved for #419: optional per-span presentation direct/highlight/propose, absent falls back to round presentation then highlight; #418 remains whole-document.
 
+
+### 2026-10-23 — witnessed native preparation and reader migration
+
+Native preparation now executes through the existing operation and real on_lines observer: compact projection, exact path/changedtick/preimage/postimage proof, one authorized insertion, then ordinary save. The helper's combined check passed 9 native and 57 model cases on Neovim 0.12.5 and 0.11.7 with clean terminal process censuses. Parent review verified the model keeps only the compact insertion/settings, not full document/header/routing snapshots. Presentation canonical precedence passed 13 unit cases; local/default/canonical review and route protections passed 23 integration cases; edit-round warned highlight fallback passed 10 cases. These targeted passes precede remaining generated-property/compatibility work and are not final suite evidence.
+
+A complete-header budget test exposed that the opening fence's four bytes were omitted. Input and projected output now both honor 8192 lines / 1 MiB, including fences, while large bodies remain accepted. Six pure settings cases including N/2N counted VM work are green. The source export snapshot was refreshed through the normal generator from landed producer main (no fixture/API invention). Next: finish adversarial and legacy fixture adaptations, verify both runtimes and protocol/lint, checkpoint/push and run the required recorded suite; then binary-owned close review and hub-scheduled live acceptance. No PR/landing has been requested yet.
+
+
+### 2026-10-23 — generated properties and compatibility checkpoint
+
+Generated settings coverage is now 13 cases: component-wise precedence, selector exact/prefix/ambiguity, quoting/comments, duplicate relevant keys, malformed roots, multi-mode readability/atomic refusal, case consistency, complete-header bounds and counted linear work. The case matrix exposed a real inconsistency: header presence normalized key case but collaboration reading matched exact case; matching now uses the same normalized identity. Property RED was 12 pass/1 fail, then all 13 passed. Export refresh is exactly generator-reproducible; its standalone test now expects the landed schema v3, and all 25 Python export tests pass. Shipped-mode assertions were updated for v3's retired deletions flag, preserving v2 synthetic compatibility tests. make lint passed all 834 files with zero warnings/errors.
+
+Preferred mapped review now exits 0. Preferred mapped session-sync found only four stale owned-move fixture row assumptions; all four were corrected to locate body headings without weakening race/lock/journal/tree assertions, and the complete owned-move target passed 43 cases. Earlier admission/lifetime adaptation passed 48 + 10 cases. Alternate-runtime mapped review/session-sync and architecture guards remain queued/running, as do two disposable in-memory mutation-control runs (no product source edits). Exact next step: collect those results, resolve any genuine failure, commit/push final verified code and run the required recorded suite, then close review/live acceptance. This checkpoint contains implementation plus its tested focused evidence; it does not claim final acceptance.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

@@ -219,7 +219,7 @@ end
 --- never rewritten. Limits cover interactive metadata, not the document body.
 function M.header(lines)
     if lines[1] ~= "---" then return { entries = {}, fields = {}, scanned = 0 } end
-    local close, size = nil, 0
+    local close, size = nil, #lines[1] + 1
     for row = 2, #lines do
         size = size + #lines[row] + 1
         if row > 8192 or size > 1024 * 1024 then
@@ -265,7 +265,7 @@ local function parse(lines)
     if not fm then fail("frontmatter is not closed") end
     local field
     for _, entry in ipairs(root_fields(lines, fm.close)) do
-        if entry.key == "collaboration-mode" then
+        if entry.key:lower() == "collaboration-mode" then
             if field then fail("duplicate collaboration-mode field") end
             field = entry
         end

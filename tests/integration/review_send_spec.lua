@@ -37,6 +37,11 @@ describe("review_send", function()
     local function has(text, needle) return text:find(needle, 1, true) ~= nil end
 
     local function set_line(n, text)
+        -- These edits target the body even after additive header preparation.
+        if n == 5 then
+            local current = lines()
+            n = #current
+        end
         vim.api.nvim_buf_set_lines(buf, n - 1, n, false, { text })
     end
 
@@ -90,7 +95,7 @@ describe("review_send", function()
         end))
     end
 
-    it("saves then registers before one submitted notification without injecting instructions", function()
+    it("saves filled settings then registers before one submitted notification", function()
         open(doc)
         set_line(5, "- a, edited")
         alt_return()
@@ -98,7 +103,7 @@ describe("review_send", function()
         assert.equals("ariadne:2|submitted: " .. file, sent()[1])
         assert.equals("submitted: " .. file, last())
         assert.same(lines(), vim.fn.readfile(file))
-        assert.equals("- a, edited", vim.fn.readfile(file)[5])
+        assert.equals("- a, edited", vim.fn.readfile(file)[#lines()])
         assert.is_false(vim.bo[buf].modified)
         local registered = vim.json.decode(table.concat(vim.fn.readfile(root .. "/registry.json"), "\n"))
         assert.equals("ariadne:2", registered.paths[file].Owner)
@@ -149,7 +154,7 @@ describe("review_send", function()
         alt_return()
         delivered(1)
         assert.equals("ariadne:2|submitted: " .. file, sent()[1])
-        assert.same({ "# notes" }, lines())
+        assert.same({ "---", "collaboration-mode: discussion", "presentation-mode: highlight", "processing-mode: free-form", "---", "", "# notes" }, lines())
     end)
 
     it("journal Markdown uses the pane mapping without inserting review instructions", function()
@@ -158,7 +163,32 @@ describe("review_send", function()
         alt_return()
         delivered(1)
         assert.equals("ariadne:2|submitted: " .. file, sent()[1])
-        assert.same({ "---", "type: journal", "---", "# private notes" }, lines())
+        assert.same({ "---", "type: journal", "collaboration-mode: discussion", "presentation-mode: highlight", "processing-mode: free-form", "---", "# private notes" }, lines())
+    end)
+
+    it("outside Couch fills and saves defaults with an explicit local outcome and no prompt", function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+        local messages = {}
+        vim.notify = function(msg) messages[#messages + 1] = msg end
+        vim.ui.input = function() error('default submit must not prompt') end
+        open({ '# notes' })
+        alt_return()
+        assert.is_not_nil(invoked)
+        assert.same({ modes = { 'free-form' }, instruction = '' }, invoked.args)
+        assert.same(lines(), vim.fn.readfile(file))
+        assert.truthy(table.concat(messages, '\n'):find('local review', 1, true))
+        assert.same({}, sent())
+    end)
+
+    it("outside Couch reads canonical processing components independently of aliases", function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+        open({ '---', 'processing-mode: proofreading', 'processing-instruction: Canonical text',
+            'process-instruction: "[copy-edit] Legacy text"', '---', 'body' })
+        alt_return()
+        assert.is_not_nil(invoked)
+        assert.same({ modes = { 'proofreading' }, instruction = 'Canonical text' }, invoked.args)
+        assert.same(lines(), vim.fn.readfile(file))
+        assert.same({}, sent())
     end)
 
     it("outside pair: no couch call; the review round runs here with the instruction", function()
@@ -184,15 +214,16 @@ describe("review_send", function()
         assert.same({}, sent())
     end)
 
-    it("Couch forwards a long unknown process instruction unchanged in the file", function()
+    it("Couch retains a long legacy instruction when the canonical mode is already selected", function()
         local value = "[unknown-mode] " .. string.rep("operator text ", 800)
-        local document = { "---", 'process-instruction: "' .. value .. '"', "---", "body" }
+        local document = { "---", 'process-instruction: "' .. value .. '"', "processing-mode: free-form", "---", "body" }
         vim.ui.input = function() error("Couch submit must not prompt") end
         open(document)
         alt_return()
         delivered(1)
         assert.equals("submitted: " .. file, last())
-        assert.same(document, vim.fn.readfile(file))
+        assert.equals(document[2], lines()[2])
+        assert.equals("processing-instruction: " .. string.rep("operator text ", 800):gsub("%s+$", ""), lines()[6])
         assert.is_nil(invoked)
     end)
 
@@ -251,30 +282,30 @@ describe("review_send", function()
         assert.truthy(text:find('unknown collaboration mode bad', 1, true))
     end)
 
-    it("no process-instruction submits unchanged Markdown without prompting", function()
+    it("plain Markdown fills all three defaults and submits without prompting", function()
         vim.ui.input = function() error("pane submission must not prompt") end
         open({ "# notes", "- a" })
         alt_return()
         delivered(1)
-        assert.same({ "# notes", "- a" }, lines())
+        assert.same({ "---", "collaboration-mode: discussion", "presentation-mode: highlight", "processing-mode: free-form", "---", "", "# notes", "- a" }, lines())
         assert.equals("submitted: " .. file, last())
     end)
 
-    it("existing frontmatter remains unchanged on pane submission", function()
+    it("existing frontmatter receives missing settings on pane submission", function()
         vim.ui.input = function() error("pane submission must not prompt") end
         open({ "---", "title: t", "---", "body" })
         alt_return()
         delivered(1)
-        assert.same({ "---", "title: t", "---", "body" }, lines())
+        assert.same({ "---", "title: t", "collaboration-mode: discussion", "presentation-mode: highlight", "processing-mode: free-form", "---", "body" }, lines())
     end)
 
-    it("a cancelled outside-pane prompt changes nothing and sends nothing", function()
+    it("outside-pane submission uses defaults instead of a legacy prompt", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         vim.ui.input = function(_, cb) cb(nil) end
         open({ "# notes" })
         alt_return()
-        vim.wait(100)
-        assert.same({ "# notes" }, lines())
+        assert.is_not_nil(invoked)
+        assert.same(lines(), vim.fn.readfile(file))
         assert.same({}, sent())
     end)
 

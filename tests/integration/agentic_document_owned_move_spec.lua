@@ -4,6 +4,12 @@ local arrival = require("tests.helpers.arrival")
 describe("registered ordinary Markdown through Parley move doors", function()
     local root, source, destination, file, buf, saved, p, document, registration
     local uv = vim.uv or vim.loop
+    local function body_row(content)
+        for index, line in ipairs(content or vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line == "# Question" or line == "# Body" then return index end
+        end
+        error("fixture body heading is missing")
+    end
     local function await(predicate)
         assert.is_true(vim.wait(arrival.MS, predicate, 10), "registered document operation did not finish")
     end
@@ -144,7 +150,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
                 it("refuses overlapping geometry before any effects: " .. shape.name .. " children=" .. tostring(shape.children)
                     .. " native=" .. tostring(native) .. " modified=" .. tostring(modified), function()
                     local target=overlapping_move_fixture(shape.name,shape.children)
-                    if modified then vim.api.nvim_buf_set_lines(buf,4,5,false,{"unsaved operator bytes"}) end
+                    if modified then vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1,false,{"unsaved operator bytes"}) end
                     local before=complete_tree(root)
                     local lines=vim.api.nvim_buf_get_lines(buf,0,-1,false)
                     local message
@@ -193,10 +199,10 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.same(expected, vim.fn.readfile(target))
         assert.same(expected, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
         assert.equals(0, vim.fn.filereadable(target .. ".lock"), "mechanical references do not invent an operator turn")
-        vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "edit after rewrite" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "edit after rewrite" })
         assert.equals(1, vim.fn.filereadable(target .. ".lock"), "read must retain native edit observers")
         vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
-        assert.equals("edit after rewrite", vim.fn.readfile(target)[7])
+        assert.equals("edit after rewrite", vim.fn.readfile(target)[body_row() + 1])
     end)
 
     local function interrupted_editor_move()
@@ -293,13 +299,13 @@ describe("registered ordinary Markdown through Parley move doors", function()
         local edited = false
         vim.api.nvim_create_autocmd("BufReadPost", { buffer = buf, once = true, callback = function()
             edited = true
-            vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "operator edit during recovered read" })
+            vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "operator edit during recovered read" })
         end })
         assert.is_true(document.attach(buf))
         assert.is_true(edited, "recovery must cross the real name-read autocmd")
-        assert.equals("operator edit during recovered read", vim.api.nvim_buf_get_lines(buf, 6, 7, false)[1])
+        assert.equals("operator edit during recovered read", vim.api.nvim_buf_get_lines(buf, body_row(), body_row() + 1, false)[1])
         assert.is_true(vim.bo[buf].modified)
-        assert.equals("original", vim.fn.readfile(target)[7])
+        assert.equals("original", vim.fn.readfile(target)[body_row() + 1])
         assert.equals("absent", lookup(target).kind, "interrupted editor read precedes registry rename")
         assert.equals(1, vim.fn.filereadable(target .. ".lock"))
         assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
@@ -329,13 +335,13 @@ describe("registered ordinary Markdown through Parley move doors", function()
         local edited = false
         vim.api.nvim_create_autocmd("BufReadPost", { buffer = buf, once = true, callback = function()
             edited = true
-            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "operator edit during v1 recovery" })
+            vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "operator edit during v1 recovery" })
         end })
         assert.is_true(document.attach(buf))
         assert.is_true(edited, "validated v1 recovery must cross the real name read")
-        assert.equals("operator edit during v1 recovery", vim.api.nvim_buf_get_lines(buf, 4, 5, false)[1])
+        assert.equals("operator edit during v1 recovery", vim.api.nvim_buf_get_lines(buf, body_row(), body_row() + 1, false)[1])
         assert.is_true(vim.bo[buf].modified)
-        assert.equals("original", vim.fn.readfile(target)[5])
+        assert.equals("original", vim.fn.readfile(target)[body_row() + 1])
         assert.equals("absent", lookup(target).kind, "v1 read refusal must precede metadata publication")
         assert.equals(1, vim.fn.filereadable(target .. ".lock"))
         assert.equals(1, vim.fn.filereadable(journal_path))
@@ -349,7 +355,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
             if vim.fn.filereadable(target) == 1
                 and table.concat(vim.fn.readfile(target), "\n"):find("spec.side", 1, true) then
                 edited = true
-                vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "operator edit during parent read" })
+                vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "operator edit during parent read" })
             end
         end })
         local ok, handled, moved, err = pcall(document.move_path, file, target)
@@ -357,9 +363,9 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.is_true(ok, tostring(handled)); assert.is_true(handled)
         assert.is_true(edited, "the real rewritten parent read must cross the autocmd")
         assert.is_nil(moved); assert.is_truthy(err)
-        assert.equals("operator edit during parent read", vim.api.nvim_buf_get_lines(buf, 6, 7, false)[1])
+        assert.equals("operator edit during parent read", vim.api.nvim_buf_get_lines(buf, body_row(), body_row() + 1, false)[1])
         assert.is_true(vim.bo[buf].modified)
-        assert.equals("original", vim.fn.readfile(target)[7])
+        assert.equals("original", vim.fn.readfile(target)[body_row() + 1])
         assert.equals("absent", lookup(target).kind, "editor refusal precedes registry rename")
         assert.equals(1, vim.fn.filereadable(target .. ".lock"))
         assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
@@ -370,13 +376,13 @@ describe("registered ordinary Markdown through Parley move doors", function()
         local target = destination .. "/spec.md"
         vim.fn.mkdir(destination .. "/spec.side", "p")
         vim.fn.writefile({ "orphan bytes" }, destination .. "/spec.side/older.md")
-        vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "unsaved native content" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "unsaved native content" })
         local ok, err = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("saveas " .. vim.fn.fnameescape(target)) end)
         assert.is_true(ok, tostring(err))
         await(function() return document.identity(buf).File == target and not document.status(buf).operation end)
         local expected = {}
         for index, line in ipairs(before) do expected[index] = line:gsub("ordinary%.side", "spec.side") end
-        expected[7] = "unsaved native content"
+        expected[body_row(before) + 1] = "unsaved native content"
         assert.same(before, vim.fn.readfile(file), "native saveas retains OLD's saved preimage")
         assert.same(expected, vim.fn.readfile(target))
         assert.same(expected, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
@@ -391,11 +397,11 @@ describe("registered ordinary Markdown through Parley move doors", function()
         local target = destination .. "/spec.md"
         local called, handled, moved, err = pcall(document.move_path, file, target)
         assert.is_true(called, tostring(handled)); assert.is_true(handled); assert.equals(target, moved, tostring(err))
-        assert.truthy(vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1]:find("spec.side", 1, true))
-        vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "saved during confirmation" })
+        assert.truthy(vim.api.nvim_buf_get_lines(buf, body_row() + 1, body_row() + 2, false)[1]:find("spec.side", 1, true))
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "saved during confirmation" })
         vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
         await(function() return document.identity(buf).File == target and not document.status(buf).operation end)
-        assert.equals("saved during confirmation", vim.fn.readfile(target)[7])
+        assert.equals("saved during confirmation", vim.fn.readfile(target)[body_row() + 1])
         assert.equals(1, vim.fn.filereadable(target .. ".lock"))
         assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
     end)
@@ -421,7 +427,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
             it(door .. " preserves registered ID, side links and held=" .. tostring(held), function()
                 seed_side()
                 if held then
-                    vim.api.nvim_buf_set_lines(buf,4,5,false,{"unsent edit"})
+                    vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1,false,{"unsent edit"})
                     assert.equals(1, vim.fn.filereadable(file .. ".lock"))
                 end
                 local moved, err = p[door](file, destination)
@@ -445,7 +451,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
                 assert.equals("registered", confirmed.kind)
                 assert.equals(registration.ID, confirmed.registration.ID)
                 assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
-                if held then assert.equals("unsent edit", vim.fn.readfile(new_path)[5]) end
+                if held then assert.equals("unsent edit", vim.fn.readfile(new_path)[body_row() + 1]) end
             end)
         end
     end
@@ -470,10 +476,10 @@ describe("registered ordinary Markdown through Parley move doors", function()
             local bar = vim.wo[vim.fn.bufwinid(buf)].winbar
             assert.truthy(bar:find("nothing to submit: no changes since %d%d:%d%d"), bar)
             assert.equals(1, #vim.fn.readfile(root .. "/sent"))
-            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "first edit after acknowledged move" })
+            vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "first edit after acknowledged move" })
             assert.equals(1, vim.fn.filereadable(moved .. ".lock"), "native edit observer must survive acknowledgement")
             vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
-            assert.equals("first edit after acknowledged move", vim.fn.readfile(moved)[5])
+            assert.equals("first edit after acknowledged move", vim.fn.readfile(moved)[body_row() + 1])
         end)
     end
 
@@ -483,7 +489,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
         vim.api.nvim_buf_set_name = function(target, path)
             set_name(target, path)
             if target == buf and path == new then
-                vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "operator edit during handoff" })
+                vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "operator edit during handoff" })
             end
         end
         local ok, moved, err = pcall(p.move_chat, file, destination)
@@ -491,9 +497,9 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.is_true(ok, tostring(moved))
         assert.is_nil(moved)
         assert.truthy(err)
-        assert.equals("operator edit during handoff", vim.api.nvim_buf_get_lines(buf, 4, 5, false)[1])
+        assert.equals("operator edit during handoff", vim.api.nvim_buf_get_lines(buf, body_row(), body_row() + 1, false)[1])
         assert.is_true(vim.bo[buf].modified)
-        assert.equals("original", vim.fn.readfile(new)[5], "non-bang acknowledgement never overwrites NEW")
+        assert.equals("original", vim.fn.readfile(new)[body_row() + 1], "non-bang acknowledgement never overwrites NEW")
         assert.equals(1, vim.fn.filereadable(new .. ".lock"))
         assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
     end)
@@ -594,7 +600,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
             return vim.wo[vim.fn.bufwinid(buf)].winbar:find("move interrupted: reopen to finish", 1, true) ~= nil
         end)
         assert.is_true(vim.bo[buf].modifiable)
-        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "editable while Couch unavailable" })
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1, false, { "editable while Couch unavailable" })
         assert.is_true(vim.bo[buf].modified)
         assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
         vim.env.FAKE_COUCH_REGISTRY_MODE = nil
@@ -652,7 +658,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
         vim.fn.writefile({"destination belongs to someone else"},target)
         vim.fn.mkdir(target_side,"p")
         vim.fn.writefile({"destination child"},target_side .. "/child.md")
-        vim.api.nvim_buf_set_lines(buf,4,5,false,{"held operator text"})
+        vim.api.nvim_buf_set_lines(buf, body_row(), body_row() + 1,false,{"held operator text"})
         local old_disk = vim.fn.readfile(file)
         local old_lock = vim.fn.readfile(file .. ".lock")
         local old_child = vim.fn.readfile(source .. "/ordinary.side/child.md")

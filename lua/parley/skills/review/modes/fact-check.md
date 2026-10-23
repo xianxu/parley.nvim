@@ -2,7 +2,6 @@
 name: fact-check
 order: 5
 scope: whole-doc
-deletions: propose-strike
 frontier: on
 ---
 Fact-check (second-opinion pass). Read the whole document as a skeptical

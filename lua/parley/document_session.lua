@@ -227,6 +227,25 @@ function M.new(context)
             state.operation, state.phase, state.receipt, state.confirmation = nil, "detached", nil, nil
             return effects
         end
+        if event.type == "preparation_edit" then
+            local operation = state.operation
+            local preparation = operation and operation.preparation
+            -- This event is an actual buffer edit, even when its candidate
+            -- witness is stale. Only the projected single edit may keep the
+            -- operation alive; all other observations use ordinary invalidation.
+            if preparation and preparation.stage == "awaiting-edit" and matching(event.witness)
+                and live(operation.witness) and event.before_hash == preparation.before_hash
+                and event.after_hash == preparation.after_hash
+                and (event.path == nil or event.path == state.path)
+                and (event.namespace == nil or event.namespace == state.namespace)
+                and (event.incarnation == nil or event.incarnation == state.incarnation) then
+                preparation.stage = "observed-edit"
+                return {}
+            end
+            local changed = copy(event)
+            changed.type = "changed"
+            return step(changed)
+        end
         if event.type == "changed" then
             local changed_context = (event.path ~= nil and event.path ~= state.path)
                 or (event.namespace ~= nil and event.namespace ~= state.namespace)
@@ -307,8 +326,10 @@ function M.new(context)
                 and event.now_ms <= confirmation.expires_at then authorization = copy(confirmation.receipt) end
             state.confirmation = nil
             state.phase = "busy"
-            return { issue("save", { owner = event.owner, previous_phase = state.registration and "registered" or "plain",
-                authorization = authorization }) }
+            local effect = issue("prepare", { owner = event.owner,
+                previous_phase = state.registration and "registered" or "plain", authorization = authorization })
+            state.operation.preparation = { stage = "planning" }
+            return { effect }
         end
         if event.type == "rename" then
             if state.operation or state.pending or not state.registration then return {} end
@@ -350,6 +371,58 @@ function M.new(context)
             end
             state.operation = nil
             state.phase = stable_phase()
+            return {}
+        end
+        if kind == "prepare" and (event.type == "projected" or event.type == "prepared") then
+            local preparation = operation.preparation
+            local function refused(message)
+                state.operation, state.phase = nil, operation.args.previous_phase
+                return notify(message or "Document preparation failed")
+            end
+            if event.type == "projected" and preparation.stage == "planning" then
+                if not event.ok then return refused(event.error) end
+                if not nonempty(event.before_hash) or not nonempty(event.after_hash)
+                    or event.current_hash ~= event.before_hash
+                    or type(event.noop) ~= "boolean"
+                    or event.noop ~= (event.before_hash == event.after_hash) then
+                    return refused("Document changed during preparation projection")
+                end
+                local projection = event.projection
+                if projection ~= nil then
+                    if type(projection) ~= "table" or projection.path ~= state.path
+                        or projection.before_hash ~= event.before_hash or projection.after_hash ~= event.after_hash
+                        or projection.changed ~= not event.noop or not finite(projection.changedtick)
+                        or projection.changedtick < 0 or not finite(projection.buf) or projection.buf <= 0 then
+                        return refused("Document preparation projection does not match its witness")
+                    end
+                    -- Keep only the compact executable patch and reader settings;
+                    -- snapshots must never clone a document postimage/header tree.
+                    local settings = projection.settings or {}
+                    preparation.projection = { buf = projection.buf, path = projection.path,
+                        changedtick = projection.changedtick, changed = projection.changed,
+                        before_hash = projection.before_hash, after_hash = projection.after_hash,
+                        patch = copy(projection.patch), settings = {
+                            modes = copy(settings.modes), instruction = settings.instruction,
+                            presentation = settings.presentation, warnings = copy(settings.warnings),
+                        } }
+                end
+                preparation.before_hash, preparation.after_hash = event.before_hash, event.after_hash
+                if event.noop then return { issue("save", operation.args) } end
+                preparation.stage = "awaiting-edit"
+                local effect = copy(operation.args)
+                effect.kind, effect.witness = "apply_preparation", copy(operation.witness)
+                effect.before_hash, effect.after_hash = preparation.before_hash, preparation.after_hash
+                effect.projection = copy(preparation.projection)
+                return { effect }
+            end
+            if event.type == "prepared" then
+                if not event.ok then return refused(event.error) end
+                if preparation.stage ~= "observed-edit" then return {} end
+                if event.current_hash ~= preparation.after_hash then
+                    return refused("Document changed during preparation edit")
+                end
+                return { issue("save", operation.args) }
+            end
             return {}
         end
         if event.type == "turn_detached" and kind == "detach_turn" then
