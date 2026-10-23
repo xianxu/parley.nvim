@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "22a5882d", done: "87795ed6"}
 ---
 
 # Zero-config chat escapes scratch in review clones
