@@ -17,11 +17,50 @@ import signal
 import subprocess
 import sys
 import time
+import shutil
 from typing import Iterable
 
 
 def acquire_lease(root: str) -> None:
     runpy.run_path(str(pathlib.Path(__file__).with_name('test-run-lease.py')))['enter'](root)
+
+
+def recorded_children(root: str, phase: str, grace: float, snapshot: bool) -> int:
+    """Use the runner's native identity/reconciliation seam, not argv clues."""
+    helper = runpy.run_path(str(pathlib.Path(__file__).with_name('test-run-lease.py')))
+    base = helper['registry_base'](root)
+    legacy = pathlib.Path(root) / '.test-processes'
+    bases = list(dict.fromkeys(path for path in (base, legacy) if os.path.lexists(path)))
+    if not bases:
+        return 0
+    runtime = os.environ.get('PARLEY_TEST_NVIM') or shutil.which('nvim')
+    if not runtime:
+        print('owned process census unknown: Neovim identity observer unavailable')
+        return 2
+    outcome = 0
+    for path in bases:
+        command = [runtime, '--clean', '--headless', '-i', 'NONE', '-l',
+                   str(pathlib.Path(__file__).with_name('test-process-census.lua')),
+                   str(path), phase, str(grace), 'snapshot' if snapshot else 'live']
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            print(f'owned process census unknown: {exc}')
+            return 2
+        print(completed.stdout, end='')
+        if completed.stderr:
+            print(completed.stderr, end='', file=sys.stderr)
+        code = completed.returncode
+        if code == 0 and 'owned process census verified\n' not in completed.stdout:
+            print('owned process census unknown: observer returned no verified verdict')
+            code = 2
+        outcome = max(outcome, code if code >= 0 else 2)
+        if code == 0 and path == legacy and path != base and not snapshot:
+            try:
+                path.rmdir()  # retire only a drained legacy container
+            except OSError:
+                pass
+    return outcome
 
 
 def parse_ps(text: str) -> list[dict[str, int | str]]:
@@ -195,10 +234,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.ps_from is None:
         acquire_lease(args.root)
+    owned_result = recorded_children(os.path.realpath(args.root), args.phase, args.grace,
+                                     args.ps_from is not None)
     text, why_not = read_process_table(args.ps_from, args.ps_command)
     if why_not == "unreadable":
         print("orphan check skipped: `ps` is unavailable here, so surviving test processes cannot be counted")
-        return 0
+        return owned_result
     self_pid = args.self_pid
     try:
         rows = validated_rows(text, self_pid)
@@ -222,18 +263,19 @@ def main(argv: list[str] | None = None) -> int:
         if selected:
             print(f"reaped {len(selected)} test process(es) left by an earlier run:")
         reap(selected, "reap", args.ps_from is None)
-        return 0
+        return owned_result
     if selected:
         print(f"LEAKED: {len(selected)} test process(es) survived the run, and are being reaped now.")
         reap(selected, "orphan", args.ps_from is None)
         return 1
-    print("clean: no surviving test processes")
-    return 0
+    if owned_result == 0:
+        print("clean: no surviving test processes")
+    return owned_result
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         print(f"BROKEN: {exc}")
         raise SystemExit(2)

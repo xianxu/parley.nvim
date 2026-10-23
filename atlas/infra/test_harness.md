@@ -190,7 +190,8 @@ the chokepoint for each process shape:
 | killed or wedged harness Neovim | `tests/helpers/exit_with_parent.lua`, installed by `tests/minimal_init.vim`, exits when the parent is gone or when the process is reparented to init |
 | fixture server or blocking fixture mode | `LoopbackHTTPServer` installs `tests/fixtures/fixture_watchdog.py` for server fixtures; non-server blocking modes call the same watchdog directly |
 | detached real `cliproxyapi` | the fixture-process registry provides best-effort normal-exit cleanup; it has no parent-death watchdog because the binary is intentionally detached and shared |
-| anything that survives those layers | `scripts/reap-test-orphans.py` takes the checkout lease, reads its `ps` rows, excludes the invoking ancestry and non-harness editors, then reports and reaps persistent survivors |
+| recorded embedded child, including after its caller exits | `tests/helpers/test_processes.lua` retains birth evidence; both runner and terminal census join exact PID/start incarnations |
+| legacy harness/fixture process outside that registry | `scripts/reap-test-orphans.py` takes the checkout lease, reads its `ps` rows, excludes the invoking ancestry and non-harness editors, then reports and reaps persistent survivors |
 
 The census uses `--ps-from` as a signal-free recorded-table seam in tests and
 re-samples live `ps` output within a bounded grace period before accusing a
@@ -199,12 +200,20 @@ process shape this harness produces. New fixture servers inherit the watchdog
 through `LoopbackHTTPServer`; new spec subprocesses inherit registry cleanup
 through `fixture_process`.
 
-Ownership requires a fixture in executable/script position, or an actual
+The legacy process-table classifier requires a fixture in executable/script position, or an actual
 headless Neovim using this checkout's harness init or Plenary spec invocation.
 An editor or pager merely naming a fixture is excluded. Every live observation
 is validated; malformed or unavailable resampling reports `BROKEN`, fails the
 target, and sends no signals based on the stale snapshot. An initially unavailable
 `ps` remains a visible skip for restricted environments.
+
+Bare embedded editors (`--clean --embed --headless -i NONE`) have no checkout path in argv and cannot be recognized safely by that classifier. The retained registry is the independent check: `scripts/test-run-lease.py` allocates a private `parley-test-processes/run-*` context under the checkout’s own Git metadata directory and validated lease and reuses it for recursive make. `scripts/test-env.sh` passes this context explicitly; scratch cleanup never removes it. Linked worktrees keep mutation outside the source tree and use separate Git directories, preserving checkout concurrency. Archives without Git use `.test-processes/`; the census also reads that legacy path so an upgrade cannot hide unresolved evidence. A drained legacy container can retire after successful live reconciliation.
+
+`spec_runner` reserves its own spec-child birth and installs `spec_jobs` for jobstart births. Clean embedded children explicitly install the same wrapper. A pending ticket is persisted **before** spawn; atomic publication adds native PID/start identity, while an interrupted birth remains unknown. The wrapper chains the supplied native on_exit once; a fast child already joined before publication can retire its pending ticket using that native exit proof. `test_process_model` is the pure observation policy, and `process_identity.observe` distinguishes explicit ESRCH from unavailable identity.
+
+On every runner return, the shared registry reconciles recorded children, including detached jobs after an otherwise successful spec. It revalidates identity before exact-PID TERM/KILL and waits for absence or replacement of the original incarnation. A leak makes the spec fail even after successful cleanup; unresolved evidence persists. `scripts/test-process-census.lua` uses the same native Lua module from the Python terminal census, so caller death cannot erase ownership. No cwd, socket, command-substring or process-group inference authorizes this recorded-child cleanup. Snapshot mode observes without signals; positive verifier completion is required before a clean line.
+
+Birth publication preserves unknown JSON member bytes, including numeric tokens that Lua cannot represent exactly. Run scopes reserve one of 64 canonical directories by atomic mkdir, so parallel runners cannot exceed the reader capacity. Empty rmdir releases a slot; explicit ENOENT from concurrent retirement permits continued reservation, while unreadable existing entries remain a refusal. A reused slot is occupied until its next confirmed retirement. Legacy random scopes remain census-readable; admission to a fresh run refuses unexpected leftovers visibly. Registry writers allow 4096 child records per spec (256 bytes each), at most 64 outstanding spec scopes per run and 256 retained run directories per checkout. Atomic publication can temporarily use a second bounded file per record; legacy job ledgers are read with a 1 MiB cap. Reaching a bound fails visibly rather than discarding evidence. Only proven-dead birth records retire; empty spec scopes retire after reconciliation, and prior empty run contexts retire at the next lease admission. Pending, corrupt, replaced, unreadable or foreign-writable evidence is retained for diagnosis. A matching known child may be retried through the same census; an unresolved pending birth requires inspection, since no exact child can be inferred.
 
 The Neovim watchdog also removes its captured query directory using synchronous
 libuv filesystem calls, which work in its timer callback. Cleanup unlinks
@@ -326,8 +335,8 @@ before the runner's idle kill ends the spec with no cause. `tests/arch/embedded_
 `spec_runner` starts each spec child as a process-group leader (`vim.system{detach = true}`), so the
 child's `vim.system` and `uv.spawn` descendants share its group. Neovim starts every `jobstart` child in a
 group of its own, so in spec children `tests/minimal_init.vim` installs `tests/helpers/spec_jobs.lua`,
-which records each job's pid with its start time (`tests/helpers/process_identity.lua`) in a per-spec
-directory (`PARLEY_SPEC_JOBS_DIR`). On the deadline, an unobserved exit, or the runner's own SIGTERM or
+which retains each job's PID/start birth record in the run-owned per-spec
+directory (`PARLEY_SPEC_JOBS_DIR`). The independent reconciliation above also runs after ordinary completion. On the deadline, an unobserved exit, or the runner's own SIGTERM or
 SIGINT, the runner sends TERM to the spec's group and to each recorded job's group, waits `GRACE_MS`, then
 sends KILL; a spinning nvim never acts on TERM. The spec child and each job are signalled under one
 identity guard: a pid whose start time no longer matches names another process and is skipped and logged.

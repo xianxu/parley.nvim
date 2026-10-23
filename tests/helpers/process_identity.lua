@@ -3,6 +3,7 @@
 -- signal sent later is guarded by pid and start time together. Read in-process
 -- (no `ps`, which sandboxes deny), and safe in a libuv callback (no vim.fn).
 local M = {}
+M.MAX_PID = 2147483647 -- supported native pid_t is signed 32-bit
 
 local ffi = require("ffi")
 local darwin = ffi.os == "OSX"
@@ -27,7 +28,7 @@ local PROC_PIDTBSDINFO = 3
 --- @param pid integer
 --- @return string|nil
 function M.start_time(pid)
-    if type(pid) ~= "number" or pid <= 0 then return nil end
+    if type(pid) ~= "number" or pid <= 0 or pid > M.MAX_PID or pid % 1 ~= 0 then return nil end
     if darwin then
         local info = ffi.new("parley_proc_bsdinfo")
         if ffi.C.proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, info, ffi.sizeof(info)) ~= ffi.sizeof(info) then return nil end
@@ -43,6 +44,19 @@ function M.start_time(pid)
     local fields = {}
     for field in rest:gmatch("%S+") do fields[#fields + 1] = field end
     return fields[20] -- field 22 overall; the name and pid precede `rest`
+end
+
+--- Absence requires an explicit ESRCH; a failed identity read alone is unknown.
+--- The second existence probe closes the ordinary exit-during-read race.
+function M.observe(pid)
+    if type(pid) ~= "number" or pid <= 0 or pid > M.MAX_PID or pid % 1 ~= 0 then
+        return { kind = "unknown", reason = "invalid pid" }
+    end
+    local start = M.start_time(pid)
+    if start then return { kind = "live", start = start } end
+    local _, _, err = (vim.uv or vim.loop).kill(pid, 0)
+    if err == "ESRCH" then return { kind = "absent" } end
+    return { kind = "unknown", reason = "native identity unreadable" }
 end
 
 return M

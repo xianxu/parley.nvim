@@ -9,8 +9,10 @@
 -- Everything after install runs in libuv callbacks too, so it uses no vim.fn.
 local identity = require("tests.helpers.process_identity")
 local uv = vim.uv or vim.loop
+local Processes = require("tests.helpers.test_processes")
 
 local M = {}
+local wrapped
 
 M.ENV = "PARLEY_SPEC_JOBS_DIR"
 
@@ -20,20 +22,42 @@ local function ledger(dir) return dir .. "/jobs" end
 function M.install()
     local dir = vim.env[M.ENV]
     if not dir or dir == "" then return end
+    if vim.fn.jobstart == wrapped then return end
     local jobstart = vim.fn.jobstart
-    vim.fn.jobstart = function(...)
-        local channel = jobstart(...)
+    wrapped = function(...)
+        local args = { ... }
+        local options = vim.tbl_extend("force", {}, args[2] or {})
+        local on_exit, exited = options.on_exit, false
+        assert(on_exit == nil or type(on_exit) == "function" or type(on_exit) == "string", "invalid on_exit callback")
+        options.on_exit = function(...)
+            exited = true
+            if type(on_exit) == "function" then return on_exit(...) end
+            if type(on_exit) == "string" then return vim.fn.call(on_exit, { ... }) end
+        end
+        args[2] = options
+        local ticket, err = Processes.prepare(dir)
+        assert(ticket, "cannot reserve spec child: " .. tostring(err))
+        local channel = jobstart(unpack(args))
         if type(channel) == "number" and channel > 0 then
             local pid = vim.fn.jobpid(channel)
-            local started = identity.start_time(pid)
-            local file = started and io.open(ledger(dir), "a")
-            if file then
-                file:write(("%d %s\n"):format(pid, started))
-                file:close()
+            local ok, why = Processes.complete(ticket, pid)
+            if not ok then
+                local status = vim.fn.jobwait({ channel }, 0)[1]
+                if exited or (type(status) == "number" and status >= 0) then
+                    assert(Processes.abort(ticket), "cannot retire joined spec child")
+                    return channel
+                end
+                pcall(vim.fn.jobstop, channel)
+                status = vim.fn.jobwait({ channel }, 3000)[1]
+                if exited or (type(status) == "number" and status >= 0) then Processes.abort(ticket) end
+                error("spec child birth unconfirmed: " .. tostring(why))
             end
+        else
+            Processes.abort(ticket)
         end
         return channel
     end
+    vim.fn.jobstart = wrapped
 end
 
 --- The recorded jobs: `pid start` lines. A malformed line is dropped, never
@@ -43,12 +67,21 @@ end
 function M.read(dir)
     local records = {}
     local file = io.open(ledger(dir), "r")
-    if not file then return records end
-    for line in file:lines() do
+    if file then
+      for line in file:lines() do
         local pid, start = line:match("^(%d+) (%d+%.?%d*)$")
-        if pid then records[#records + 1] = { pid = tonumber(pid), start = start } end
+        if pid and tonumber(pid) > 0 and tonumber(pid) <= identity.MAX_PID then
+            records[#records + 1] = { pid = tonumber(pid), start = start }
+        end
+      end
+      file:close()
     end
-    file:close()
+    local values = Processes.read(dir)
+    for _, entry in ipairs(values or {}) do
+        if entry.path ~= ledger(dir) and entry.record.state == "born" then
+            records[#records + 1] = { pid = entry.record.pid, start = entry.record.start }
+        end
+    end
     return records
 end
 

@@ -972,6 +972,23 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   Failure diagnostics include outcome, elapsed time, mode, runtime and load.
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
 
+
+## 2026-10-22 (#416 — birth evidence through terminal census)
+
+- Generic embedded argv cannot prove checkout ownership. Retain native PID/start at the spawn seam; persist a pending ticket before the effect so launcher death before publication stays unknown rather than becoming an empty clean ledger. A signal or leader exit cannot establish joined descendant death.
+- Preserve unknown persisted JSON members as values, including null and empty-container kinds. Converting null to Lua nil before a rewrite silently loses future fields. Validate known fields, escaped duplicate keys and native integer widths before any native effect.
+- Revalidate birth-record bytes before unlinking, and rescan the whole retained tree after cleanup: a terminating child can publish another scope. Keep newer/pending evidence and fail unknown; an empty read followed by failed directory retirement is not successful cleanup.
+
+- Keep churning test evidence in per-worktree Git metadata, not the source tree a native tool may traverse. Linked worktrees require their own Git directory rather than the shared common directory; migration must still census unresolved evidence at the former location. Argument-injection tests can search immutable source without traversing concurrent Git/test metadata.
+
+- #416 close BR-1: a JSON round-trip oracle using the same native decoder cannot detect numeric precision loss. Preserve unknown raw values when the host number type cannot represent every JSON number; assert exact large integer, decimal and exponent text independently.
+- #416 close BR-2: a count followed by allocation is not capacity reservation across parallel runners. Reserve one of a fixed number of directories with atomic mkdir, and drive two callers through the final-slot interleaving in a deterministic test.
+
+- #416 close BR-3: an atomic capacity reservation still needs retirement semantics. Enumerate allocation/allocation, allocation/retirement and retirement/reuse together. Only explicit ENOENT permits proceeding after a stale directory snapshot; unreadable entries remain unknown. Drive each ordering with a controlled barrier.
+
+- #416 close BR-4: canonicalize a shared fixture base before deriving path expectations or metadata-fake keys. Otherwise symlinked scratch makes the fake identify a different path from production. Run sensitive tests under an explicit scratch alias as part of the normal suite, rather than relying on machine-specific `/tmp` layout.
+
+- #416 first full suite: generated child Lua must receive the same arrival budget by value as parent predicates. Include the existing arrival architecture guard in the affected harness mapping; a narrow native map alone can miss static guard violations in generated source strings.
 ## 2026-10-22 (#417 — notification prompts after a completed edit)
 
 - A successful asynchronous edit can still block the next key on builtin notification hit-enter. Keep the real notification surface in attached-UI regressions; an injected recording notifier hides this failure. Inspect fast `nvim_get_mode` before ordinary Lua RPC when a prompt may be active, then prove subsequent typing reaches the buffer.
