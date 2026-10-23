@@ -2,6 +2,7 @@
 name: proofreading
 order: 4
 scope: whole-doc
+deletions: apply
 frontier: on
 ---
 Proofread. The final mechanical pass over the whole document: typos, misspellings,

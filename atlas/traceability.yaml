@@ -793,8 +793,6 @@ atlas:
       - lua/parley/skills/review/init.lua
       - lua/parley/skills/review/instruction.lua
       - lua/parley/review_send.lua
-      - lua/parley/editorial_frontmatter.lua
-      - lua/parley/editorial_prepare.lua
       - lua/parley/frontmatter.lua
       - lua/parley/couch.lua
     tests:
@@ -808,8 +806,6 @@ atlas:
       - tests/unit/frontmatter_spec.lua
       - tests/unit/couch_spec.lua
       - tests/integration/review_send_spec.lua
-      - tests/unit/editorial_frontmatter_spec.lua
-      - tests/integration/editorial_submit_spec.lua
       - tests/unit/comment_codec_spec.lua
       - tests/unit/comment_view_spec.lua
       - tests/unit/comment_thread_spec.lua
@@ -827,8 +823,6 @@ atlas:
       - lua/parley/view_map.lua
       - lua/parley/window_views.lua
       - lua/parley/agentic_document.lua
-      - lua/parley/editorial_frontmatter.lua
-      - lua/parley/editorial_prepare.lua
       - lua/parley/document_band.lua
       - lua/parley/document_band_model.lua
       - lua/parley/document_session.lua
@@ -855,8 +849,6 @@ atlas:
       - tests/unit/view_map_spec.lua
       - tests/integration/window_views_spec.lua
       - tests/unit/document_session_spec.lua
-      - tests/unit/editorial_frontmatter_spec.lua
-      - tests/integration/editorial_submit_spec.lua
       - tests/unit/document_move_plan_spec.lua
       - tests/unit/document_move_state_spec.lua
       - tests/arch/document_move_owner_spec.lua

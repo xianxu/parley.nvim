@@ -1011,3 +1011,9 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #418 counted-growth tests: cached JIT traces can bypass debug instruction sampling. Flush traces and count interpreter instructions before comparing N/2N; do not relax a growth ratio to compensate for missing measurement.
 
 - #418: counted Lua instructions cannot reveal backtracking inside native string patterns. Remove unrequested inference rather than widening the YAML surface; adversarial colon/digit instructions must retain string semantics. Avoid adjacent greedy repetitions over overlapping character sets in an interactive bounded parser.
+
+
+## 2026-10-23 (#418 — root scalar lexical context)
+
+- Split the root key/value before scanning a plain scalar for comments. A quote starts a quoted root scalar only at its first character; punctuation later in ordinary instruction text does not reopen YAML quoting. Keep flow collection context separate, and test unrelated metadata beside both scalar and mapped legacy chat declarations.
+- After an operator scope pivot, keep prior plan rows explicitly historical and publish a current entity inventory; do not let an old completed checklist claim that removed runtime APIs remain part of delivery.

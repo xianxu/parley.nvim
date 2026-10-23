@@ -13,6 +13,23 @@ local function bad(body)
 end
 
 describe("collaboration-mode value", function()
+    it("reads legacy chat despite literal quotes in unrelated plain root values", function()
+        for _, text in ipairs({ [[Keep commas, "please]], [[Keep ["asides] intact]], [[Keep -"voice intact]],
+            [[Keep commas, 'please]], [[Keep commas, "please # trailing comment]] }) do
+            for _, key in ipairs({ "process-instruction", "processing-instruction", "notes" }) do
+                for _, declaration in ipairs({ "collaboration-mode: chat", "collaboration-mode: {chat: [Notes]}",
+                    "collaboration-mode:\n  chat:\n    - Notes" }) do
+                    for _, first in ipairs({ true, false }) do
+                        local unrelated = key .. ": " .. text
+                        local value, err = read(first and (unrelated .. "\n" .. declaration)
+                            or (declaration .. "\n" .. unrelated))
+                        assert.is_nil(err)
+                        assert.same(declaration == "collaboration-mode: chat" and "chat" or { chat = { "Notes" } }, value)
+                    end
+                end
+            end
+        end
+    end)
     it("leaves absent fields absent", function()
         local value, err = parser.parse({ "# Document", "collaboration-mode: chat" })
         assert.is_nil(value)
@@ -194,6 +211,25 @@ local function copied_bytes(body)
 end
 
 describe("collaboration frontmatter scan work", function()
+    it("bounds VM work for punctuation in long plain root values", function()
+        local function work(size)
+            local running = jit.status()
+            jit.off()
+            jit.flush()
+            local count = 0
+            debug.sethook(function() count = count + 1 end, "", 1)
+            local ok, value, err = pcall(read, 'process-instruction: Keep ' .. string.rep('a, ', size)
+                .. '"please\ncollaboration-mode: chat')
+            debug.sethook()
+            if running then jit.on() end
+            assert.is_true(ok)
+            assert.is_nil(err)
+            assert.equals("chat", value)
+            return count
+        end
+        local small, large = work(2048), work(4096)
+        assert.is_true(large < small * 2.3, ("VM work grew from %d to %d"):format(small, large))
+    end)
     it("handles large whitespace runs and multiline collections without editor stalls", function()
         local start = os.clock()
         local value, err = read("notes: a" .. string.rep(" ", 20000) .. "z")
@@ -223,55 +259,5 @@ describe("collaboration frontmatter scan work", function()
             assert.equals(count + 1, #value.chat)
             assert.is_truthy(bytes < #body * 40)
         end
-    end)
-end)
-
-
-describe("flat root embedded quote lexical context", function()
-    it("opens quoted scalars only at the first value character", function()
-        local failed = {}
-        for _, punctuation in ipairs({ ',', '[', '{', ']', '}', ':', '-', '?', '/', '=', ' ', '' }) do
-            for _, quote in ipairs({ '"', "'" }) do
-                for _, matched in ipairs({ false, true }) do
-                    local text = 'Keep ' .. punctuation .. quote .. 'voice' .. (matched and quote or '')
-                    for _, suffix in ipairs({ '', '#literal', ' # comment', '\\path' }) do
-                        for _, key in ipairs({ 'processing-instruction', 'process-instruction' }) do
-                            local original = { '---', key .. ': ' .. text .. suffix,
-                                'collaboration-mode: chat', '---', '# Body' }
-                            local captured = vim.deepcopy(original)
-                            local ok = pcall(function()
-                                local header = assert(parser.header(original))
-                                local value, err = parser.scalar(header.fields[key][1], key == 'process-instruction')
-                                assert.is_nil(err)
-                                local expected = text .. (suffix == ' # comment' and key ~= 'process-instruction' and '' or suffix)
-                                assert.equals(expected, value)
-                                local route, route_err = parser.parse(original)
-                                assert.is_nil(route_err)
-                                assert.equals('chat', route)
-                                assert.same(captured, original)
-                            end)
-                            if not ok then
-                                failed[#failed + 1] = key .. ': ' .. text .. suffix
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        local sample = {}
-        for i = 1, math.min(8, #failed) do sample[i] = failed[i] end
-        assert.equals(0, #failed, 'failed root scalar cases (first 8): ' .. table.concat(sample, ' | '))
-    end)
-
-    it("keeps actual quoted scalars and legacy collection grammar separate from embedded quotes", function()
-        for _, source in ipairs({ [["chat" # comment]], [['chat' # comment]] }) do
-            local value, err = read('notes: Keep ,"unmatched\ncollaboration-mode: ' .. source)
-            assert.is_nil(err)
-            assert.equals('chat', value)
-        end
-        assert.same({ chat = { 'A, B', 'Say "yes"', "What's next" } },
-            read([[collaboration-mode: {chat: ["A, B", 'Say "yes"', 'What''s next']}]]))
-        bad([[collaboration-mode: "chat" trailing]])
-        bad([[collaboration-mode: "ch\qat"]])
     end)
 end)

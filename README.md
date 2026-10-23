@@ -48,13 +48,7 @@ Neovim 0.11 or newer (an older editor gets a clear refusal; see
 [minimal config](atlas/infra/config.md#minimal-config) for typical overrides.
 
 In a Couch pane, the first Alt+Return in any named Markdown document saves,
-registers and submits it to the pane's agent. Missing frontmatter mode keys are
-added as collaboration-mode: discussion, presentation-mode: highlight and
-processing-mode: free-form. Existing choices, aliases and unknown metadata stay
-unchanged; missing keys use effective legacy choices before defaults.
-Automatic fill handles flat key/value headers. More complex headers stay
-unchanged and submit through Couch with a short notice; local review names any
-header line it cannot interpret. Existing legacy collaboration maps remain readable.
+registers and submits it to the pane's agent, without changing its frontmatter.
 The winbar confirms the destination and time after submission succeeds, until
 your next edit or the agent's write; failures show an error there. Unchanged
 content shows `nothing to submit` instead of sending again. Press Alt+Return
@@ -119,10 +113,7 @@ See [the open-descriptor watchdog](atlas/infra/fd_watchdog.md).
 
 In a Couch pane, **Alt+Return** sends only `submitted: ABSOLUTE_PATH` through
 the registered document flow. The agent's shared `xx-universal-review` skill
-reads the file's editorial mode keys, optional processing-instruction and changes
-since its last read. Deprecated presentation and process-instruction remain
-readable. Multiple legacy processing selectors require an explicit single-mode
-choice before automatic fill can proceed.
+reads the file's `process-instruction:` and changes since its last read.
 Outside Couch, the same shortcut runs Parley's inline review using the bundled
 canonical round, marker grammar, collaboration modes (when exported) and review
 modes with its local editing tool.
@@ -133,8 +124,7 @@ Side documents, chat answer files and changes since the last read remain with
 the agent-side skill in Couch.
 
 When the agent answers, Parley shows what its write changed the way the
-document's `presentation-mode:` frontmatter asks (legacy presentation remains a
-fallback when the canonical key is absent). Under `highlight` (the default),
+document's `presentation:` frontmatter asks. Under `highlight` (the default),
 each changed span is highlighted, and its diagnostic gives the agent's reason
 (or "changed by the agent"). The highlights follow your edits and clear on your
 next confirmed Alt+Return. Under `propose`, the agent writes per-line

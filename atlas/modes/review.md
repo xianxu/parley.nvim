@@ -115,62 +115,45 @@ longer dialogue also accepts deletion because no single replacement is selected.
 Unanchored commentary disappears on either action. These rules are implemented
 by `drill_in.resolve` and tested with the shared marker parser.
 
-## Alt+Return: editorial settings and submission (#418, #322)
+## Alt+Return: process-instruction and the slot send (#316)
 
-Alt+Return first fills missing document settings, preserving existing metadata,
-comments, legacy aliases and body bytes. The defaults are explicit:
+Inside a Couch pane, Alt+Return in a named Markdown document follows
+[agentic document submission](session_sync.md) (#332): save, register on first
+submission, attach the existing turn engine and send `submitted: <absolute
+path>`. It adds no frontmatter and does not prompt for a process instruction.
+Ariadne's `xx-universal-review` skill reads `process-instruction:` from the
+submitted file and computes changes since its last read through Couch. Parley
+sends no instruction prose or editor diff, and keeps no review-send baseline.
+The pane's agent is the default owner; explicit `couch-owner:` overrides it,
+while a business `owner:` field does not. Confirmed membership survives header
+edits. Unknown offline membership stays editable with `Couch unavailable:
+agentic state unknown`; known attached/cached identities keep turn protection.
+
+Outside a Couch pane, the existing review behavior remains: the standing
+instruction lives in the document's frontmatter, one line the operator edits
+per round. The review-mode menu float (#133 M4) is gone.
 
 ```yaml
-collaboration-mode: discussion
-presentation-mode: highlight
-processing-mode: free-form
+process-instruction: "[copy-edit] keep the voice"
 ```
 
-`editorial_frontmatter.lua` owns pure resolution and the additive insertion.
-Canonical presence wins independently for each component. Deprecated
-`presentation:` supplies a missing presentation-mode; `process-instruction:`
-supplies missing processing-mode and processing-instruction components. Existing
-aliases remain and warn. Processing names come from packaged mode metadata and
-accept exact names or unique prefixes. Unknown or ambiguous names refuse before
-editing. Legacy multiple selectors remain readable, but automatic fill refuses
-atomically and asks for one processing-mode plus free processing-instruction.
-Unknown presentation values warn and use highlight, even if a shadowed alias
-names another value. Legacy collaboration maps remain readable and unchanged.
-Header input and its projected output are bounded to 8192 lines / 1 MiB; document
-body size does not count toward that envelope.
-
-Convenience fill handles flat, uniformly indented root key/value lines with
-supported plain or quoted scalar values. A quote inside an already-started
-plain value is literal text. Nested metadata, flow collections, block scalars
-and other unsupported representations are left byte-identical, with
-`front matter left unchanged: not a simple header (line N)`. Legacy collaboration
-maps also skip fill but remain readable through the existing map parser.
-Semantic readers refuse unsupported settings with the offending line named;
-they do not guess modes or instructions. An unreadable presentation clears
-round decorations instead of assuming highlight. Missing/empty/unknown scalar
-presentation retains the warned-highlight rule above.
-
-Inside Couch, [agentic document submission](session_sync.md) owns preparation,
-ordinary save, registration and delivery. Its existing operation records exact
-before/after hashes; only the matching native edit may advance preparation.
-Every other edit, reload, context change or detach cancels stale work. One
-provenance-authorized insertion is undoable; a second submit adds no metadata.
-Parley sends only `submitted: <absolute path>`, never instruction prose or an
-editor diff. A skipped convenience fill still follows ordinary save/register/send
-with the original bytes. The pane agent supplies the default owner; couch-owner overrides
-it, while business owner metadata does not. Unknown membership retains the
-existing editable unavailable state, and confirmed identity survives header edits.
-
-Outside Couch, the same preparation saves the file and announces local review,
-then passes effective modes and free instruction to run_via_invoke. Missing
-legacy process-instruction needs no prompt: free-form is sufficient. The local
-reader resolves a skipped header before save/invoke and reports a named refusal
-if its settings cannot be read. A readable legacy map keeps its routing. The local
-review retains its normal marker/routing behavior; typed legacy session-sync
-files retain their dedicated save/send path. A failed pane lookup cannot fall
-back to local review. Legacy bracket completion remains until #419 adds canonical
-frontmatter and heading completion. Section comments and mixed per-span round
-presentation are also #419, separate from this whole-document reader.
+- **Grammar** (`skills/review/instruction.lua`, PURE): each leading `[name]`
+  names a stock prompt — a `modes/<name>.md` file, or a unique prefix of one
+  (`[copy-edit]` → `copy-editing`); the rest is free text added to it. No
+  `[name]` means `free-form`. Several names contribute their briefs; the first
+  one's knobs (`scope`, `deletions`, `frontier`) give the round's directives.
+  The local source passes neutral mode data to the canonical round's flag
+  table (`source(ctx)` takes `args.modes`).
+- **Quoting:** `[copy-edit] keep` is not valid YAML (sdlc's yaml.v3 rejects it in
+  issue frontmatter), so parley writes the value double-quoted when it needs it
+  (`frontmatter.needs_quote`) and reads either form. Typing `[` in the value
+  completes the mode names (from the modes directory); accepting one quotes the
+  line.
+- **Where it goes** (`lua/parley/review_send.lua`): without a Couch thread,
+  the instruction runs `run_via_invoke` here. Typed legacy session-sync files
+  keep their dedicated submit path.
+- **No line yet:** outside Couch, Alt+Return asks once and writes the answer
+  into the frontmatter (creating one), then runs the review.
 
 The sidecar (`*.parley-journal.md`) is excluded from review attachment
 (`is_journal_sidecar`). `<M-CR>` is free here — chat-respond's `<M-CR>` is
@@ -212,7 +195,7 @@ change baseline.
   (`apply-with-gutter-why` | `propose-strike` | `apply`), `frontier` (`on` | `off`
   — when on, treat text above the topmost `🤖[]` as settled). `deletions` is
   optional with no default (#383): export v3 (ariadne#437) retires it, and the
-  document's effective `presentation-mode:` is then the one proposal knob, copied into no
+  document's own `presentation:` is then the one proposal knob, copied into no
   flag. A v2 mode file carries it. Plus `order:` — the
   editorial-sequence position that orders the menu (developmental=1 … free-form=6).
 - **Six shipped modes:** developmental, line-editing, copy-editing, proofreading,
@@ -258,6 +241,10 @@ Root frontmatter must be a closed block mapping; uniformly indented and
 quoted/escaped keys are decoded. Root flow maps, sequences, complex keys,
 tags/anchors/aliases and merge keys refuse instead of becoming absent routing.
 Unrelated nested metadata and literal blocks do not define root routing. The pure
+parser splits a root key from its value before scanning comments: a quote opens
+a quoted root scalar only at the value's first character. Literal quotes after
+punctuation in unrelated plain text cannot hide a legacy chat declaration (#418).
+The existing flow-map/list grammar keeps its own quote context. The pure
 `review/collaboration.lua` resolver handles normalized heading names, repeated
 headings, ATX levels 1–6, fenced code, nearest named ancestors and dangling-name
 warnings. Unknown modes and cross-mode heading conflicts refuse before local
@@ -380,8 +367,6 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- submi
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam
 - `lua/parley/review_send.lua` — `<M-CR>` dispatch to agentic submission in Couch; existing in-editor fallback, add-instruction prompt and `[` completion outside Couch
 - `lua/parley/agentic_document.lua` — named-document registration/admission and native rename hooks; see [session-sync](session_sync.md)
-- `lua/parley/editorial_frontmatter.lua` — effective canonical/legacy settings and additive fill (PURE)
-- `lua/parley/editorial_prepare.lua` — native projection/application proofs and authorized insertion
 - `lua/parley/skills/review/instruction.lua` — `process-instruction` grammar, mode expansion and neutral context (PURE)
 - `lua/parley/frontmatter.lua` — shared frontmatter reader (hyphenated keys, raw values, quoting; PURE)
 - `lua/parley/couch.lua` — the `couch` seam: send, query, this editor's own actor. Every child gets a deadline: a caller that names none gets `couch.deadline_ms()` (the user's `agentic_submit_timeout_ms`, through `document_registry.config_ms`); a send gets `couch.send_deadline_ms()`, three of them (`document_registry.lost_ms`, #359), so a press past the submit deadline can still join it. Expiry kills the child and reports `couch.timed_out`; a killed send logs one line and says it may have arrived (#400). Only `document_registry`, which runs its own deadline timer, opts out with `timeout = false`

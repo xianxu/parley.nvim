@@ -24,15 +24,6 @@ local function attached(s)
     reply(s, s.dispatch({ type = "open" })[1], outcome("registered"))
 end
 
--- Registry/receipt tests below use an already complete document. Dedicated
--- preparation tests exercise the actual edit protocol without this helper.
-local function submit_complete(s, event)
-    local prepare = s.dispatch(event)[1]
-    if not prepare or prepare.kind ~= "prepare" then return prepare end
-    return s.dispatch({ type = "projected", witness = prepare.witness, ok = true,
-        before_hash = "complete", after_hash = "complete", current_hash = "complete", noop = true })[1]
-end
-
 describe("document_session.classify_reply", function()
     before_each(load_model)
     it("proves absence only with explicit lookup null and success", function()
@@ -152,7 +143,7 @@ describe("document_session lifecycle", function()
     it("saves then registers then attaches and sends once", function()
         local s = session()
         plain(s)
-        local save = submit_complete(s, { type = "submit", owner = "ops:1" })
+        local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
         assert.equals("save", save.kind)
         assert.same({}, s.dispatch({ type = "submit", owner = "ops:1" }))
         local register = s.dispatch({ type = "saved", witness = save.witness, ok = true })[1]
@@ -170,7 +161,7 @@ describe("document_session lifecycle", function()
     it("refreshes a registered owner through lookup before each explicit send", function()
         local s = session()
         attached(s)
-        local save = submit_complete(s, { type="submit" })
+        local save = s.dispatch({ type="submit" })[1]
         local lookup = s.dispatch({ type="saved", witness=save.witness, ok=true })[1]
         assert.equals("lookup", lookup.kind)
         assert.is_true(lookup.submit)
@@ -187,7 +178,7 @@ describe("document_session lifecycle", function()
     it("retains attached identity without send when submit owner confirmation fails", function()
         local s = session()
         attached(s)
-        local save = submit_complete(s, { type="submit" })
+        local save = s.dispatch({ type="submit" })[1]
         local lookup = s.dispatch({ type="saved", witness=save.witness, ok=true })[1]
         local effects = reply(s, lookup, {kind="unavailable",error="offline"})
         assert.equals("registered", s.snapshot().phase)
@@ -200,7 +191,7 @@ describe("document_session lifecycle", function()
     it("does not register or send on save failure", function()
         local s = session()
         plain(s)
-        local save = submit_complete(s, { type = "submit", owner = "ops:1" })
+        local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
         local effects = s.dispatch({ type = "saved", witness = save.witness, ok = false, error = "disk full" })
         assert.equals("notify", effects[1].kind)
         assert.equals("plain", s.snapshot().phase)
@@ -208,7 +199,7 @@ describe("document_session lifecycle", function()
     it("keeps uncertain mutation pending with exact captured identity", function()
         local s = session()
         plain(s)
-        local save = submit_complete(s, { type = "submit", owner = "ops:1" })
+        local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
         local reg = s.dispatch({ type = "saved", witness = save.witness, ok = true })[1]
         local effects = reply(s, reg, { kind = "uncertain" })
         assert.equals("pending", s.snapshot().phase)
@@ -224,7 +215,7 @@ describe("document_session lifecycle", function()
             assert.same({}, reply(s, probe, outcome("registered")))
             s = session()
             plain(s)
-            local save = submit_complete(s, { type = "submit", owner = "ops:1" })
+            local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
             local reg = s.dispatch({ type = "saved", witness = save.witness, ok = true })[1]
             s.dispatch(change)
             local effects = reply(s, reg, outcome("registered"))
@@ -238,7 +229,7 @@ describe("document_session lifecycle", function()
     it("confirms a body-invalidated registration on retry without resending", function()
         local s = session()
         plain(s)
-        local save = submit_complete(s, { type = "submit", owner = "ops:1" })
+        local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
         local register = s.dispatch({ type = "saved", witness = save.witness, ok = true })[1]
         s.dispatch({ type = "changed" })
         reply(s, register, outcome("registered"))
@@ -260,7 +251,7 @@ describe("document_session lifecycle", function()
     -- the shell for a fresh submit (current bytes); it never sends the stale ones.
     local function pending_register(s)
         plain(s)
-        local save = submit_complete(s, { type = "submit", owner = "ops:1" })
+        local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
         local register = s.dispatch({ type = "saved", witness = save.witness, ok = true, hash = "h1" })[1]
         reply(s, register, { kind = "unavailable", error = "Couch registry deadline exceeded" })
         assert.equals("pending", s.snapshot().phase)
@@ -305,7 +296,7 @@ describe("document_session lifecycle", function()
         for _, change in ipairs({ { type="changed", path="/other.md" }, { type="changed", namespace="another" } }) do
             local s = session()
             plain(s)
-            local save = submit_complete(s, { type="submit", owner="ops:1" })
+            local save = s.dispatch({ type="submit", owner="ops:1" })[1]
             local register = s.dispatch({ type="saved", witness=save.witness, ok=true })[1]
             s.dispatch(change)
             reply(s, register, outcome("registered"))
@@ -362,7 +353,7 @@ describe("document_session lifecycle", function()
         for _, field in ipairs({ "namespace", "path", "incarnation", "generation", "token", "operation" }) do
             local s = session()
             plain(s)
-            local save = submit_complete(s, { type = "submit", owner = "ops:1" })
+            local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
             local witness = vim.deepcopy(save.witness)
             witness[field] = "forged"
             assert.same({}, s.dispatch({ type = "saved", witness = witness, ok = true }))
@@ -381,7 +372,7 @@ describe("document_session successful-submit receipt", function()
         for _, effect in ipairs(effects) do if effect.kind == kind then return effect end end
     end
     local function attempt(s, hash, pressed, confirmed, reg)
-        local save=submit_complete(s, {type="submit",owner="ops:1",now_ms=pressed})
+        local save=s.dispatch({type="submit",owner="ops:1",now_ms=pressed})[1]
         local lookup=s.dispatch({type="saved",witness=save.witness,ok=true,hash=hash})[1]
         local result={kind="registered",registration=reg or registration()}
         return s.dispatch({type="reply",witness=lookup.witness,result=result,now_ms=confirmed or pressed})
@@ -458,7 +449,7 @@ describe("document_session successful-submit receipt", function()
 
     it("does not count busy lookup, save or send presses as resend confirmation", function()
         local s=delivered()
-        local save=submit_complete(s, {type="submit",now_ms=100})
+        local save=s.dispatch({type="submit",now_ms=100})[1]
         assert.same({},s.dispatch({type="submit",now_ms=101}))
         local lookup=s.dispatch({type="saved",witness=save.witness,ok=true,hash="hash-A"})[1]
         assert.same({},s.dispatch({type="submit",now_ms=102}))
@@ -496,7 +487,7 @@ describe("document_session successful-submit receipt", function()
     it("revokes captured resend authorization on reload without cancelling owner confirmation", function()
         local s=delivered()
         attempt(s,"hash-A",100,120)
-        local save=submit_complete(s, {type="submit",now_ms=130})
+        local save=s.dispatch({type="submit",now_ms=130})[1]
         local lookup=s.dispatch({type="saved",witness=save.witness,ok=true,hash="hash-A"})[1]
         s.dispatch({type="invalidate_confirmation"})
         assert.equals(lookup.witness.token,s.snapshot().operation.witness.token)
@@ -896,211 +887,5 @@ describe("document_session inherit", function()
         assert.same({}, s.dispatch({ type = "inherit", parent = { path = "/p.md", id = "", owner = "ops:0" } }))
         s.dispatch({ type = "detach" })
         assert.same({}, s.dispatch({ type = "inherit", parent = parent }))
-    end)
-end)
-
-
-describe("document_session owned submit preparation", function()
-    before_each(load_model)
-    local function begin()
-        local s = session(); plain(s)
-        local prepare = s.dispatch({ type = "submit", owner = "ops:9", now_ms = 17 })[1]
-        assert.equals("prepare", prepare.kind)
-        assert.equals("planning", s.snapshot().operation.preparation.stage)
-        return s, prepare
-    end
-    local function project(s, prepare, overrides)
-        return s.dispatch(vim.tbl_extend("force", { type = "projected", witness = prepare.witness,
-            ok = true, before_hash = "old", after_hash = "filled", current_hash = "old", noop = false }, overrides or {}))
-    end
-    local function observe(s, prepare, overrides)
-        return s.dispatch(vim.tbl_extend("force", { type = "preparation_edit", witness = prepare.witness,
-            before_hash = "old", after_hash = "filled" }, overrides or {}))
-    end
-    local function finish(s, prepare, overrides)
-        return s.dispatch(vim.tbl_extend("force", { type = "prepared", witness = prepare.witness,
-            ok = true, current_hash = "filled" }, overrides or {}))
-    end
-    it("keeps one operation until the exact edit and fresh postimage prove preparation", function()
-        local s, prepare = begin()
-        assert.equals("ops:9", prepare.owner)
-        assert.equals("plain", prepare.previous_phase)
-        assert.same({}, s.dispatch({ type = "submit", owner = "ops:2" }))
-        assert.same({}, finish(s, prepare)) -- a claimed success cannot replace the observation
-        local apply = project(s, prepare)[1]
-        assert.equals("apply_preparation", apply.kind)
-        assert.same(prepare.witness, apply.witness)
-        assert.equals("old", apply.before_hash)
-        assert.equals("filled", apply.after_hash)
-        assert.equals("awaiting-edit", s.snapshot().operation.preparation.stage)
-        assert.same({}, finish(s, prepare))
-        assert.same({}, observe(s, prepare))
-        assert.equals("observed-edit", s.snapshot().operation.preparation.stage)
-        assert.same(prepare.witness, s.snapshot().operation.witness)
-        local save = finish(s, prepare)[1]
-        assert.equals("save", save.kind)
-        assert.equals("ops:9", save.owner)
-        assert.equals("plain", save.previous_phase)
-        assert.is_nil(s.snapshot().operation.preparation)
-        assert.same({}, finish(s, prepare))
-    end)
-    it("owns an immutable compact projection through its preparation operation", function()
-        local s, prepare = begin()
-        local projection = { buf = 19, path = "/old.md", changedtick = 8, changed = true,
-            before_hash = "old", after_hash = "filled", patch = { first = 0, last = 0, lines = { "metadata" } },
-            settings = { presentation = "highlight", instruction = "", modes = { { name = "free-form" } }, warnings = {} } }
-        local expected = vim.deepcopy(projection)
-        projection.lines = { "discard full postimage" }
-        projection.settings.header = { future = "discard parsed unknown tree" }
-        local apply = project(s, prepare, { projection = projection })[1]
-        assert.same(expected, apply.projection)
-        projection.patch.lines[1] = "caller mutation"
-        apply.projection.patch.lines[1] = "effect mutation"
-        local snap = s.snapshot()
-        assert.same(expected, snap.operation.preparation.projection)
-        snap.operation.preparation.projection.patch.lines[1] = "snapshot mutation"
-        assert.same(expected, s.snapshot().operation.preparation.projection)
-        observe(s, prepare)
-        assert.equals("save", finish(s, prepare)[1].kind)
-        assert.is_nil(s.snapshot().operation.preparation)
-    end)
-    it("refuses a payload whose identity or hashes contradict the projected witness", function()
-        for _, bad in ipairs({ { path = "/other.md" }, { before_hash = "other" },
-            { after_hash = "other" }, { changed = false }, { changedtick = false } }) do
-            local s, prepare = begin()
-            local projection = vim.tbl_extend("force", { buf = 19, path = "/old.md", changedtick = 8,
-                changed = true, before_hash = "old", after_hash = "filled" }, bad)
-            local effects = project(s, prepare, { projection = projection })
-            assert.equals("notify", effects[1].kind)
-            assert.is_nil(s.snapshot().operation)
-        end
-    end)
-    it("saves a byte-exact no-op without waiting for an edit", function()
-        local s, prepare = begin()
-        local save = project(s, prepare, { after_hash = "old", noop = true })[1]
-        assert.equals("save", save.kind)
-        assert.equals("ops:9", save.owner)
-        assert.same({}, project(s, prepare, { after_hash = "old", noop = true }))
-    end)
-    it("refuses unsuccessful or unproved projections before any edit or save", function()
-        for _, bad in ipairs({ { ok = false, error = "invalid processing-mode" },
-            { current_hash = "other" }, { noop = true }, { after_hash = "old" },
-            { before_hash = "" }, { after_hash = "" }, { current_hash = false } }) do
-            local s, prepare = begin()
-            local effects = project(s, prepare, bad)
-            assert.equals("notify", effects[1].kind)
-            if bad.error then assert.equals(bad.error, effects[1].message) end
-            assert.is_nil(s.snapshot().operation)
-            assert.equals("plain", s.snapshot().phase)
-            assert.same({}, finish(s, prepare))
-            assert.equals("prepare", s.dispatch({ type = "submit", owner = "ops:9" })[1].kind)
-        end
-    end)
-    it("ignores every stale completion witness without moving the preparation stage", function()
-        for _, stage in ipairs({ "planning", "awaiting-edit", "observed-edit" }) do
-            for _, field in ipairs({ "path", "namespace", "incarnation", "generation", "token", "operation" }) do
-                local s, prepare = begin()
-                if stage ~= "planning" then project(s, prepare) end
-                if stage == "observed-edit" then observe(s, prepare) end
-                local stale = vim.deepcopy(prepare.witness)
-                stale[field] = "stale"
-                local before = s.snapshot()
-                assert.same({}, project(s, prepare, { witness = stale }))
-                assert.same({}, finish(s, prepare, { witness = stale }))
-                assert.same(before, s.snapshot(), stage .. ": " .. field)
-            end
-        end
-    end)
-    it("invalidates every mismatched or duplicate observed edit through changed", function()
-        local edits = { { before_hash = "other" }, { after_hash = "other" },
-            { before_hash = false }, { after_hash = false }, { witness = {} },
-            { path = "/other.md" }, { namespace = "other" }, { incarnation = 99 } }
-        for _, field in ipairs({ "path", "namespace", "incarnation", "generation", "token", "operation" }) do
-            edits[#edits + 1] = { witness_field = field }
-        end
-        for _, stage in ipairs({ "planning", "awaiting-edit", "observed-edit" }) do
-            for _, bad in ipairs(edits) do
-                local s, prepare = begin()
-                if stage ~= "planning" then project(s, prepare) end
-                if stage == "observed-edit" then observe(s, prepare) end
-                local generation = s.snapshot().generation
-                local candidate = vim.deepcopy(bad)
-                if candidate.witness_field then
-                    candidate.witness = vim.deepcopy(prepare.witness)
-                    candidate.witness[candidate.witness_field] = "stale"
-                    candidate.witness_field = nil
-                end
-                local effects = observe(s, prepare, candidate)
-                assert.equals("cancel", effects[1].kind, stage)
-                assert.same(prepare.witness, effects[1].witness)
-                assert.equals(generation + 1, s.snapshot().generation)
-                assert.is_nil(s.snapshot().operation)
-                assert.same({}, finish(s, prepare))
-                assert.same({}, project(s, prepare))
-            end
-        end
-        local premature, planning = begin()
-        assert.equals("cancel", observe(premature, planning)[1].kind)
-        assert.same({}, finish(premature, planning))
-        local s, prepare = begin(); project(s, prepare); observe(s, prepare)
-        assert.equals("cancel", observe(s, prepare)[1].kind)
-        assert.same({}, finish(s, prepare))
-    end)
-    it("never saves after interruption at any preparation stage", function()
-        for _, stage in ipairs({ "planning", "awaiting-edit", "observed-edit" }) do
-            for _, interruption in ipairs({ { type = "changed" }, { type = "changed", path = "/other.md" },
-                { type = "changed", namespace = "other" }, { type = "detach" } }) do
-                local s, prepare = begin()
-                if stage ~= "planning" then project(s, prepare) end
-                if stage == "observed-edit" then observe(s, prepare) end
-                assert.equals("cancel", s.dispatch(interruption)[1].kind)
-                assert.same({}, project(s, prepare))
-                assert.same({}, finish(s, prepare))
-                assert.is_nil(s.snapshot().operation)
-                assert.is_nil(s.snapshot().receipt)
-            end
-        end
-    end)
-    it("retains captured resend authorization and registered phase across the edit", function()
-        local receipt = { namespace = "thread", id = "doc-1", owner = "ops:1",
-            hash = "delivered", display_time = "12:34" }
-        local s = model.new({ path = "/old.md", namespace = "thread", incarnation = 7,
-            registration = registration(), receipt = receipt })
-        local save = submit_complete(s, { type = "submit", now_ms = 10 })
-        local lookup = s.dispatch({ type = "saved", witness = save.witness, ok = true, hash = "delivered" })[1]
-        local unchanged = s.dispatch({ type = "reply", witness = lookup.witness,
-            result = outcome("registered"), now_ms = 20 })[2]
-        assert.equals("unchanged", unchanged.intent)
-        local prepare = s.dispatch({ type = "submit", now_ms = 21 })[1]
-        assert.same(receipt, prepare.authorization)
-        assert.equals("registered", prepare.previous_phase)
-        local apply = project(s, prepare)[1]
-        assert.same(receipt, apply.authorization)
-        observe(s, prepare)
-        local next_save = finish(s, prepare)[1]
-        assert.same(receipt, next_save.authorization)
-        assert.equals("registered", next_save.previous_phase)
-        assert.same(receipt, s.snapshot().receipt)
-        -- A subsequent ordinary edit still cancels the save; its later result
-        -- cannot reach registration or delivery.
-        assert.equals("cancel", s.dispatch({ type = "changed" })[1].kind)
-        assert.same({}, s.dispatch({ type = "saved", witness = next_save.witness, ok = true, hash = "filled" }))
-    end)
-    it("ends an authorized edit refusal or changed postimage without saving", function()
-        for _, bad in ipairs({ { ok = false, error = "protected document" }, { current_hash = "reentrant edit" },
-            { current_hash = false } }) do
-            for _, observed in ipairs({ false, true }) do
-                local s, prepare = begin(); project(s, prepare)
-                if observed then observe(s, prepare) end
-                -- A success before observation remains in flight; a refusal always ends it.
-                if observed or bad.ok == false then
-                    local effects = finish(s, prepare, bad)
-                    assert.equals("notify", effects[1].kind)
-                    if bad.error then assert.equals(bad.error, effects[1].message) end
-                    assert.is_nil(s.snapshot().operation)
-                    assert.same({}, finish(s, prepare))
-                end
-            end
-        end
     end)
 end)

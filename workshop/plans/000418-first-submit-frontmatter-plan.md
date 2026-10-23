@@ -45,7 +45,7 @@ Presentation fallback clarification: ariadne:5 delivery 7106eb75 relays TL confi
 
 ### Pure entities
 
-| Name | Lives in | Status |
+| Name | Lives in | Historical status (superseded by the operator pivot) |
 |---|---|---|
 | Effective document editorial settings and additive fill projection | `lua/parley/editorial_frontmatter.lua` | new |
 | `resolve`, `fill`, `presentation_value` — effective components, additive projection and independent repaint selection | `lua/parley/editorial_frontmatter.lua` | new |
@@ -62,7 +62,7 @@ The pure result is local to one submit and dies with it. One document has one pr
 
 ### Integration points
 
-| Name | Lives in | Status | Wraps |
+| Name | Lives in | Historical status (superseded by the operator pivot) | Wraps |
 |---|---|---|---|
 | Registered submit preparation lifecycle | `lua/parley/document_session.lua` | modified | Existing operation witness with explicit preparation stage before ordinary save |
 | Registered submit editor execution | `lua/parley/agentic_document.lua` | modified | Preparation projection, real edit observer, authorized buffer edit, normal write and model events |
@@ -96,7 +96,7 @@ Persistent fake: reuse `tests/helpers/fake_couch.lua`, `tests/fixtures/fake_couc
 
 ### Native preparation API
 
-| Name | Lives in | Status |
+| Name | Lives in | Historical status (superseded by the operator pivot) |
 |---|---|---|
 | `project`, `apply`, `prepare` — capture compact witnessed insertion, authorize/apply once, and reuse outside registered submission | `lua/parley/editorial_prepare.lua` | new |
 
@@ -214,13 +214,13 @@ Authenticated TL 3424bf0f approves the existing scanner's narrow root-plain corr
 
 #### Core-concept delta
 
-| Name | Lives in | Status |
+| Name | Lives in | Historical status (superseded by the operator pivot) |
 |---|---|---|
 | Root scalar lexical context; `header` diagnostic row/kind | `lua/parley/skills/review/collaboration_value.lua` | modified |
 | Header eligibility, `resolve`, `fill`, `presentation_value` | `lua/parley/editorial_frontmatter.lua` | modified |
 | Legacy collaboration map parser | `lua/parley/skills/review/collaboration_value.lua` | unchanged grammar, reused |
 
-| Integration | Lives in | Status | Wraps |
+| Integration | Lives in | Historical status (superseded by the operator pivot) | Wraps |
 |---|---|---|---|
 | `project`, `prepare` skipped no-edit projection | `lua/parley/editorial_prepare.lua` | modified | Native identity/hashes and existing edit seam |
 | Outside-Couch semantic resolution before save/invoke | `lua/parley/review_send.lua` | modified | Existing local review/typed session submit |
@@ -306,3 +306,12 @@ No new integration entity, mutable state, cache, watcher or durable runtime arti
 ### 2026-10-23 11:17 — replacement approved
 
 TL 49bad7d4 approves the immediately preceding legacy-reader-only revision. It is now the active implementation plan; earlier fill tasks and completed markers are historical. #322 owns mode-free outside-Couch submission after #418, before #419. The reviewed tip is preserved on origin at refs/ariadne/preserved/000418-mode-fill; normal branch history remains forward-only. Root-plain quoted-value recognition is the sole runtime mechanism retained; no general scalar codec, new header budget, unsupported-header semantic refusal or mode behavior is introduced. Native no-fill tests use the existing submit fake and existing cancellation tests. The old estimate is the historical combined forecast and is not a request to re-charge completed work; actuals remain measured.
+
+
+### 2026-10-23 — active entity inventory after removing obsolete fill
+
+The earlier tables retain their exact historical rows, but their column is labelled Historical status so they no longer assert removed APIs are current entities. The active inventory is only the existing parser; no new production symbol is added.
+
+| Name | Lives in | Status |
+|---|---|---|
+| `parse`, `uncomment`, `root_fields` — existing legacy collaboration parser and root lexical context | `lua/parley/skills/review/collaboration_value.lua` | modified |

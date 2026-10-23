@@ -802,7 +802,7 @@ M.registry_callbacks = function(buf)
         review_menu = function()
             require("parley.skill_picker").open()
         end,
-        -- <M-CR> prepares editorial settings and submits through the existing owner:
+        -- <M-CR> sends the document as its `process-instruction:` line directs:
         -- to this slot's agent, or (outside pair) a review round here (#316).
         -- It replaced the review-mode menu float (#133 M4).
         review_next = function()

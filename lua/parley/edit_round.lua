@@ -63,11 +63,7 @@ end
 
 local function draw(buf, round)
     local lines = lines_of(buf)
-    local value, warnings = presentation.value(lines)
-    if not value then
-        for _, warning in ipairs(warnings) do vim.notify("parley: " .. warning, vim.log.levels.WARN) end
-    end
-    if value ~= "highlight" then
+    if presentation.value(lines) ~= "highlight" then
         skill_render.clear_round(buf)
         return
     end
@@ -88,9 +84,7 @@ end
 --- @param buf number
 function M.refresh(buf)
     if not vim.api.nvim_buf_is_valid(buf) then return end
-    local value, warnings = presentation.value(lines_of(buf))
-    for _, warning in ipairs(warnings) do vim.notify("parley: " .. warning, vim.log.levels.WARN) end
-    if value ~= "highlight" then
+    if presentation.value(lines_of(buf)) ~= "highlight" then
         M.clear(buf)
         return
     end

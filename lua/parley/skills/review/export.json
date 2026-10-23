@@ -1,32 +1,32 @@
 {
   "schema": "ariadne/universal-review-export",
-  "version": 3,
+  "version": 2,
   "members": [
     {
       "role": "round",
       "path": "round.md",
-      "bytes": 9696,
-      "sha256": "e2ab145933e9b241e991ffc463d4f82e101c85cf139a3606aa8bc5d614dea47f"
+      "bytes": 6150,
+      "sha256": "64fa0fd9fbb0f21a7de8327b03bb7d29584205eb071201e4b22ff4cac8836ed4"
     },
     {
       "role": "grammar",
       "path": "review-convention.md",
       "source": "construct/local/fix/review-convention.md",
-      "bytes": 9955,
-      "sha256": "555038122b7a4dbbb834acbf74163deabfa4cc64eb040291d5e7fc1afad6078e"
+      "bytes": 8774,
+      "sha256": "56ba73da56b8968d56f8335c024c19038a709363aa8be42778be9af7572918ef"
     },
     {
       "role": "collaboration-modes",
       "path": "collaboration-modes.md",
-      "bytes": 36535,
-      "sha256": "ccc219d1419180b78ff5186fc74e7b954a0fe1d86af4428243c0ec8b1a736f0f"
+      "bytes": 26647,
+      "sha256": "acc57418a1a07bdacb4de35287d916549a11eda93b09e980059c42210b67ce1a"
     },
     {
       "role": "adapter",
       "name": "file-edit",
       "path": "adapters/file-edit.md",
-      "bytes": 10096,
-      "sha256": "a6eca522ba7515bb27eb860d2cc7288b43b7c7eb1dcacaf51627177e38508be2"
+      "bytes": 5394,
+      "sha256": "9499d6017ae7c932313f0e3b793730e24244e31ca1524e80c1f288e9bed7dd2b"
     },
     {
       "role": "mode",
@@ -34,9 +34,10 @@
       "path": "modes/developmental.md",
       "order": 1,
       "scope": "whole-doc",
+      "deletions": "apply-with-gutter-why",
       "frontier": "off",
-      "bytes": 507,
-      "sha256": "38bb238efc36820083d208da36d4c160789725865c264731f94b04409290297e"
+      "bytes": 531,
+      "sha256": "50ddea58a807bd44507265597f8e5a32ce6d3ee42edba81c08d4ad8bc5b9b4e3"
     },
     {
       "role": "mode",
@@ -44,9 +45,10 @@
       "path": "modes/line-editing.md",
       "order": 2,
       "scope": "whole-doc",
+      "deletions": "propose-strike",
       "frontier": "on",
-      "bytes": 434,
-      "sha256": "226a2e35dcb233fab54827b7fda371df18ff43afc5236c9d287114939755cd71"
+      "bytes": 476,
+      "sha256": "ae596e467b3bf8eca06355e3fba14144dfdd84e7d2695a80e24bc513ddaf41cc"
     },
     {
       "role": "mode",
@@ -54,9 +56,10 @@
       "path": "modes/copy-editing.md",
       "order": 3,
       "scope": "whole-doc",
+      "deletions": "propose-strike",
       "frontier": "on",
-      "bytes": 521,
-      "sha256": "a9d41b01c0976ab3f4b3cd0bd8cd7466ee163b1a4a5ccfcdc8a570eea0fd364e"
+      "bytes": 531,
+      "sha256": "c5de437dbe5f7c228dc458cbc57a95e3afb5d75ac4f24cba4754e70432262b3f"
     },
     {
       "role": "mode",
@@ -64,9 +67,10 @@
       "path": "modes/proofreading.md",
       "order": 4,
       "scope": "whole-doc",
+      "deletions": "apply",
       "frontier": "on",
-      "bytes": 447,
-      "sha256": "0b8a0d606fe9fb9e6402cabf14f9ac1d389a688ad1369d4a7d4c445ebe803a90"
+      "bytes": 464,
+      "sha256": "b19efa549e31c47d0c4d39612e2b4b28979476ee21996d8930a579e00e87ad3f"
     },
     {
       "role": "mode",
@@ -74,9 +78,10 @@
       "path": "modes/fact-check.md",
       "order": 5,
       "scope": "whole-doc",
+      "deletions": "propose-strike",
       "frontier": "on",
-      "bytes": 484,
-      "sha256": "7d3a5265e59b090b710d9a9564f9bdeebfc5599e2b0f1a92e8a246eb508f7018"
+      "bytes": 510,
+      "sha256": "c3fbc512061b607a6bd776d9396c8143d5bd72ba005f71012f32387ae55f060b"
     },
     {
       "role": "mode",
@@ -84,9 +89,10 @@
       "path": "modes/free-form.md",
       "order": 6,
       "scope": "whole-doc",
+      "deletions": "propose-strike",
       "frontier": "off",
-      "bytes": 474,
-      "sha256": "01a3bd7e40329cf8c5c9cfa929de00e86d5922c59792b27087689c6854718071"
+      "bytes": 500,
+      "sha256": "1dd5a41723a959bbea5701edfaffa9bd246d3782f9f32f5d3724fe481d19faed"
     },
     {
       "role": "fixture",

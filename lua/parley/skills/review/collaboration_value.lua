@@ -37,9 +37,7 @@ local function utf8_char(n)
     if n < 0x10000 then return string.char(0xe0 + math.floor(n / 4096), 0x80 + math.floor(n / 64) % 64, 0x80 + n % 64) end
     return string.char(0xf0 + math.floor(n / 262144), 0x80 + math.floor(n / 4096) % 64, 0x80 + math.floor(n / 64) % 64, 0x80 + n % 64)
 end
-local escapes = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", n = "\n", r = "\r", t = "\t", b = "\b", f = "\f", [" "] = " ",
-    ["0"] = string.char(0), a = string.char(7), v = string.char(11), e = string.char(27),
-    N = utf8_char(0x85), _ = utf8_char(0xa0), L = utf8_char(0x2028), P = utf8_char(0x2029) }
+local escapes = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", n = "\n", r = "\r", t = "\t", b = "\b", f = "\f", [" "] = " " }
 local function unquote(span)
     if span:sub(1, 1) == "'" then return frontmatter.unquote(span) end
     local out, i = {}, 2
@@ -63,27 +61,6 @@ local function unquote(span)
     return table.concat(out)
 end
 
--- Recognize complete implicit non-string spellings, never a prefix such as
--- "1st pass". Retain the existing conservative YAML 1.1 boolean/date policy.
-local function non_string(value)
-    local lower = value:lower()
-    if ({ null = true, ["~"] = true, ["true"] = true, ["false"] = true,
-        yes = true, no = true, on = true, off = true, y = true, n = true })[lower] then return true end
-    local number = lower:gsub("^[+-]", "")
-    if number == ".inf" or number == ".nan" then return true end
-    if not number:match("^%d") and not number:match("^%.%d") then return false end
-    number = number:gsub("_", "")
-    if number:match("^0x[%da-f]+$")
-        or number:match("^0o[0-7]+$") or number:match("^0b[01]+$") then return true end
-    local mantissa = number:match("^(.-)e[+-]?%d+$") or number
-    if mantissa:match("^%d+$") or mantissa:match("^%d+%.%d*$") or mantissa:match("^%.%d+$") then return true end
-    -- Retain the existing date/timestamp policy. Colon-separated digit text
-    -- such as 12:30 is an ordinary string, not a YAML 1.1 sexagesimal number.
-    if value:match("^%d%d%d%d%-%d%d%-%d%d$")
-        or value:match("^%d%d%d%d%-%d%d?%-%d%d?[Tt ]%s*%d%d?:%d%d:%d%d[%d%.Zz+:%s%-]*$") then return true end
-    return false
-end
-
 local function decode(text, block_scalar)
     local i = 1
     local function skip() local _, last = text:find("^%s*", i); i = (last or i - 1) + 1 end
@@ -104,12 +81,9 @@ local function decode(text, block_scalar)
             i = i + 1
         end
         local value = trim(text:sub(start, i - 1))
-        -- Outside flow collections, commas/brackets/braces are literal after
-        -- the first character. '-', '?' and ':' may begin a plain scalar when
-        -- followed by a non-space character (YAML 1.2.2, section 7.3.3).
-        local indicator = value:match("^[%[%]{},&*!|>%%@`]")
-            or (value:match("^[?:%-]") and (#value == 1 or value:sub(2, 2):match("%s")))
-        if value == "" or indicator or value:find(":%s") or value:sub(-1) == ":" or non_string(value) then
+        if value == "" or value:match("^[&*!|>%%@`?%-]") or value:find(":%s")
+            or value:match("^%d") or value:match("^[+.]%d")
+            or ({ null = true, ["~"] = true, ["true"] = true, ["false"] = true, yes = true, no = true, on = true, off = true })[value:lower()] then
             fail("expected a string; unsupported YAML value: " .. value)
         end
         return value
@@ -205,18 +179,18 @@ local function flow_balance(text, stack)
     end
 end
 
-local function root_fields(lines, close, diagnostic)
+local function root_fields(lines, close)
     local entries, current, base, stack = {}, nil, nil, {}
     for row = 2, close - 1 do
-        if diagnostic then diagnostic.row = row end
         local line = lines[row]
         local prefix = line:match("^(%s*)") or ""
         if prefix:find("\t", 1, true) then fail("tabs in root indentation are unsupported") end
         local literal = current and base and #prefix > base and current.value:match('^[|>]')
-        local raw_line = trim(line)
+        -- Split a root field before scanning its value: punctuation inside
+        -- an already-started plain scalar cannot open a quoted YAML node.
         local root = #stack == 0 and (not base or #prefix == base)
-        local content = (literal or root) and raw_line or uncomment(line)
-        if content:sub(1, 1) == "#" and not literal then content = "" end
+        local content = (literal or root) and trim(line) or uncomment(line)
+        if not literal and content:sub(1, 1) == "#" then content = "" end
         if content ~= "" then
             local indent = #prefix
             base = base or indent
@@ -226,14 +200,10 @@ local function root_fields(lines, close, diagnostic)
                 flow_balance(content, stack)
             elseif indent == base then
                 local key, raw = field_line(content)
-                -- A plain root value has already started after its first
-                -- character. Interior quotes/punctuation cannot open a node.
-                -- Existing legacy flow maps keep their separate old grammar.
-                local legacy_instruction = key:lower() == "process-instruction"
-                local value = uncomment(raw, legacy_instruction or not raw:match("^[%[{]"))
-                current = { key = key, value = value, raw = raw, row = row, children = {} }
+                local value = uncomment(raw, not raw:match("^[%[{]"))
+                current = { key = key, value = value, children = {} }
                 entries[#entries + 1] = current
-                if not legacy_instruction and value:match("^[%[{]") then flow_balance(value, stack) end
+                if value:match("^[%[{]") then flow_balance(value, stack) end
             else
                 -- Nested mappings belong only to a block collection, not to
                 -- an unrelated scalar followed by a misindented declaration.
@@ -249,60 +219,13 @@ local function root_fields(lines, close, diagnostic)
     return entries
 end
 
---- Shared root mapping scan for additive editorial fill. Unknown values stay
---- opaque; callers inspect only the fields they own. The original lines are
---- never rewritten. Limits cover interactive metadata, not the document body.
-function M.header(lines)
-    if lines[1] ~= "---" then return { entries = {}, fields = {}, scanned = 0 } end
-    local close, size = nil, #lines[1] + 1
-    for row = 2, #lines do
-        size = size + #lines[row] + 1
-        if row > 8192 or size > 1024 * 1024 then
-            return nil, "frontmatter line " .. row .. ": exceeds 8192 lines or 1 MiB; shorten the header before submitting",
-                { kind = "limit", row = row }
-        end
-        if lines[row] == "---" then close = row; break end
-    end
-    if not close then return nil, "frontmatter line 1: is not closed", { kind = "unsupported", row = 1 } end
-    local diagnostic = { kind = "unsupported", row = 1 }
-    local ok, entries = pcall(root_fields, lines, close, diagnostic)
-    if not ok then return nil, "frontmatter line " .. diagnostic.row .. ": " .. tostring(entries), diagnostic end
-    local fields = {}
-    for _, entry in ipairs(entries) do
-        local key = entry.key:lower()
-        fields[key] = fields[key] or {}
-        fields[key][#fields[key] + 1] = entry
-    end
-    return { close = close, entries = entries, fields = fields, scanned = close - 1, bytes = size }
-end
-
---- A known scalar from the root scanner. Legacy process-instruction retains
---- its historical plain-text reading (including an unquoted #).
-function M.scalar(entry, legacy)
-    if #entry.children > 0 then return nil, "expected one scalar value" end
-    local text = trim(legacy and entry.raw or entry.value)
-    if text == "" then return "" end
-    local span = frontmatter.quoted_span(text)
-    if span then
-        local tail = trim(text:sub(#span + 1))
-        if tail ~= "" and tail:sub(1, 1) ~= "#" then return nil, "unexpected text after quoted scalar" end
-        local ok, value = pcall(unquote, span)
-        if not ok then return nil, tostring(value) end
-        return value
-    end
-    if legacy then return text end
-    local ok, value = pcall(decode, text, true)
-    if not ok or type(value) ~= "string" then return nil, "expected a scalar string" end
-    return value
-end
-
 local function parse(lines)
     if lines[1] ~= "---" then return nil end
     local fm = frontmatter.parse(lines)
     if not fm then fail("frontmatter is not closed") end
     local field
     for _, entry in ipairs(root_fields(lines, fm.close)) do
-        if entry.key:lower() == "collaboration-mode" then
+        if entry.key == "collaboration-mode" then
             if field then fail("duplicate collaboration-mode field") end
             field = entry
         end

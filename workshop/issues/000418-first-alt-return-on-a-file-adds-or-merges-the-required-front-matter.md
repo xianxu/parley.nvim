@@ -7,7 +7,7 @@ created: 2026-10-22
 updated: 2026-10-23
 estimate_hours: 3.61
 collaboration-mode: collaboration
-card_mirror: '9ab80bcd1147ab027fb711d0870d1ec142780f61' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '657d651a63fe978f0674221cdd85b69b80e26402' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T00:21:40-07:00
 claimant:
     operator: Xian Xu
@@ -20,7 +20,7 @@ flow: {kind: full, provenance: operator}
 actual_hours: 4.29
 ---
 
-# First Alt+Return on a file adds or merges the required front matter
+# Legacy chat reader tolerates quotes in unrelated plain metadata
 
 ## Problem
 
@@ -303,3 +303,10 @@ The alternative is abandonment with the binary's preserved archive ref, then por
 ### 2026-10-23 11:17 — scope approved; reviewed tip preserved
 
 Authenticated TL 49bad7d4 approves the narrow legacy-chat correction and assigns mode-free local submit to #322, after this item and before #419. #419 waits for ariadne#575 fixtures and reconciles old mixed-presentation scope with always-highlight/pair#838. The pre-pivot reviewed tip 4ffe7c9bd79295c66b676fd8d1d165b6d550ba51 is preserved locally and on origin as refs/ariadne/preserved/000418-mode-fill. No force push. #419's revisions were published to main from the resting branch; this checkout is back on #418. Next: change-code for the narrowed contract, then discard obsolete code and run test-first parser/native checks. No new runtime code yet.
+
+
+### 2026-10-23 — narrowed implementation ready for final verification
+
+Change-code plan round 5 is CLEAN on the approved pivot; estimate-quality INFO explicitly preserves the old 3.61h forecast as historical, not remaining work. Removed obsolete runtime, exported three-axis bundle, filler fixtures and test adaptations from the net delivery diff. The only runtime delta is root key/value separation plus root-scalar quote context in collaboration_value.lua; existing map grammar, resolver API and save/submit owner remain unchanged. The active plan table replaces historical API assertions without deleting old design rows.
+
+Test-first evidence: added the legacy-chat/plain-punctuation matrix and observed 20 pass/1 expected failure with unclosed quoted value on baseline code. After the narrow correction, the focused preferred-runtime run passes parser22, collaboration resolver10, document_session47 and native admission/lifetime specs, with clean terminal census; added native plain/partial/existing-header checks prove saved and live bytes unchanged. Compatibility runtime plus architecture guards is running, not yet claimed passed. Three changed Lua files pass luacheck with zero warnings/errors; diff whitespace is clean. Exact next step: finish compatibility/guards, push and queue one final recorded suite, then full close review on the respecified contract; no obsolete full-suite evidence is reused.

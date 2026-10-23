@@ -2,6 +2,7 @@
 name: free-form
 order: 6
 scope: whole-doc
+deletions: propose-strike
 frontier: off
 ---
 Free-form. The operator's instruction (provided separately) governs this round
