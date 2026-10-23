@@ -1495,9 +1495,10 @@ atlas:
       - scripts/couch-editor-probe.lua
       - scripts/couch_bridge.py
       - tests/fixtures/fake_couch_bridge.py
-    tests:
       - tests/packaging/test_couch_bridge.py
       - tests/packaging/test_registry_conformance_bridge.py
+    tests:
+      - tests/integration/couch_bridge_spec.lua
       - tests/unit/remote_session_model_spec.lua
       - tests/unit/remote_runtime_record_spec.lua
       - tests/integration/remote_process_spec.lua
