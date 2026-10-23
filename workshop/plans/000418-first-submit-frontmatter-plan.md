@@ -274,3 +274,30 @@ A bounded LuaJIT probe found quadratic backtracking in the added YAML 1.1 sexage
 The regression first fails on 12:30 and 12:30:45.5 across canonical/legacy and partial/complete headers. It also checks long digit runs with and without a trailing letter as exact instruction strings, no-op repeated fill, and counted value-growth at N=2048/2N=4096 with flushed JIT traces and the unchanged 2.3x bound. This records a post-close fix, with no new parser/state/dependency or change to the feature's mode-key requirement.
 
 Authenticated TL 64c7d8c4 explicitly authorizes finishing this deletion, regression and fresh suite but places sdlc merge and #419 on HOLD pending the operator's proposed mode-key simplification. Do not merge, start #419 or change the three-key contract without a subsequent direction. #322's main-based acceptance-only close follows only if/when #418 lands, per a0ad9f4d.
+
+
+### 2026-10-23 11:15 — proposed replacement after the operator's mode simplification
+
+This revision supersedes the three-key fill plan above; approval is pending. No new code follows this proposal until the hub approves the scope and change-code admits it.
+
+**Goal:** deliver only a necessary legacy collaboration-reader correction; first submission creates no mode or instruction metadata. ARCH-PURPOSE excludes convenience fill that the operator has explicitly retired. ARCH-DRY keeps the existing parser instead of carrying a parallel editorial resolver.
+
+| Pure entity | File | Change |
+|---|---|---|
+| Legacy collaboration header parser | lua/parley/skills/review/collaboration_value.lua | Retain only root-plain lexical-context correction needed to read legacy chat declarations; keep existing scalar/map API and supported grammar |
+
+No new integration entity, mutable state, cache, watcher or durable runtime artifact is introduced. Existing agentic_document/document_session save/register/delivery owns submission without a preparation edit. Existing collaboration.resolve consumes the same parser API. Native tests exercise those actual boundaries with the existing portable registry fake. The existing observer invalidation behavior is restored with the removal of fill preparation.
+
+**Actions and states:** submit, edit/reload/detach, retry after correction. A readable legacy declaration routes normally; an unsupported collaboration declaration reports its existing parse error and requires correcting the header. Edits/reloads/detaches still cancel stale submissions through the existing owner. No new refusal for an unrelated retired scalar and no mutation or loss of operator metadata. Unknown transport outcomes remain owned by the existing submission state; this fix adds no second delivery owner.
+
+**Proposed sequence:**
+- Preserve the reviewed pre-pivot pushed tip in a named Git ref. Keep ordinary forward history; do not force-push.
+- Remove obsolete filler/projection/resolver/lifecycle changes and their generated three-axis snapshot/test/doc adaptations from the delivery diff. Preserve issue and review history as evidence, not executable requirements.
+- Write a focused RED on main behavior for chat scalar plus unrelated plain text with quotes after comma/bracket/hyphen, then retain the smallest root-plain correction in the existing parser. Exercise both scalar and existing flow/block legacy maps; malformed actual collaboration values still fail explicitly.
+- Count instructions at N and 2N for the retained root scan, with parser JIT disabled and traces flushed, so the previous quadratic class cannot return. No scalar-type or writer expansion.
+- Add or retain native no-fill submission regressions for plain, partial and existing header files: body and metadata unchanged, ordinary save/delivery once, second press and stale completion behavior preserved. Run parser/native submission tests on both installed runtimes, architecture guards and lint; inspect delivery diff against main.
+- Update atlas/README to the narrow delivered behavior; rerun change-code, then record a fresh suite on the pushed narrowed code and obtain close's mandatory review. No obsolete suite or live acceptance is reused as final-code proof. Landing requires the hub's scope approval and any requested live check.
+
+**Operating envelope:** one linear scan over header bytes and existing legacy-map entries, no new input domain or durable storage. Use the existing header bound rather than expanding YAML support. Tests cover literal punctuation and existing map shape, not a new general YAML surface. ARCH-PURE keeps lexical rules in the pure parser; ARCH-EVOLVE leaves old metadata byte-identical and preserves the known map grammar.
+
+#419 remains a separate main-based branch after this item resolves, with no stacked development. Its implementation waits for ariadne#575's landed export v4 and fixtures. The mode-free local-submit adapter is an explicit ownership question for TL because it is necessary to #322 and no longer supplied by this narrowed #418.
