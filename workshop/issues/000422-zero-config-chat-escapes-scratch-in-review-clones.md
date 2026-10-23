@@ -1,13 +1,13 @@
 ---
 id: 000422
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'cd41c5d5e6350f6e83312dc2651481fafb0ae029' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '000b5ae1077e81047385464ea93958975d4322d0' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T01:58:47-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "22a5882d", done: "87795ed6"}
+actual_hours: 0.21
 ---
 
 # Zero-config chat escapes scratch in review clones
