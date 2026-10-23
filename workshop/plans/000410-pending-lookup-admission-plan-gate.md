@@ -57,6 +57,44 @@ reviewer_runs:
       finished_at: "2026-10-23T07:22:54.091088Z"
       session_id: 01a167a3-9d9e-75d3-896b-81d4f53015d0
       outcome: returned
+    - version: 1
+      intent:
+        id: b708f9c3-b0e3-45a2-b9bb-153b3f56e062
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000410"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        reviewed_head: 5d7d98a14b8c62d0100e47ed925f895e7e1c795f
+        slot: parley.nvim:4
+        requested_at: "2026-10-23T07:24:34.096735Z"
+      phase: finished
+      pid: 19582
+      started_at: "2026-10-23T07:24:34.229737Z"
+      finished_at: "2026-10-23T07:25:24.826078Z"
+      session_id: 01a167a5-b1ba-7f81-a950-3ae52a9c6a30
+      outcome: exit-error
+    - version: 1
+      intent:
+        id: 17d5b5b8-202b-49ea-8980-96430d35e2ea
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000410"
+        recipe: estimate-quality
+        round: 1
+        attempt: 2
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        reviewed_head: 5d7d98a14b8c62d0100e47ed925f895e7e1c795f
+        slot: parley.nvim:4
+        requested_at: "2026-10-23T07:25:25.082781Z"
+      phase: finished
+      pid: 63427
+      started_at: "2026-10-23T07:25:25.253742Z"
+      finished_at: "2026-10-23T07:26:08.729984Z"
+      session_id: 01a167a6-7916-7aa3-985c-f1dd446a1d27
+      outcome: returned
 gate: plan-quality
 issue: 410
 id_prefix: PQ
@@ -252,7 +290,41 @@ rounds:
       reviewer: codex (openai; author openai)
       blocked: false
       protocol_error: no valid findings block
-content_hash: 06b9f2b1e665f9fe3d08b0eca61ca4b3bdabdae886fa5922b1bd18d395151102
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: c753abea-1663-4477-8f65-9ae2d03c752b
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000410"
+            recipe: plan-quality
+            round: 7
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+            reviewed_head: 5d7d98a14b8c62d0100e47ed925f895e7e1c795f
+            slot: parley.nvim:4
+            requested_at: "2026-10-23T07:24:01.753412Z"
+          phase: finished
+          pid: 92224
+          started_at: "2026-10-23T07:24:01.88762Z"
+          finished_at: "2026-10-23T07:24:32.595977Z"
+          session_id: 01a167a5-3321-7b91-9b4e-cbd79a190082
+          outcome: returned
+      "n": 7
+      timestamp: "2026-10-23T00:24:32-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: RETIRE supersedes automatic handoff and preserves old proof/history until explicit owned completion or validated journal recovery.
+          round: 7
+        - id: PQ-2
+          disposition: addressed
+          note: Named function strategies specify adversarial inputs and mechanical guards; the active harness revision identifies its tested API and bounded real-child verification.
+          round: 7
+      blocked: false
+content_hash: 0a87cf86d09f57b78ce0b4d3788352216191fc5fab25c3f6e07fe8b8ca700b30
 ---
 
 # Gate ledger — parley.nvim#410 (plan-quality)
@@ -295,6 +367,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 ## Round 6 — 2026-10-23T00:22:16-07:00 (codex) — passed
 
 **Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 7 — 2026-10-23T00:24:32-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — RETIRE supersedes automatic handoff and preserves old proof/history until explicit owned completion or validated journal recovery.
+- PQ-2 — addressed — Named function strategies specify adversarial inputs and mechanical guards; the active harness revision identifies its tested API and bounded real-child verification.
 
 ## Open findings
 
