@@ -321,6 +321,22 @@ A child that never answers is killed by pid, and the request fails naming its me
 before the runner's idle kill ends the spec with no cause. `tests/arch/embedded_rpc_spec.lua` refuses a raw `vim.rpcrequest` or
 `--embed` spawn anywhere else.
 
+`child:begin_case(name, budget_ms)` gives subsequent requests one absolute
+deadline; each request gets the smaller of its usual cap and the case's
+remaining time. An expired case refuses before dispatch, and its deadline
+cannot be restarted. The fold uncertainty-retirement case uses the existing
+load-scaled request budget for the whole case (#410, #420).
+
+That fold scenario stays in one child RPC to preserve callback ordering. Six
+stderr checkpoints name its current block, elapsed time and last-known mode.
+The helper retains at most 4096 bytes of child stderr. Its existing timer is
+the sole timeout owner: before the exact child kill it captures elapsed time,
+budgets, the pending RPC, PID/channel, a signal-0 liveness observation and the
+stderr tail. Current editor mode remains unknown during a blocked request;
+checkpoint mode is explicitly last-known. No diagnostic RPC can block behind
+the stalled work. The named diagnostics aid investigation; they do not provide
+the structured Lua results required by SDLC's typed flake adapter (#415).
+
 ### A spec's processes end with it (#402)
 
 `spec_runner` starts each spec child as a process-group leader (`vim.system{detach = true}`), so the
