@@ -41,13 +41,32 @@ Two owners:
 2. **ariadne (file there; TL routes it):** an inside-checkout reviewer's TMPDIR should be a sibling of the review checkout, inside the reviewer's write fence but outside the reviewed tree. That fixes this class for every repo (the #202 traversal flake and the #338 marker), and restores parley tests in review clones.
 
 Tests:
-- [ ] Shell-level regression spec: a disposable marked tree with TEST_ENV_ROOT inside it → the guard refuses (nonzero, the message names the marked root) and creates nothing in the tree. An unmarked out-of-tree root passes. The guard catches a marker at the root itself, and inside $(CURDIR) even without a marker.
-- [ ] zero_config case 1 additionally asserts the precondition (no marked ancestor of its cwd) and that the chat path lies under the child's HOME scratch. A future placement break then fails with the reason rather than as "chat outside default dir", and asserts nothing about the checkout.
-- [ ] Repro: the short-path review-style clone (`TMPDIR=<clone>/.sdlc-review/tmp make test-spec SPEC=infra/config`) refuses up front with the guard message and leaves `git status` clean apart from `.sdlc-review/`. The ordinary checkout passes infra/config and infra/test_harness.
-- [ ] atlas/infra/test_harness.md: the pre-write placement check.
+- [x] Shell-level regression spec: a disposable marked tree with TEST_ENV_ROOT inside it → the guard refuses (nonzero, the message names the marked root) and creates nothing in the tree. An unmarked out-of-tree root passes. The guard catches a marker at the root itself, and inside $(CURDIR) even without a marker.
+- [x] zero_config case 1 additionally asserts the precondition (no marked ancestor of its cwd) and that the chat path lies under the child's HOME scratch. A future placement break then fails with the reason rather than as "chat outside default dir", and asserts nothing about the checkout.
+- [x] Repro: the short-path review-style clone (`TMPDIR=<clone>/.sdlc-review/tmp make test-spec SPEC=infra/config`) refuses up front with the guard message and leaves `git status` clean apart from `.sdlc-review/`. The ordinary checkout passes infra/config and infra/test_harness.
+- [x] atlas/infra/test_harness.md: the pre-write placement check.
 
 Side observation (not in scope): when $TMPDIR is long, nvim's tempname() silently falls back to /tmp/nvim.<user>, outside TEST_ENV_ROOT. My first repro under a long scratchpad path passed for that reason alone. If the TL wants it, I'll file it separately.
 
 ## Log
 
 Observed independently in #405 M2 R1 and R2. R2 reviewed head4508683883564bbd676e42c2ee50d15935a95454 against replayed base d4f332353feca049bb17eb68643b40a66176d25d. Its preferred focused mapping had275PASS/1FAIL/0ERROR; zero-config alone at base had8PASS/1FAIL/0ERROR, proving it predates the M2 changes. All process censuses were clean. R1 reported a chat created under workshop/parley in its disposable checkout; R2 removed disposable artifacts. This is review-clone context evidence, not yet an ordinary-checkout reproduction or an established timing flake. See #405's M2 review sidecar for the retained result. No operator file was changed.
+
+### 2026-10-23 — guard implemented; landing waits for ariadne#571
+
+TL approved the refusal, plus the ariadne fix filed as ariadne#571 (owner ariadne:4). Sequencing: land this only after #571, so parley reviewers are not left unable to run tests in clones. The tempname() long-path fallback is filed separately as #423 (unclaimed).
+
+Implementation 92bf8cbc:
+- `scripts/test-placement.sh` is the opening step of PREP_TEST_ENV, with `REPO_MARKER := .parley`.
+- Regressions in `tests/arch/scratch_placement_spec.lua`: a marked tree refuses and creates nothing; a root that carries the marker refuses; a root inside the checkout refuses without a marker; unmarked roots pass, existing or not; the guard is wired with the configured marker.
+- zero_config case 1 asserts its no-marker precondition, and that the chat lies under the child's HOME.
+- `tests/unit/test_run_lease.py` copies the script into its disposable checkouts. Before that, its real make runs hung at PREP and timed out (exit 124, 8 failures). After the fix: 27 OK.
+
+Evidence:
+- Ordinary checkout: infra/test_harness 229/0/0 and infra/config 166/0/0, each with a clean census.
+- Short review-style clone of 92bf8cbc (`TMPDIR=<clone>/.sdlc-review/tmp make test-spec SPEC=infra/config`): exit 2, with the single `test-placement: ... is inside the checkout` refusal. No parley-test-env and no workshop artifact were created.
+- Post-#571 sibling layout (`TMPDIR=<clone>.sdlc-review/tmp`): 166/0/0, clean census, clean git status.
+- Guard replaced by a no-op in the disposable clone: zero_config fails on `scratch sits under a marked project` before any chat is written.
+
+Sent ariadne:4 the capture /Volumes/TestScratch/tmp/r422-review.log, the probe target, and the reviewed heads (45086838, 09f68966).
+
