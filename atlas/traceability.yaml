@@ -765,6 +765,7 @@ atlas:
       - tests/unit/reap_test_orphans_spec.lua
       - tests/integration/chat_progress_process_spec.lua
       - tests/integration/embedded_nvim_spec.lua
+      - tests/integration/fold_retirement_trace_spec.lua
       - tests/arch/embedded_rpc_spec.lua
       - tests/unit/spec_jobs_spec.lua
       - tests/unit/test_process_model_spec.lua
