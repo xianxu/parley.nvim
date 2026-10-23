@@ -38,6 +38,25 @@ reviewer_runs:
       finished_at: "2026-10-23T17:13:26.532136Z"
       session_id: 01a169c0-5e6b-7520-a04e-7cbcd9b2bd03
       outcome: returned
+    - version: 1
+      intent:
+        id: 8d5bfebc-7c16-466a-9559-45444445c4cd
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000418"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        reviewed_head: 3fe968d92084727168aec0b25b7c406a6e9106a2
+        slot: parley.nvim:3
+        requested_at: "2026-10-23T18:14:39.707817Z"
+      phase: finished
+      pid: 22681
+      started_at: "2026-10-23T18:14:39.947339Z"
+      finished_at: "2026-10-23T18:15:20.357012Z"
+      session_id: 01a169f8-e00d-7f31-b7e3-b0d234e02275
+      outcome: returned
 gate: plan-quality
 issue: 418
 id_prefix: PQ
@@ -182,7 +201,32 @@ rounds:
           note: Named risky functions have adversarial strategies and mechanical guards covering the revised boundary.
           round: 4
       blocked: false
-content_hash: f6511c76d93da83830c1767ed82fd8544dd9a1c91406d44f08c120e596ea3f30
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: 01957c31-be48-4c08-95ac-38fcbc3628cc
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000418"
+            recipe: plan-quality
+            round: 5
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+            reviewed_head: 3fe968d92084727168aec0b25b7c406a6e9106a2
+            slot: parley.nvim:3
+            requested_at: "2026-10-23T18:14:07.778Z"
+          phase: finished
+          pid: 83740
+          started_at: "2026-10-23T18:14:07.875436Z"
+          finished_at: "2026-10-23T18:14:37.897641Z"
+          session_id: 01a169f8-620d-7710-a65d-720aee104788
+          outcome: returned
+      "n": 5
+      timestamp: "2026-10-23T11:14:38-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      blocked: false
+content_hash: ea6b006d9ce6eddc8e27433fe4c1b32f1f1818b516098b17e7d3f4f1facc15f6
 ---
 
 # Gate ledger — parley.nvim#418 (plan-quality)
@@ -219,6 +263,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - PQ-1 — addressed — Witnessed preparation remains on the existing operation; skipped fill uses its established no-op path.
 - PQ-2 — addressed — Named risky functions have adversarial strategies and mechanical guards covering the revised boundary.
+
+## Round 5 — 2026-10-23T11:14:38-07:00 (codex) — passed
 
 ## Open findings
 
