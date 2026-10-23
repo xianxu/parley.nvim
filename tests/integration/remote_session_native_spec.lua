@@ -21,7 +21,7 @@ describe('private editor endpoint native document lifetime', function()
             fixture = fixture or {}
             vim.env.PATH = root .. '/bin:' .. vim.env.PATH
             vim.env.FAKE_COUCH_REGISTRY = root .. '/registry.json'
-            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_EDITOR_MODE = nil, nil
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_EDITOR_MODE = fixture.registry_mode, fixture.editor_mode
             vim.env.COUCH_ISOLATED_ROOT = root
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = pane and 'native-endpoint' or nil, pane and 'pane' or nil
             vim.env.FAKE_COUCH_ACTORS = vim.json.encode({ Code = 'ok', Actors = {
@@ -36,8 +36,15 @@ describe('private editor endpoint native document lifetime', function()
                 if operation == 'lookup' then endpoint_probe.lookups = endpoint_probe.lookups + 1 end
                 if operation == 'rename' then endpoint_probe.renames = endpoint_probe.renames + 1 end
                 local ordinal = endpoint_probe.lookups
+                if operation == 'lookup' and fixture.lookup_timeout_ms and vim.env.FAKE_COUCH_REGISTRY_MODE == 'delay' then
+                    options = vim.tbl_extend('force', {}, options or {}, { timeout_ms = fixture.lookup_timeout_ms })
+                end
                 return request(operation, args, witness, function(result)
-                    if operation == 'lookup' then endpoint_probe.lookup_completions = endpoint_probe.lookup_completions + 1 end
+                    if operation == 'lookup' then
+                        endpoint_probe.lookup_completions = endpoint_probe.lookup_completions + 1
+                        endpoint_probe.lookup_result = result.kind
+                        endpoint_probe.lookup_error = result.error
+                    end
                     if operation == 'rename' then endpoint_probe.rename_completions = endpoint_probe.rename_completions + 1 end
                     if operation == 'lookup' and ordinal <= (fixture.hold_lookups or 0) then
                         held_endpoint_lookups[ordinal] = function() callback(result) end
@@ -123,6 +130,56 @@ describe('private editor endpoint native document lifetime', function()
         assert.equals('socket', uv.fs_lstat(observed.state.context.Socket).type)
     end)
 
+    for _, failure in ipairs({
+        { name = 'unavailable command', registry_mode = 'unsupported' },
+        { name = 'malformed reply', registry_mode = 'malformed' },
+        { name = 'missing absence witness', registry_mode = 'missing' },
+        { name = 'lookup timeout', registry_mode = 'delay', lookup_timeout_ms = 50 },
+        { name = 'rejected identity', invalid_identity = true },
+        { name = 'rejected registration', editor_mode = 'wrong-identity', allocated = true, registers = 1 },
+        { name = 'rejected runtime', unsafe_runtime = true, allocated = true, registers = 0 },
+    }) do
+        it('reports ' .. failure.name .. ' once per outside-pane incarnation and retries only on reopen', function()
+            local file = document('discovery-failure.md')
+            if failure.invalid_identity then
+                registrations[file].ID = 'invalid'
+                vim.fn.writefile({ vim.json.encode({ paths = registrations, moves = vim.empty_dict() }) }, root .. '/registry.json')
+            end
+            if failure.unsafe_runtime then assert(uv.fs_mkdir(root .. '/runtime', 493)) end
+            open(file, false, failure)
+            local first = child:exec([[
+                local arrival_ms = ...
+                assert(vim.wait(arrival_ms, function() return #endpoint_probe.notices > 0 end, 10),
+                    'discovery failure must surface remote unavailability')
+                for _ = 1, 8 do require('parley').setup_markdown_keymaps(endpoint_buf) end
+                return { counts = endpoint_probe, modifiable = vim.bo[endpoint_buf].modifiable,
+                    modified = vim.bo[endpoint_buf].modified, lines = vim.api.nvim_buf_get_lines(endpoint_buf, 0, -1, false) }
+            ]], arrival.MS)
+            assert.equals(1, first.counts.lookups)
+            assert.equals(1, #first.counts.notices, 'discovery callback and dispatcher share one notice owner')
+            assert.equals('Remote view unavailable; reopen the file to retry', first.counts.notices[1])
+            assert.equals(failure.allocated and 1 or 0, first.counts.acquires)
+            assert.equals(failure.registers or 0, first.counts.registers)
+            assert.equals((failure.invalid_identity or failure.allocated) and 'registered' or 'unavailable', first.counts.lookup_result)
+            if failure.lookup_timeout_ms then assert.matches('deadline exceeded', first.counts.lookup_error) end
+            assert.is_true(first.modifiable)
+            assert.is_false(first.modified)
+            assert.same({ '# Original', 'original contents' }, first.lines)
+            if not failure.allocated then assert.is_nil(uv.fs_lstat(root .. '/runtime')) end
+            if failure.unsafe_runtime then assert(uv.fs_chmod(root .. '/runtime', 448)) end
+            registrations[file].ID = vim.fn.sha256('discovery-failure.md'):sub(1, 32)
+            vim.fn.writefile({ vim.json.encode({ paths = registrations, moves = vim.empty_dict() }) }, root .. '/registry.json')
+            child:exec([[
+                vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_EDITOR_MODE = nil, nil
+                vim.cmd('edit!')
+            ]])
+            local reopened = observe()
+            assert.is_true(reopened.complete, vim.inspect(reopened))
+            assert.equals(2, reopened.counts.lookups)
+            assert.equals(1, #reopened.counts.notices)
+        end)
+    end
+
     it('leaves an ordinary outside-Couch Markdown file local after its one positive absence lookup', function()
         open(document('ordinary.md', nil, false))
         local observed = child:exec([[
@@ -191,40 +248,44 @@ describe('private editor endpoint native document lifetime', function()
         end)
     end
 
-    it('ignores a real lookup completed for an unloaded incarnation before the reopened lookup completes', function()
-        local file = document('held-discovery.md')
-        open(file, false, { hold_lookups = 2 })
-        local observed = child:exec([[
-            local file, arrival_ms = ...
-            local remote = require('parley.remote_session')
-            assert(vim.wait(arrival_ms, function() return held_endpoint_lookups[1] ~= nil end, 10), 'first lookup not held')
-            local old_buf = endpoint_buf
-            assert(remote.snapshot(old_buf) == nil)
-            vim.cmd('bdelete! ' .. old_buf)
-            vim.cmd('edit ' .. vim.fn.fnameescape(file))
-            endpoint_buf = vim.api.nvim_get_current_buf()
-            assert(endpoint_buf == old_buf, 'fixture must reuse one buffer across true unload/reopen')
-            require('parley').setup_markdown_keymaps(endpoint_buf)
-            assert(vim.wait(arrival_ms, function() return held_endpoint_lookups[2] ~= nil end, 10), 'reopen lookup not held')
-            held_endpoint_lookups[1]()
-            local stale_advertised = remote.snapshot(endpoint_buf) ~= nil
-            local stale_registers, stale_acquires = endpoint_probe.registers, endpoint_probe.acquires
-            held_endpoint_lookups[2]()
-            local complete = vim.wait(arrival_ms, function()
-                local state = remote.snapshot(endpoint_buf)
-                return state and state.phase == 'active'
-            end, 10)
-            return { complete = complete, stale_advertised = stale_advertised, stale_registers = stale_registers, stale_acquires = stale_acquires,
-                state = remote.snapshot(endpoint_buf), counts = endpoint_probe }
-        ]], file, arrival.MS)
-        assert.is_false(observed.stale_advertised)
-        assert.equals(0, observed.stale_registers)
-        assert.equals(0, observed.stale_acquires)
-        assert.is_true(observed.complete, vim.inspect(observed))
-        assert.equals(registrations[file].ID, observed.state.context.DocumentID)
-        assert.equals(2, observed.counts.lookups)
-        assert.equals(1, observed.counts.registers)
-    end)
+    for _, lookup_failure in ipairs({ false, true }) do
+        it('ignores a real ' .. (lookup_failure and 'failed' or 'registered') .. ' lookup completed for an unloaded incarnation', function()
+            local file = document('held-discovery.md')
+            open(file, false, { hold_lookups = 2, registry_mode = lookup_failure and 'malformed' or nil })
+            local observed = child:exec([[
+                local file, arrival_ms = ...
+                local remote = require('parley.remote_session')
+                assert(vim.wait(arrival_ms, function() return held_endpoint_lookups[1] ~= nil end, 10), 'first lookup not held')
+                local old_buf = endpoint_buf
+                assert(remote.snapshot(old_buf) == nil)
+                vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+                vim.cmd('bdelete! ' .. old_buf)
+                vim.cmd('edit ' .. vim.fn.fnameescape(file))
+                endpoint_buf = vim.api.nvim_get_current_buf()
+                assert(endpoint_buf == old_buf, 'fixture must reuse one buffer across true unload/reopen')
+                require('parley').setup_markdown_keymaps(endpoint_buf)
+                assert(vim.wait(arrival_ms, function() return held_endpoint_lookups[2] ~= nil end, 10), 'reopen lookup not held')
+                held_endpoint_lookups[1]()
+                local stale_advertised = remote.snapshot(endpoint_buf) ~= nil
+                local stale_registers, stale_acquires = endpoint_probe.registers, endpoint_probe.acquires
+                held_endpoint_lookups[2]()
+                local complete = vim.wait(arrival_ms, function()
+                    local state = remote.snapshot(endpoint_buf)
+                    return state and state.phase == 'active'
+                end, 10)
+                return { complete = complete, stale_advertised = stale_advertised, stale_registers = stale_registers, stale_acquires = stale_acquires,
+                    state = remote.snapshot(endpoint_buf), counts = endpoint_probe }
+            ]], file, arrival.MS)
+            assert.is_false(observed.stale_advertised)
+            assert.equals(0, observed.stale_registers)
+            assert.equals(0, observed.stale_acquires)
+            assert.is_true(observed.complete, vim.inspect(observed))
+            assert.equals(registrations[file].ID, observed.state.context.DocumentID)
+            assert.equals(2, observed.counts.lookups)
+            assert.equals(1, observed.counts.registers)
+            assert.same({}, observed.counts.notices)
+        end)
+    end
 
     for _, door in ipairs({ 'move_path', 'saveas' }) do
         it('fences a registered ' .. door .. ' until its real registry rename confirms the stable ID', function()

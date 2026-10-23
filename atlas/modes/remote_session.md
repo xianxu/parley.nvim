@@ -135,3 +135,11 @@ The normal suite and the `modes/remote_session` mapping run the Python bridge
 protocol/lifetime checks through `tests/integration/couch_bridge_spec.lua`. Its
 fixture installs the shared parent-death watchdog before blocking; a regression
 keeps stdin open after parent death to distinguish watchdog exit from EOF.
+
+Outside-pane discovery distinguishes positive absence from failure. Positive
+absence is silent. Unavailable or malformed lookup and rejected attachment
+produce the existing remote-unavailable notice once per buffer incarnation;
+the discovery callback and dispatcher share that notice owner. Duplicate events
+do not retry or repeat it. Local editing stays available; explicitly reopening
+the file creates a new incarnation and permits fresh discovery. Stale callbacks
+cannot report into the replacement incarnation.

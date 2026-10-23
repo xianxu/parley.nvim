@@ -83,9 +83,10 @@ local function watch_buffer(buf)
 end
 
 local function notify(record, message)
-    if record.notified then return end
-    record.notified = true
-    vim.notify(message, vim.log.levels.WARN)
+    local owner = record.lifetime or record
+    if owner.notified then return end
+    owner.notified = true
+    vim.notify(message or 'Remote view unavailable; reopen the file to retry', vim.log.levels.WARN)
 end
 local function report(record, result)
     if record.callback then
@@ -210,7 +211,7 @@ local function effects(record, list)
                         dispatch(record, { type = 'reply', witness = effect.witness, result = result })
                         local accepted = record.owner:snapshot().result
                         if not retired(record) and accepted.kind ~= 'confirmed' then
-                            notify(record, 'Remote view unavailable; reopen the file to retry')
+                            notify(record)
                         end
                         report(record, accepted)
                     end
@@ -290,7 +291,7 @@ function M.attach(buf, identity, callback, options)
     if life.suspended then callback({ kind = 'unavailable', error = 'document is moving' }); return end
     life.known = true
     counter = next_id
-    local record = { buf = buf, attach = counter, pending = 0, allocating = true,
+    local record = { buf = buf, lifetime = life, attach = counter, pending = 0, allocating = true,
         options = owned_options(options), callback = callback, identity = vim.deepcopy(identity), context = context, requests = {} }
     attachments[record], by_buffer[buf], by_attach[record.attach] = true, record, record
     attachment_count = attachment_count + 1
@@ -299,7 +300,7 @@ function M.attach(buf, identity, callback, options)
             record.allocating = false
             release_consumer(record)
             report(record, { kind = 'unavailable', error = result.error or 'attachment retired' })
-            if not retired(record) then notify(record, 'Remote view unavailable; reopen the file to retry') end
+            if not retired(record) then notify(record) end
             prune(record); return
         end
         local slot
@@ -349,7 +350,7 @@ function M.attach(buf, identity, callback, options)
                 done(listening); prune(record)
                 if completion then
                     report(record, completion)
-                    if not retired(record) then notify(record, 'Remote view unavailable; reopen the file to retry') end
+                    if not retired(record) then notify(record) end
                 end
             end)
         end)
@@ -367,11 +368,22 @@ function M.observe(buf)
     life.discovered = true
     local token = {}
     life.lookup_token = token
+    local function current()
+        return lifetimes[buf] == life and life.lookup_token == token and not life.suspended
+            and named_file(buf) == file and vim.api.nvim_buf_is_loaded(buf)
+    end
     life.request = registry.request('lookup', { file }, {}, function(result)
-        if lifetimes[buf] ~= life or life.lookup_token ~= token or life.suspended
-            or named_file(buf) ~= file or not vim.api.nvim_buf_is_loaded(buf) then return end
+        if not current() then return end
         life.request = nil
-        if result.kind == 'registered' then M.attach(buf, result.registration) end
+        if type(result) == 'table' and result.kind == 'registered' then
+            M.attach(buf, result.registration, function(reply)
+                if current() and (type(reply) ~= 'table' or reply.kind ~= 'confirmed') then
+                    notify(life)
+                end
+            end)
+        elseif type(result) ~= 'table' or result.kind ~= 'absent' then
+            notify(life)
+        end
     end)
 end
 
