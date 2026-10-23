@@ -260,3 +260,16 @@ Focused mapping discovered Python tests listed directly under tests were fed to 
 ### 2026-10-22 — review-ready evidence bookkeeping
 
 Tick completed M1 records and M2 implementation/qualification rows against their recorded evidence. Keep publication as a procedural gate, not a self-referential implementation checkbox. Preferred focused mapping has266 passes and two confirmed intermittent runtime cases authorized by TL2e100e36 for registration under421; isolated unchanged-head diagnostic passes44. Operator-version mapping268 passes. No product deadline or assertion was relaxed. The queued full suite must still pass before landing; known flakes require the normal SDLC evidence policy.
+
+### 2026-10-22 — M2 BR-8/BR-9 correction approved (TLbc56275d)
+
+M2 R1 returned FIX-THEN-SHIP but did not finalize: Important BR-8 (visible-remote-availability-failures) and BR-9 (second readme-runnable-surface-documentation finding). Keep one existing remote-unavailable notice per buffer incarnation, shared by discovery callback and attachment dispatcher; the existing lifetime owns dedup. No new phase, automatic retry, watcher, authority field or local editing change. A fresh explicit reopen creates a fresh lifetime and permits one discovery. Stale, suspended or retired callbacks cannot notify the replacement incarnation.
+
+| Discovery/attachment outcome | Visible state | Recovery | Possible loss |
+|---|---|---|---|
+| positive registration absence | ordinary local editor, silent | continue locally | no remote view exists |
+| unavailable/malformed/timeout lookup, rejected identity or attachment | one existing remote-unavailable notice; local editor remains writable | reopen explicitly | remote publication unavailable or uncertain, local work unchanged |
+| duplicate events in same incarnation | existing visible state, no new lookup/notice | same recovery as that state | unchanged |
+| stale completion after detach/reopen | no notice or publication for successor | continue with new incarnation | old publication cleanup retains existing exact ownership rules |
+
+Native red matrix uses the persisted registry/endpoint fakes for unsupported, malformed, missing-witness, delayed lookup, rejected registration identity and late endpoint rejection; retain silent-absence, duplicate, stale callback and explicit-reopen controls. One shared notice owner prevents callback/dispatcher duplication. Sweep all early attachment exits and allocated failures, consuming normalized outcomes. README sweep covers the real absolute bridge invocation, its Pair build command, invocation PATH nvim selection, optional candidate and fake-only control; library/probe helpers gain no invented standalone CLI. Cancel only the superseded owned suite, then queue the fixed head and rerun the plain M2 boundary (prior close was not finalized).
