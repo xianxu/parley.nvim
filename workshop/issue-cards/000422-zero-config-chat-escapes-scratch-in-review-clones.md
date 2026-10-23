@@ -1,6 +1,6 @@
 ---
 id: 000422
-status: codecomplete
+status: done
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: f5bd5052ddd7f48fd515a88e0d4f2b38466f8af4
         evidence_commit: 8cb7afc076347cd380f224bb36223aba0092c389
+        landed_commit: e169face48edcdbbae4e464bbc428f291f878147
 ---
 
 # Zero-config chat escapes scratch in review clones
