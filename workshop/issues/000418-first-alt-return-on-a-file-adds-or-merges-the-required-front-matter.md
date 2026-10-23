@@ -47,9 +47,9 @@ missing keys, never overwriting or dropping the operator's existing keys or valu
 
 ## Done when
 
-- [ ] Legacy chat scalar and existing flow/block maps read correctly with unrelated plain instruction text such as Keep commas, "please, including punctuation after comma, bracket and hyphen.
-- [ ] Actual malformed collaboration values still produce explicit errors; the supported grammar is not expanded.
-- [ ] Ordinary Couch submit of plain/partial/existing documents adds no mode or instruction keys and preserves metadata/body; normal cancellation and once-only delivery remain intact.
+- [x] Legacy chat scalar and existing flow/block maps read correctly with unrelated plain instruction text such as Keep commas, "please, including punctuation after comma, bracket and hyphen.
+- [x] Actual malformed collaboration values still produce explicit errors; the supported grammar is not expanded.
+- [x] Ordinary Couch submit of plain/partial/existing documents adds no mode or instruction keys and preserves metadata/body; normal cancellation and once-only delivery remain intact.
 - [ ] Counted N/2N parser work is linear; focused parser/native tests pass on both supported runtimes, followed by a fresh recorded suite and narrowed close review.
 
 **Superseded original acceptance checklist (retained as history):**
@@ -311,3 +311,10 @@ Authenticated TL 49bad7d4 approves the narrow legacy-chat correction and assigns
 Change-code plan round 5 is CLEAN on the approved pivot; estimate-quality INFO explicitly preserves the old 3.61h forecast as historical, not remaining work. Removed obsolete runtime, exported three-axis bundle, filler fixtures and test adaptations from the net delivery diff. The only runtime delta is root key/value separation plus root-scalar quote context in collaboration_value.lua; existing map grammar, resolver API and save/submit owner remain unchanged. The active plan table replaces historical API assertions without deleting old design rows.
 
 Test-first evidence: added the legacy-chat/plain-punctuation matrix and observed 20 pass/1 expected failure with unclosed quoted value on baseline code. After the narrow correction, the focused preferred-runtime run passes parser22, collaboration resolver10, document_session47 and native admission/lifetime specs, with clean terminal census; added native plain/partial/existing-header checks prove saved and live bytes unchanged. Compatibility runtime plus architecture guards is running, not yet claimed passed. Three changed Lua files pass luacheck with zero warnings/errors; diff whitespace is clean. Exact next step: finish compatibility/guards, push and queue one final recorded suite, then full close review on the respecified contract; no obsolete full-suite evidence is reused.
+
+
+### 2026-10-23 — narrowed full review SHIP; retained final suite
+
+Full close round 6 returned SHIP, no new findings, BR-1/2/3/4 addressed under the approved rescope. Reviewer independently reproduced baseline RED in memory and passed parser22/native51 on both Neovim0.12.5 and0.11.7; 40 architecture checks and lint are green. Parent compatibility run also passed resolver10, lifecycle47 and native-lifetime10 with clean terminal census. Close evidence commit is 053aea044aee9a1f9995f7174e1e08dcf5a396e3; later mirror fabd733210bbb9ba5655ffa04694799e83de6bbf is bookkeeping only. Main delivery diff remains one runtime parser, two test files and the atlas note, plus issue/plan/review history.
+
+Retained recorded suite: terminal20693, lease-1759230174, exact code b1b34cb9761bfc7aa0fbe5fbe8139cde6e7ed44c. Checkout /Volumes/TestScratch/local-checks/sdlc-local-18287140; log .git/sdlc/test-stats/inflight/d36e0759f56e8fa57cb67719949f7566/run.log. Last observed FIFO3, waiting behind admitted Parley/Pair and a two-slot Ariadne suite. Do not restart or requeue for these docs-only descendants; no final-code full pass exists yet. Exact next step: read terminal20693 to completion, classify any failure without a blind retry, record the result, then sdlc merge on the approved #418 PR338. After landing/report, start #322's mode-free outside-Couch submission from main; #419 follows and waits for #575 fixtures. The three-key stage stays cleared.
