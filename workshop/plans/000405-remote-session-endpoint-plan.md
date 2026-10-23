@@ -130,8 +130,8 @@ The new lifecycle never changes modifiable, admission history, lock ownership, s
 - [x] Record durable producer contract aa24764a and the TL-approved crash-residue correction before change-code; use the eventual landed producer merge pin for real conformance, never stack branches.
 - [x] Add failing pure sequences, then the minimal sole owner; run unit specs red/green.
 - [x] Add failing socket/CLI tests through the stateful fake, implement thin shell/transport, then run targeted integration red/green on 0.12.5 and0.11.7.
-- [ ] ~~Extend real conformance with an intentional corrupt-fake negative control; run against producer merge pin in isolated roots.~~ Deferred to M2 by the TL-approved bridge sequencing Revision below. M1 qualifies the fake driver and its corrupt-identity negative control; real conformance requires both pair#758 and pair#801 merge pins.
-- [ ] Update indexed atlas/traceability; commit; recorded suite and milestone-close M1 through SDLC.
+- [x] ~~Extend real conformance with an intentional corrupt-fake negative control; run against producer merge pin in isolated roots.~~ Deferred to M2 by the TL-approved bridge sequencing Revision below. M1 qualifies the fake driver and its corrupt-identity negative control; real conformance requires both pair#758 and pair#801 merge pins. Now qualified in M2 against landed #801.
+- [x] Update indexed atlas/traceability; commit; recorded suite and milestone-close M1 through SDLC (M1 SHIP at219cd3e0).
 
 ### M2 — real attachment lifecycle and desktop acceptance
 
@@ -146,10 +146,10 @@ The new lifecycle never changes modifiable, admission history, lock ownership, s
 | scaling/control | counted 8/16 attachments; duplicate attach events, reloads, saves, insert and status callbacks do not create extra registration requests/listeners |
 
 - [x] Add native red cases before lifecycle wiring; connect existing confirmed identity and move boundaries without changing operator_admission.
-- [ ] Test every teardown and supersession ordering on both supported runtimes; verify plain-file and outside-pane submit controls.
-- [ ] Run focused mapping, lint, fake and real conformance; push final head and queue the recorded suite.
-- [ ] Request a brief fixture-only real-profile stage from TL once producer is deployed and suite green; check parent/side doc, takeover and cleanup; clear immediately and verify :0 against fresh main.
-- [ ] Close/review through SDLC, fix findings, run any required fresh evidence, then sdlc merge --yes; report verified PR/merge to hub.
+- [x] Test every teardown and supersession ordering on both supported runtimes; verify plain-file and outside-pane submit controls. The two intermittent runtime cases are tracked under #421 with same-head fail/pass evidence.
+- [x] Run focused mapping, lint, fake and real conformance; push final head and queue the recorded suite (a63c4360, lease-2122078490). Preferred mapping has two classified #421 flakes; no unqualified green mapping claim.
+- [x] Request a brief fixture-only real-profile stage from TL once producer is deployed and suite green; check parent/side doc, takeover and cleanup; clear immediately and verify :0 against fresh main. TL23088180 accepts landed-producer/native conformance as this live check; no stage or copied-profile run required or performed.
+Publication follows M2 review, whole-issue close, the passing recorded suite and sdlc merge --yes; report the verified PR/merge to the hub. These future gates are not implementation checkboxes.
 
 ## Planning status
 
@@ -256,3 +256,7 @@ Landed pair#801 PR548 merge b5c1cb99260fa8131b48092e4601c2ac86abf5d7 replaces th
 TL23088180 confirms this real-producer/native acceptance satisfies the live check for the RPC-server feature; no copied-profile or :0 stage is required. Operator project use covers the eventual combined experience. The unchanged operator profile has an unrelated invalid options.lua line; do not edit it. This supersedes the earlier M2 stage checkbox, not the registration/lifecycle requirements.
 
 Focused mapping discovered Python tests listed directly under tests were fed to Plenary: all267 Lua cases passed but the target correctly failed loading two Python modules as Lua. Follow the existing Python-test-wrapper pattern: one bounded Lua integration spec invokes both Python modules, so ordinary full suites execute them too. Keep the Python files in the atlas code corpus and map the Lua wrapper as the executable test. No make/gate configuration change or language-dispatch mechanism.
+
+### 2026-10-22 — review-ready evidence bookkeeping
+
+Tick completed M1 records and M2 implementation/qualification rows against their recorded evidence. Keep publication as a procedural gate, not a self-referential implementation checkbox. Preferred focused mapping has266 passes and two confirmed intermittent runtime cases authorized by TL2e100e36 for registration under421; isolated unchanged-head diagnostic passes44. Operator-version mapping268 passes. No product deadline or assertion was relaxed. The queued full suite must still pass before landing; known flakes require the normal SDLC evidence policy.

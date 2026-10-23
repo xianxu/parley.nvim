@@ -130,3 +130,8 @@ transport specs live under `tests/unit/` and `tests/integration/`;
 
 
 Real endpoint conformance uses the supported Pair `couch-conformance-bridge` owner, not adopt-store or a Parley launcher. Run `python3 scripts/check-couch-registry-conformance.py --editor-endpoints --bridge /ABS/couch-conformance-bridge` with the desired native nvim first on the invocation PATH; `--couch /ABS/candidate/couch` optionally selects the Couch candidate. The bridge supplies the complete private environment and actual registered parent/side IDs. The consumer reads and verifies those registrations, qualifies two-editor takeover and per-file listeners in one editor, then closes its native clients before bridge EOF. `scripts/couch_bridge.py` continuously drains bounded pipe output and joins its owned probe/bridge under the fixed300/600/15s contract plus observation margin. Nonzero or unknown cleanup retains the exact parent paths and diagnostics; the driver never removes producer roots. Fake-only qualification and the deliberately corrupted identity control remain available without the bridge.
+
+The normal suite and the `modes/remote_session` mapping run the Python bridge
+protocol/lifetime checks through `tests/integration/couch_bridge_spec.lua`. Its
+fixture installs the shared parent-death watchdog before blocking; a regression
+keeps stdin open after parent death to distinguish watchdog exit from EOF.
