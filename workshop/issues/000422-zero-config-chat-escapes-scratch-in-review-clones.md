@@ -1,13 +1,21 @@
 ---
 id: 000422
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'ee498570148b26dc50d3d74d7d1baa96e3142303' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'cd41c5d5e6350f6e83312dc2651481fafb0ae029' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-23T01:58:47-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Zero-config chat escapes scratch in review clones
@@ -26,7 +34,19 @@ The zero-config chat test must select its disposable scratch storage even in an 
 
 ## Plan
 
-- [ ]
+Root cause (reproduced 2026-10-23): an SDLC inside-checkout review sets TMPDIR to `<clone>/.sdlc-review/tmp` (ariadne `cmd/sdlc/internal/reviewbox/confine.go`, by design: the reviewer never writes outside its checkout). The Makefile derives TEST_ENV_ROOT, HOME, XDG and TMPDIR from that, so all harness scratch sits under the clone, which carries a tracked `.parley`. The zero-config child clears PARLEY_REPO_MODE (on purpose: it tests real defaults), walks up from `scratch/work`, finds the clone's marker, and writes the new chat to `<clone>/workshop/parley`. This is the existing #202/#338 placement invariant (scratch outside the tree, no marked ancestor) broken by the environment. `tests/arch/scratch_placement_spec.lua` already detects it, but as one spec among many, after other specs have written into the tree. The product behavior is correct: a marked ancestor should select repo mode.
+
+Two owners:
+1. **parley (this issue): fail fast, once, before any spec writes.** PREP_TEST_ENV checks the placement invariant up front: if TEST_ENV_ROOT resolves inside $(CURDIR), or any ancestor of it carries the repo marker, the target refuses with one message naming the path, the marked root, and the fix (point TMPDIR or TEST_ENV_ROOT outside a marked tree). It is a shell helper next to test-env.sh, so it covers every target that calls PREP_TEST_ENV. scratch_placement_spec stays as the in-process guard; the new check is its pre-write twin, and the two state the same rule. This adds no product surface and changes no repo-mode behavior.
+2. **ariadne (file there; TL routes it):** an inside-checkout reviewer's TMPDIR should be a sibling of the review checkout, inside the reviewer's write fence but outside the reviewed tree. That fixes this class for every repo (the #202 traversal flake and the #338 marker), and restores parley tests in review clones.
+
+Tests:
+- [ ] Shell-level regression spec: a disposable marked tree with TEST_ENV_ROOT inside it → the guard refuses (nonzero, the message names the marked root) and creates nothing in the tree. An unmarked out-of-tree root passes. The guard catches a marker at the root itself, and inside $(CURDIR) even without a marker.
+- [ ] zero_config case 1 additionally asserts the precondition (no marked ancestor of its cwd) and that the chat path lies under the child's HOME scratch. A future placement break then fails with the reason rather than as "chat outside default dir", and asserts nothing about the checkout.
+- [ ] Repro: the short-path review-style clone (`TMPDIR=<clone>/.sdlc-review/tmp make test-spec SPEC=infra/config`) refuses up front with the guard message and leaves `git status` clean apart from `.sdlc-review/`. The ordinary checkout passes infra/config and infra/test_harness.
+- [ ] atlas/infra/test_harness.md: the pre-write placement check.
+
+Side observation (not in scope): when $TMPDIR is long, nvim's tempname() silently falls back to /tmp/nvim.<user>, outside TEST_ENV_ROOT. My first repro under a long scratchpad path passed for that reason alone. If the TL wants it, I'll file it separately.
 
 ## Log
 
