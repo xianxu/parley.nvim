@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "57bc0431", done: "48afe56c"}
 ---
 
 # Long TMPDIR makes nvim tempname() fall back outside the test scratch
