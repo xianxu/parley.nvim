@@ -159,6 +159,13 @@ end
 local config_ms = registry.config_ms
 
 local function band(s, message, highlight)
+    if not valid(s) then s.renderer.clear(); return end
+    local typed = require("parley.session_sync").parse_header(vim.api.nvim_buf_get_lines(s.buf, 0, 40, false)) ~= nil
+    local unprotected = lifecycle.unprotected_view(s.model.snapshot(), typed)
+    if unprotected then
+        message = unprotected.label .. (message ~= "" and " · " .. message or "")
+        highlight = highlight or unprotected.hl
+    end
     if message == "" then s.renderer.clear()
     else
         local plain = s.model.snapshot().phase == "plain"
@@ -181,7 +188,6 @@ local function show_feedback(s, message, is_error)
 end
 
 local function clear_feedback(s)
-    if not s.feedback then return end
     s.feedback = nil
     band(s, s.model.snapshot().phase == "unknown" and "Couch unavailable: agentic state unknown" or "")
 end
@@ -283,16 +289,22 @@ local function cache(s, registration, remove)
     return found
 end
 
-local function adopt(s, registration)
+local function adopt(s, registration, witness)
     local feedback = s.feedback
     s.feedback = nil
     band(s, "")
     local ss = require("parley.session_sync")
-    ss.attach(s.buf, registration)
-    if feedback then ss.set_submission_feedback(s.buf, feedback.label, feedback.is_error) end
+    local scope = s.input_scope
+    if scope and (scope.closed or scope.incarnation ~= s.incarnation
+        or not witness or not vim.deep_equal(scope.witness, witness)) then scope = nil end
+    local observed
     if s.outstanding or vim.bo[s.buf].modified then
-        ss.acquire_observed(s.buf, { baseline = s.baseline or s.content, loaded = s.loaded, outstanding = true })
+        observed = { baseline = s.baseline or s.content, loaded = s.loaded, outstanding = true }
     end
+    -- Supply the pre-edit baseline before attach can acquire an already-active
+    -- insert turn; an auto-save must not make edited text the clean baseline.
+    ss.attach(s.buf, registration, observed, nil, scope)
+    if feedback then ss.set_submission_feedback(s.buf, feedback.label, feedback.is_error) end
     s.outstanding, s.baseline = false, nil
     cache(s, registration)
 end
@@ -354,11 +366,11 @@ local function execute(s, effects)
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
-            if ss.is_session_sync(s.buf) then ok, err = ss.prepare_submit(s.buf)
+            if ss.identity(s.buf) then ok, err = ss.prepare_submit(s.buf)
             else ok, err = pcall(vim.api.nvim_buf_call, s.buf, function() vim.cmd("stopinsert"); vim.cmd("silent write") end) end
             if ok then s.saved_hash = hash(s.buf) end
             dispatch(s, { type = "saved", witness = effect.witness, ok = not not ok, error = err, hash = s.saved_hash })
-        elseif kind == "attach" then adopt(s, effect.registration)
+        elseif kind == "attach" then adopt(s, effect.registration, effect.witness)
         elseif kind == "resubmit" then
             end_submit(s)
             M.submit(s.buf)
@@ -405,7 +417,7 @@ local function execute(s, effects)
         elseif kind == "band" then
             if effect.message == "" then end_submit(s) end -- the document turned out plain
             if s.feedback then band(s, s.feedback.label, s.feedback.hl) else band(s, effect.message) end
-            if effect.message ~= "" then ensure_retry() else s.baseline, s.outstanding = nil, false end
+            if effect.message ~= "" then ensure_retry() end
         elseif kind == "reconcile" and effect.operation == "rename" and s.move and s.move.new_path then
             -- Moved on disk; Couch refused or lost the metadata rename (rows 6, 7).
             s.move.answered = true
@@ -444,6 +456,41 @@ retry_loaded = function()
     if not remaining and retry_timer then retry_timer:stop(); retry_timer:close(); retry_timer = nil end
 end
 
+local function pending_input(buf)
+    local s = states[buf]
+    if not s or not valid(s) or s.reading or s.move or s.recovery_pending then return end
+    local snapshot = s.model.snapshot()
+    local operation = snapshot.operation
+    if snapshot.registration or not operation or operation.witness.operation ~= "lookup" then return end
+    return s, operation
+end
+
+-- Ownership begins at opening, independently of what discovery has proved.
+function M.owns_admission(buf)
+    local s = states[buf]
+    return s ~= nil and valid(s) or false
+end
+
+function M.admit_insert(buf)
+    local s, operation = pending_input(buf)
+    if not s then return false end
+    if s.input_scope then return true end
+    local scope = { incarnation = s.incarnation, witness = operation.witness,
+        deadline_ms = uv.hrtime() / 1000000 + couch.OPERATOR_LOCK_TIMEOUT_MS }
+    s.input_scope = scope
+    local ok, err = pcall(vim.wait, couch.remaining_ms(scope.deadline_ms, uv.hrtime() / 1000000), function()
+        if uv.hrtime() / 1000000 >= scope.deadline_ms then return true end
+        if not valid(s) or s.incarnation ~= scope.incarnation then return true end
+        local current = s.model.snapshot().operation
+        return not current or not vim.deep_equal(current.witness, scope.witness)
+    end, 5)
+    scope.closed = true
+    if s.input_scope == scope then s.input_scope = nil end
+    require("parley.session_sync").finish_input_scope(buf, scope)
+    if not ok then error(err, 0) end
+    return true
+end
+
 function M.attach(buf)
     if states[buf] then
         if states[buf].reading then return true end
@@ -459,7 +506,10 @@ function M.attach(buf)
     local known = cache(s)
     s.model = lifecycle.new({ path = path, namespace = ns, incarnation = serial, registration = known })
     states[buf] = s
-    if known then adopt(s, known) end
+    -- Retire an idle legacy attachment; an old owned turn remains available
+    -- only for explicit completion. The S1 writer guard is already active.
+    require("parley.session_sync").attach(buf)
+    band(s, "")
     local function attach_edits()
         if s.edits_attached then return end
         s.content = hash(buf)
@@ -492,6 +542,9 @@ function M.attach(buf)
     end
     attach_edits()
     s.group = vim.api.nvim_create_augroup("ParleyAgenticDocument" .. buf, { clear = true })
+    vim.api.nvim_create_autocmd("InsertEnter", { group = s.group, buffer = buf, nested = true, callback = function()
+        M.admit_insert(buf)
+    end })
     vim.api.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, { group = s.group, buffer = buf, callback = function()
         -- A guarded mechanical move read checks its editor preimage and the IO
         -- dispatcher rechecks the raw postimage. It must not stale its own move
@@ -527,7 +580,10 @@ function M.attach(buf)
     vim.api.nvim_create_autocmd("BufWipeout", { group = s.group, buffer = buf, callback = function() M.detach(buf) end })
     vim.api.nvim_create_autocmd("BufWinEnter", { group = s.group, buffer = buf, callback = function() M.recheck(buf) end })
     install_migration_hooks(s)
-    if not recover_migration(s) then dispatch(s, { type = "open" }) end
+    if not recover_migration(s) then
+        if known then adopt(s, known) end
+        dispatch(s, { type = "open" })
+    end
     return true
 end
 

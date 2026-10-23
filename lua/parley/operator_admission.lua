@@ -39,6 +39,13 @@ function M.new()
         if kind == 'observe' then
             content = event.content
         elseif kind == 'acquire' then
+            -- Existing tokenless protection is completed only by explicit release.
+            -- Acquisition cannot convert it or replace its original edit history.
+            if proof ~= nil and token == nil then
+                phase, message, operation = 'refused',
+                    event.message or 'finish the existing operator turn before acquiring', nil
+                return nil
+            end
             -- The first pre-edit baseline survives all later retries, including
             -- clean saves made while ownership was unavailable or refused.
             content = event.content

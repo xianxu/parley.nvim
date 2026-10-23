@@ -1,13 +1,23 @@
 ---
 id: 000410
-status: open
+status: codecomplete
 deps: [parley.nvim#408]
 github_issue:
 created: 2026-10-21
-updated: 2026-10-21
-estimate_hours:
+updated: 2026-10-22
+estimate_hours: 1.987
 collaboration-mode: collaboration
-card_mirror: 'bce16d45ba1b8900f0db881eccf81bc291e3b430' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd16a0d44f753b1a7a27f930d5a1b8b1a5d5e7b1d' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-22T11:48:38-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: operator}
+actual_hours: 4.05
 ---
 
 # Bound insert admission across pending registration lookup
@@ -22,6 +32,8 @@ On InsertEnter, if S1 already has a lookup pending for that exact buffer/incarna
 
 The wait must not recursively admit another acquire with a fresh 500 ms budget: S1's completion callback adopts the identity, and session_sync.attach currently acquires immediately if already inserting. One deadline must cover both modules, attachment and acquisition, without changing ordinary background discovery or unregistered-file input.
 
+Operator-approved retirement revision (Couch 8f18c995): S1 owns admission from file opening and never starts a new tokenless turn, including on typed files with absent, pending or unavailable membership. Those typed files remain editable with a clear not-protected indication until registered; first submit registers. Outside S1, standalone legacy behavior stays unchanged. Existing old protection and move journals are finished/released explicitly through proven ownership or validated recovery, never swept or automatically converted. The active RETIRE plan supersedes the attempted dual-protocol handoff; its exact existing-lock/journal rule requires TL agreement before code and fresh plan-quality afterward.
+
 ## Done when
 
 - Native queued-input tests hold an existing lookup, complete it before the deadline, then race an external write against acquisition; first input follows confirmed protection and clean freshness.
@@ -29,9 +41,210 @@ The wait must not recursively admit another acquire with a fresh 500 ms budget: 
 - A lookup that remains pending permits today's unknown-period input after the bound, and later completion reconciles outstanding edits safely.
 - A plain file with no pending lookup has no new blocking Couch request; stale buffer/incarnation completions cannot gate another buffer.
 - Both supported Neovim versions pass, with the existing stateful Couch fake and disposable real-command conformance where applicable.
+- S1 owns admission before legacy attachment: no new tokenless lock on opening, edits, absence/unavailability completion or expired input scopes. Typed unregistered/unknown files retain a visible not-protected indication and first submit registers normally.
+- Old live proof/history is preserved until explicit exact owned completion; unproven sidecars remain refused with owner-assisted recovery guidance. Existing v1/v2 journals retain validated forward recovery, and no new move uses tokenless protection as admission.
+- Standalone editors outside S1 retain legacy locks, submit, unchanged-exit and undo behavior; no automatic sweep or new generic unlock is introduced.
 
 ## Plan
+
+- [x] Agree the active [RETIRE plan](../plans/000410-pending-lookup-admission-plan.md), especially old-lock/journal recovery, with the TL; clear fresh plan-quality before code.
+- [x] Replace the superseded handoff/deferred-write mechanism with S1-first ownership, one admission route and the not-protected presentation; prove retirement and compatibility through red/green tests.
+- [x] Verify both runtimes, full mapped regressions, counts/deadlines, guards, lint and conformance; recorded suite, fresh close review and authorized live acceptance remain required before landing.
+
+## Prior estimate (superseded by retirement)
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only; calibration source is marked stale/provisional.*
+
+This is a prospective estimate of the approved correction and remaining acceptance work after plan-quality cleared, not a reconstruction of the initial quick-flow work. One Lua/Neovim feature covers shared entry routing, production-order native regressions and both-runtime verification: v2 design 2.0 × thorough-spec 0.2 = 0.4; implementation 1.5 × v3.1 0.4 = 0.6. One small pure-owner extension uses the smaller-module analogue: design 0.2 × 0.2 = 0.04, implementation 0.5 × 0.4 = 0.2. Docs use 0.1 × 0.2 design and 0.1 × 0.4 implementation. One remaining review uses 0.1 × 0.2 design and 0.5 × 0.4 implementation; disposable conformance/profile acceptance uses real-API discovery 0.4 × 0.4 implementation. Existing owner, Couch seam, fake and native harness are reused; no greenfield library search or new protocol is needed. Familiarity is 1.0 and the thorough plan gets a 15% design buffer. Queue wait is excluded.
+
+```text
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.6
+item: smaller-go-module design=0.04 impl=0.2
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0.02 impl=0.2
+item: real-api-discovery design=0 impl=0.16
+design-buffer: 0.15
+total: 1.752
+```
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only; calibration source remains marked stale/provisional.*
+
+Prospective remaining RETIRE implementation and acceptance after fresh plan-quality round 4 accepted the design, not a backfill of earlier attempts. One focused Lua/Neovim feature covers the pure warning/refusal policy, native deadline/restart regressions and both-runtime verification: v2 design 2.0 × thorough-plan discount 0.2 = 0.4; impl 1.5 × v3.1 scale 0.4 = 0.6. One cross-cutting-refactor primitive covers S1-first wiring and removal of the dual-protocol consumers: design 0.6 × 0.2 = 0.12; impl 0.5 × 0.4 = 0.2. Docs use raw 0.2 design/0.2 impl, review raw 0.1/0.5, and disposable conformance/copied-profile acceptance raw 0/0.6. Existing controller, owner, fake, native harness and statically prepared profile fixture are reused; no novel library, producer protocol or generic unlock is being built. Familiarity is 1.0; thorough design buffer 15%. Verification execution is included; suite FIFO and operator turnaround are excluded. Whole-issue actuals include the superseded quick-flow/re-plan work and are not a matching window for this remaining-work estimate.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.6
+item: cross-cutting-refactor design=0.12 impl=0.2
+item: atlas-docs design=0.04 impl=0.08
+item: milestone-review design=0.02 impl=0.2
+item: real-api-discovery design=0 impl=0.24
+design-buffer: 0.15
+total: 1.987
+```
 
 ## Log
 
 Filed from #408 after TL approval a15354ef: use the existing pending lookup within the same 500 ms bound if small, otherwise document #408's boundary and file this follow-up. Investigation found completion ownership spans agentic_document.adopt -> session_sync.attach -> insert acquisition, while the current synchronous acquire seam owns its fixed 500 ms budget; a superficial wait can run a nested full acquire after consuming the lookup budget. This needs an explicit shared-deadline design rather than an extra wait in #408.
+
+### 2026-10-22 — claimed and planned; awaiting TL
+- 2026-10-22: closed — README-only merge-conflict resolution keeps both #410 exact standalone recovery command and #411 registered external-write guidance. All code auto-merged from current main; no code conflict was resolved. Prior final-code suite exited0 on both runtimes, log SHA256 prefix80b3482e74a2; copied actual-profile acceptance all3 cases each runtime passed with exact cleanup. Integrated recorded suite lease-1477672515 is queued on7b8452df and remains mandatory before landing; no integrated-suite pass claimed. Review/queue overlap follows tl-worker; no full-suite waiver or product scope change. (fixed-then-ship); review verdict: SHIP
+- 2026-10-22: closed — BR3 recovery guidance now includes env -u COUCH_THREAD_SCOPE -u COUCH_THREAD_TAG nvim /absolute/file.md in README and atlas; exact phrase preserved, existing restart native fixture validates it on both runtimes. Product code remains ff71df2b: preferred native165/policy64, operator mapping854/extra53, lint822 and real/fake conformance pass. Prior review validates RETIRE and disposes BR1/BR2; its registered-saveas timing fail/isolated pass is separately filed unclaimed #414, related #412, per TL cb8f8ce2 and does not block410; only that exact recorded failure has one-evidenced-rerun permission. Recorded suite lease-3671644753 remains queued in normal FIFO; no full-suite pass or copied-profile check claimed. Await review plus suite before authorized live acceptance, then hub SHIP before landing.; review verdict: SHIP
+
+Read #408's landed owner/refusal/reload history and current S1 adoption, session-sync acquisition dispatcher and Couch process seam. The proposed ephemeral entry scope carries one absolute deadline through callback/late attachment and permits one acquire attempt; #408's private operator_admission remains the sole lock/history owner (ARCH-DRY/STATE). No producer protocol or failure policy changes. Exact witness/incarnation checks reject stale handoffs. Plan includes native queued-input races, timed pending fallback, late edit reconciliation and 4/8-entry counted costs.
+
+Startup refreshed inherited tooling and produced an unrelated `.github/workflows/merge-check.yml` grep/SIGPIPE fix. Preserved that generated delta in stash `410: preserve weave-generated workflow delta before planning`; it is excluded from issue changes and no local-gates configuration is being shipped here. Planning branch created by `sdlc start-plan`. No code or tests edited; no stage or suite running. Next: TL review of committed durable plan before change-code.
+
+### 2026-10-22 — approved implementation checkpoint
+
+Verified submitted TL approval a1825097; change-code passed quick flow. Couch deadline seam delegated as bounded work: red 20 pass/5 expected fail/0 errors, green 25 pass/0 fail/0 errors; logs `/Volumes/TestScratch/parley-410-couch-2qky079j/`. Native initial red 142 pass/3 expected fail/0 errors, clean process census (`/tmp/parley-410-native-red.log`). The first native implementation exposed Normal-mode reporting during InsertEnter and a timeout-only wait overrun to 14889 ms. Explicit scope insert intent and a monotonic predicate restore confirmed first-edit freshness and a measured 500.25 ms fallback. Focused diagnostic snapshot: 11 pass/0 fail/0 errors, clean census (`/tmp/parley-410-focus-deadline.log`); corrected test use of actual S1 buffer numbers. No operator history policy was changed.
+
+Current full native run `/tmp/parley-410-native-final.log` includes new 4/8-entry process/read counters; both count cases have passed, run still active. No recorded suite, PR or stage yet. Next: finish native verification, operator-runtime and mapped/architecture/lint checks, disposable conformance, then push and recorded suite/live acceptance through TL. Plan Revision records the native findings.
+
+### 2026-10-22 — corrections verified on both runtimes; suite next
+
+Preferred full native file completed 153/0/0. Operator 0.11.7 full native run was 151/2/0: one in-scope late-autosaved baseline defect and one independent #408 o-retry refusal assertion. Adoption now passes the observed baseline into attach before automatic insert acquisition. A new saved-normal-edit-before-insert case also pins the original baseline. Existing operator_admission transitions are unchanged.
+
+The broad map completed 58 files, 840 passing cases, three architecture failures: two plan-table inventories and one synchronous spawn classification. Corrected individual public-symbol rows and preserved the direct synchronous spawn/wait expression. Final focused corrections on EACH runtime pass 80 cases, zero failures/errors (`/tmp/parley-410-corrections-preferred.log`, `/tmp/parley-410-corrections-operator.log`), including new native cases, residual process unit tests and affected guards. All other broad checks passed. Final lint: zero warnings/errors in 822 files. Isolated real/fake registry/operator conformance and corrupted-fake negative control pass (`/tmp/parley-410-conformance-real.log`, `-fake.log`).
+
+TL 97e1636a instructed filing the unrelated retry case separately and not blocking #410 on it; filed unclaimed #412 with the failure, isolated 200 ms delayed-producer pass, command durations and explicitly missing failure-time load. Current sampled load was 20.35/33.58/39.16, not a retrospective failure measurement. Diagnostic assertion now records native mode/notifications on recurrence; oracle unchanged. Typed Lua registry support is ariadne#556. Only this exact failure has TL authorization for one evidenced recorded-suite rerun.
+
+PR #333 exists. TL 828e035c authorized a disposable copied operator-profile live check only AFTER review and suite pass. Any :0 stage must wait for #411's operator stage to clear and requires another TL ask before staging. No stage held. Next: commit/push corrections, recorded suite on that exact head, SDLC close review, then authorized live acceptance. Do not restart while the recorded check is queued/running.
+
+Recorded suite lease-1901041664, attempt 1f75cea859f261b4e87927ca0d433a4f, is queued normally on pushed 11c41b7b. Initial FIFO position 14 behind two Pair runs. Log: common Git dir `sdlc/test-stats/inflight/1f75cea859f261b4e87927ca0d433a4f/run.log`. Per tl-worker's explicit overlap rule, the close review may run while this check is queued; a passing recorded final-code suite still precedes live acceptance and landing. No duplicate runner, stage or restart.
+
+### 2026-10-22 — R1 REWORK; existing-controller correction proposed
+
+Boundary review returned Critical BR-1 (`admission-handoff-covers-existing-controllers`): production attaches session-sync before S1, while our native helper detached it. Existing-controller adoption returns without acquiring, and its earlier legacy callback can establish tokenless protection; observed saved edits then skip acquisition because that legacy turn reads operator. The review reproduced clean and saved variants on both runtimes, zero producer acquisitions and stale first input. Source inspection confirms this handoff gap. No disposition yet; correction requires native red/green evidence and another boundary review.
+
+Cancelled our obsolete queued suite through `sdlc local-check cancel --run lease-1901041664`; no other runner touched. Proposed plan Revision routes the earlier legacy callback through S1's one input scope, defers tokenless unknown-period writes, and handles adoption into existing controllers with the original baseline/deadline. It explicitly enumerates pre-owned/foreign legacy proof rather than assuming every existing controller is empty. Waiting for TL approval of this mechanism correction before more code. Disposable profile fixture is statically prepared but unrun at `/Volumes/TestScratch/tmp/parley.nvim-slot4/parley-410-profile.H9qNMO/`; no :0 stage or live check held.
+
+### 2026-10-22 — full-flow plan gate; stopped for history re-plan
+
+TL c8405302 approved R1 and required stopping for a re-plan if review found another admission mechanism hole. Invoked change-code with full flow before any further code. Plan-quality raised Important PQ-1 (ordinary release clears history before reacquisition) and PQ-2 (replace test inventories with named function strategies). No code or tests changed after that approval. The durable plan now specifies an owner-controlled legacy_release continuation of acquire: exact release success preserves original baseline/content/history and emits registered acquire immediately; failure retains tokenless proof/history in existing refused phase; post-removal expiry/refusal retains original work. There is no ordinary release/reset or intermediate writable gap. Active tests are described as named function strategies. Waiting for TL review of this re-plan before re-entering the gate. No check/review/editor fixture is running.
+
+### 2026-10-22 — re-plan accepted; production-order correction under verification
+
+TL f0654bf4 approved the owner-acquisition continuation, requested the retire-legacy alternative paragraph, and required stopping if plan-quality found another handoff hole. Added that comparison in plan commit 0f27be94. Full-flow plan-quality rounds 2 and 3 returned CLEAN, disposing PQ-1/PQ-2 with no new findings; estimate-quality INFO and change-code passed at c8e811f1. Its estimate is explicitly prospective correction/acceptance work, so whole-issue actuals cannot be treated as a matching convergence window; the optimistic allowance includes verification execution and prepared-profile acceptance, excludes queue wait.
+
+Production-order native red reproduced unconfirmed first input from a pre-owned legacy turn. Pure-owner sequences red 19/6/0 then green 25/0/0; logs `/Volumes/TestScratch/parley-410-couch-2qky079j/owner-{red,green}.log`. The integrated preferred focus passed 14 native cases plus owner/Couch and affected architecture guards (`/tmp/parley-410-r1-green.log`). Existing controllers now join S1 before tokenless writes, observation anchors unknown-period history in the same owner, and adoption into existing/new controllers uses the exact scope. Internal legacy_release keeps history through exact-byte removal and emits the registered acquire without idle/reset or intermediate gate restoration.
+
+Expanded native verification adds post-removal unavailable/refused retries and standalone typed S1 attachment. The latter red caught using the header-aware is_session_sync predicate where the plan requires an actually attached controller; now checks the existing identity accessor. The timeout fixture writes protection before delaying its reply, so lack of acknowledgment cannot assert absent sidecar; corrected that oracle to exercise same-turn retry. Operator stale-rename diagnosis traced the stall inside nvim_buf_set_name before callback return: typed unknown legacy migration is deliberately refused by the existing #359 preflight. The preflight also refuses unknown prose, so the stale-name test narrowly ignores BufFilePre/Post while changing the name, modeling external name invalidation without exercising migration admission. Migration policy is unchanged. Both-runtime final checks, lint, recorded suite, fresh boundary review and live acceptance remain outstanding. No :0 stage held.
+
+Final-code evidence at 6d34f535: preferred full native 159/0/0; operator focused new native 17/0/0 (including all four pre-owned outcomes and 4/8 counters); owner 25/0/0; prior integrated focus includes Couch 25/0/0 and affected architecture guards. Whole-tree lint 822 files, zero warnings/errors. Disposable real/fake producer conformance and corrupted-fake negative control pass. Full operator native regression is running separately. Recorded suite lease-3241185062, attempt 58772d90cf8ca491fcf530bfd75bc091, is queued normally at position 12 on the pushed code head. Per the permitted overlap, fresh close review may run while it queues; no recorded-suite pass, live acceptance or landing is claimed. Prepared copied-profile fixture now preserves the parent's production legacy-before-S1 order and remains unrun.
+
+### 2026-10-22 — R2 REWORK; stopped for operator policy decision
+
+Fresh boundary review on 8f42416f disposed BR-1 addressed and raised Critical BR-2 in the same `admission-handoff-covers-existing-controllers` family (second instance). Deferring tokenless writes during pending discovery has no background settlement when lookup finishes absent: normal-mode outstanding edits remain unlocked after pending=false/no identity unless another input action happens. Existing regression `tests/integration/session_sync_spec.lua:411` (unresolvable owner, no submission, legacy lock retained) fails at this head and passes with pre-correction c8e811f1 modules. Source inspection confirms the observer defers at session_sync.lua:797–799 and lookup completion at agentic_document.lua:347–355 has no legacy continuation. This is a further mechanism gap, not the separate #412 native refusal timing issue.
+
+Stopped without a product/test patch or another mechanism proposal, per TL c8405302/f0654bf4. Sent the finding and retire-legacy question to the hub; the existing plan paragraph records why retirement changes unknown/absent/unavailable legacy policy and needs an operator decision. BR-1 regressions remain fixed: the reviewer verified 17 native cases on each runtime and owner/Couch 25 each, with substitution red. My complete native runs passed 159/0/0 on EACH runtime; lint and real/fake conformance passed. These do not outweigh the mapped legacy regression. The reviewer's mapped run also stalled and had an overlapping preparation cleanup, so it cannot establish a complete suite pass.
+
+Cancelled obsolete queued suite lease-3241185062 through the supported exact-run command; runner exited context-cancelled and produced no suite result. No suite, review, stage or live profile is running. PR #333 is unlanded; issue remains working. Next action is TL/operator policy direction, not a third patch. Preserve the unrelated generated-workflow stash.
+
+## Revisions
+
+### 2026-10-22 — accepted recovery guidance included in fresh review
+
+TL b128ed41 accepted the standalone route and required the old typed-lock refusal to say: “open it in nvim outside Couch and press Alt+Return to release”. The plan requires that exact instruction and path in the paired refusal regression, its successful restart/standalone action regression, README and atlas. Existing-path probes pass 1/0/0 on each runtime; no product/tracked test code changed. Cancelled the initial in-flight plan review without a verdict to include this requirement; next is fresh plan-quality on the committed amendment. Preserved the obsolete estimate as historical text so the gate requests a new derivation after quality clears, rather than validating the superseded scope's allowance.
+
+### 2026-10-22 — name crashed-owner recovery before fresh plan-quality
+
+TL aa353a9d agreed RETIRE with the condition that a dead old owner has an existing way out. The existing standalone typed-legacy Alt+Return path supplies it: open without Couch thread scope/tag, then explicitly submit to release exact observed tokenless bytes with a fresh controller. Staleness is only a reminder, not unlock. The plan names this workflow and a permanent restart/native-input regression to add after gate admission, alongside continued inside-S1 refusal and validated v1/v2 recovery. A temporary preferred-runtime probe passes 1/0/0; no product or tracked test code changed. Non-typed orphans with neither live proof nor valid journal have no existing plugin recovery command; this limit is reported to the hub rather than adding a generic unlock.
+
+### 2026-10-22 — operator selects retirement inside S1
+
+TL delivery 8f18c995 reports the operator's RETIRE choice. Extended Spec/Done-when and replaced the active checklist around that chosen policy; prior attempt/results remain in the Log. The durable plan appends an authoritative RETIRE revision, preserving the earlier design as historical text and marking its concept tables historical. No product/test code changed. Proposed compatibility: exact live old proof can finish via explicit Alt+Return; unproven old sidecars require owner-assisted explicit release and remain refused; validated v1/v2 journals use their existing reopen/save/Alt+Return continuation and retire last. New acquisition never deletes/converts old protection, and new moves cannot treat it as fresh admission. Waiting for TL agreement on that rule before fresh change-code/implementation. PR #333 remains unlanded; no suite, review, stage or profile probe is running.
+
+### 2026-10-22 — distinguish implementation checklist from landing evidence
+
+The final Plan checkbox originally combined implemented tests/docs with the recorded suite and live check. Clarified it as completed implementation/verification preparation so SDLC can run its single close review while the suite waits, as tl-worker explicitly permits. The mandatory recorded pass and post-review/suite live acceptance are retained above and in the Log; no requirement is waived or represented as already passed.
+
+### 2026-10-22 — RETIRE implementation checkpoint, verification incomplete
+
+Fresh RETIRE plan-quality rounds 4/5 are CLEAN; full change-code passed and committed accepted design at 9d424cdc. Implemented S1-first attachment, centralized refusal of new tokenless writes under S1, removal of legacy-release acquisition continuation, visibly unprotected typed views, and explicit old-lock guidance. Pure owner/view tests pass 23/51 respectively. Corrected native RED was 1 pass/6 fail; current native RETIRE focus is 6 pass/1 fail/0 errors (`/tmp/parley-410-retire-native-green.log`). First submit of an unregistered typed file times out waiting for its submitted payload; root cause is not yet known and is the next debugging step. This is unfinished work, not suite/review evidence.
+
+The native retained-old-turn refusal/explicit finish, foreign refusal, pending/absent/unavailable editable warning and crashed standalone Alt+Return recovery cases pass. Remaining work includes first-submit diagnosis, invalid-buffer band cleanup coverage, planned new-move proof tests and architecture guard, README/atlas, both-runtime mapped regressions, lint/conformance, recorded final-head suite and fresh boundary review, then authorized isolated copied-profile acceptance. A provisional begin_move guard needs its failing regression and proof-of-absence handling checked before acceptance. The static profile fixture was revised for S1-first opening and remains UNRUN. No recorded check, review or live probe is queued/running; no :0 stage held. Preserve unrelated generated-workflow stash (ariadne#557).
+
+### 2026-10-22 — clean unregistered rename policy clarified
+
+Preferred full mapping exposed the old alias-saveas expectation: it auto-registered an unregistered typed file before rename because an attached legacy controller was the typed-owner signal. Paused product edits and asked the hub instead of restoring a compatibility branch. TL delivery 84d246e3 confirms this is intentionally retired: an unregistered typed file stays ordinary/not protected until first submit; clean saveas/rename must have no registration side effect. Updated only that test expectation to assert plain saveas with no registration/lock/journal, followed by first-submit registration at the actual canonical destination. Existing registered native saveas/owned-move regressions remain unchanged and are included in the full mapping. No migration product patch added.
+
+TL ba57d44c clarifies the deliberate asymmetry: native saveas/rename stays plain, while the explicit Parley move door retains its existing typed-header background registration. That public move is independent of legacy lock attachment and remains unchanged, including its owed-ledger adoption regression. Atlas records the distinction; no public-move product/test change. Two band expectations also change under the approved policy: typed unknown S1 now shows not-protected rather than a legacy free controller, and reopening OLD with a pending journal shows recovery before cached ordinary admission instead of first attaching a cached turn. Journal content/proof/recovery behavior is preserved.
+
+### 2026-10-22 — coherent retirement verified on preferred runtime
+
+First-submit diagnosis captured the raw failed producer reply: the fixture serialized empty paths/moves as JSON arrays and Python raised AttributeError on paths.get. Corrected the native fixture to use vim.empty_dict, and require an actual plain lifecycle result in the absent case. No registration product workaround. Preferred new native focus passed 22/0/0 and lifetime 11/0/0 after REDs. Added a further unproven-old-lock refusal/native submit case and path assertions. Full preferred session-sync mapping completed 845 pass/4 fail/0 errors: only the four now-revised retirement policy expectations (alias-saveas, typed-unknown band, journal-before-cache band, unresolved-pane old lock). All 165 native cases passed, including original deadlines/counters and new retirement compatibility. The policy/architecture/Couch repair mapping then passed 64/0/0, including all four corrected cases, owner structural mutation guards, complete single-source sweeps and Couch25. Final lint: zero warnings/errors in 822 files. Logs /tmp/parley-410-retire-{mapped,policy-green,final-lint}.log.
+
+New-move old/unknown protection tests first failed 0/2; the retirement-band cleanup regression first failed while the ten existing lifetime tests passed. The existing finalization_lock reader now also supplies the new-move check: only ENOENT proves absence, old/foreign/unreadable protection cannot mint a fresh move; validated restore remains separate. A detached S1 renderer clears before header projection so a stale typed warning cannot survive retirement. These fixes implement the agreed rule; no new authority or recovery path.
+
+Operator 0.11.7 full mapping is now running serially in this checkout (/tmp/parley-410-retire-operator-mapped.log); its outcome is NOT yet known. Conformance, fresh recorded suite and boundary review remain required. The copied actual-profile fixture is statically updated for S1-first normal file opening, with exact not-protected warning, no session-sync controller/lock before adoption and original late-save baseline checks; it remains UNRUN. Next: publish this coherent head and queue its isolated recorded suite, finish operator/conformance verification, then fresh close review. Live profile only after review and suite pass; :0 still requires hub permission.
+
+### 2026-10-22 — targeted retirement acceptance complete; recorded suite queued
+
+Operator Neovim 0.11.7 full session-sync mapping passes 854/0/0, including all 165 native cases, standalone legacy, old-lock explicit finish/refusal, first registration, registered native/Parley moves and v1/v2 journal recovery. Operator extra single-source sweeps/Couch mapping passes 53/0/0. Preferred full mapping's four retired expectations were corrected and all passed in the recorded 64/0/0 repair focus; no unclassified failures or #412 reruns occurred. Real/fake registry conformance plus deliberately corrupted fake negative control pass; scratch stores removed. Logs /tmp/parley-410-retire-{operator-mapped,operator-extra,conformance}.log. Both-runtime required targeted verification is complete.
+
+Published coherent code head ff71df2b2f2fc69b57d3ccca4001de3d7dd47825 to PR333. Recorded isolated suite lease-3671644753, attempt89936e0b5bf67bf6d2774e7657dca8f1, is queued on that exact pushed head (last observed normal FIFO position15). No suite pass is claimed. The following docs-only evidence commit does not change tested code. Next: fresh close review during the allowed queue overlap. Retain this own queued run; no continuation/restart/cancellation while it waits. Copied-profile acceptance remains UNRUN until fresh review and recorded final-code suite pass; no :0 stage held.
+
+### 2026-10-22 — retirement review validates mechanism; BR-3 documentation correction
+
+Fresh close round3 on 199c3b90 returns FIX-THEN-SHIP, disposes BR-1/BR-2 addressed and finds no mechanism gap. Important BR-3 (recovery-guidance-names-launch-context) blocks finalization: README and atlas said outside Couch but omitted the scope/tag-free launch required by the plan and exercised by native recovery. Added the exact command to BOTH passages: env -u COUCH_THREAD_SCOPE -u COUCH_THREAD_TAG nvim /absolute/file.md, then Alt+Return. Added the prevention rule to lessons: recovery guides must name launch prerequisites and mirror the successful fixture. This is docs-only; tested code and queued suite remain unchanged. The ledger explicitly requires another close to dispose BR-3 because its blocking result was not finalized.
+
+Reviewer independently verifies #410 native23 on each runtime, preferred native165, owner guards7, Couch25, conformance and lint822. Its full mapped run is 853/1/0: existing agentic_document_spec.lua:257 registered saveas absent target exceeds the <500ms elapsed assertion; isolated same-head rerun passes. Raw /tmp/parley-410-review-tests.log and /tmp/parley-410-review-negative.log preserve both runs. No precise elapsed duration or machine-load capture was emitted, so only >=500ms failure and <500ms pass are established. This is separate from #412. Asked hub (receipt3a5367f8) how to classify that second timing family before accepting it; no blind rerun, budget patch, issue filing, live check or landing. Recorded suite lease-3671644753 remains queued on ff71df2b; preserve its FIFO place while the hub decides.
+
+### 2026-10-22 — separate saveas timing issue authorized, continue acceptance
+
+Correction to the preceding raw-log pointer: the isolated same-code saveas pass is /tmp/parley-410-review-extra.log:85 (1/0/0), not review-negative.log (the intentional negative control for other cases). Verified the review reset all Lua modules from199c3b90 before that rerun.
+
+TL cb8f8ce2 authorizes filing the second timing family separately and continuing #410: filed #414 unclaimed, linked to #412 fixed-budget native timing under load, with both runs and the absence of exact elapsed/load measurement stated. It does not block #410. If the retained recorded suite hits this exact registered-saveas case, TL allows one evidenced rerun; other unknown failures still block. Continue re-close for the committed docs-only BR-3 correction, retain suite lease-3671644753 on ff71df2b, then copied-profile acceptance only after both pass. No live check or :0 stage yet.
+
+### 2026-10-22 — recorded suite passed; copied-profile acceptance blocked before input
+
+Retained recorded suite lease-3671644753 / attempt89936e0b5bf67bf6d2774e7657dca8f1 completed exit0 in5m54s on pushed product ff71df2b2f2fc69b57d3ccca4001de3d7dd47825, recorded as sdlc-local/suite (log SHA256 prefix80b3482e74a2). Full preferred and operator-runtime passes include agentic_document_spec and session_sync_native_spec; both process censuses are clean. No #412/#414 rerun was needed. Saved log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/ff71df2b2f2fc69b57d3ccca4001de3d7dd47825/suite.log. Product/test/script/Makefile diff from that head to the codecomplete tip is empty. Fresh close round4 finalized SHIP/no findings at d0531a2f09f05a4f2a4138f2cd80243d4b9de918, followed by the codecomplete mirror8103f3853aa3148b57115546d0e5172714a18f1a.
+
+Ran the authorized copied actual-profile / isolated-state / scratch-document acceptance only after those gates passed, without :0 staging. Preparation root: /Volumes/TestScratch/tmp/parley.nvim-slot4/parley-410-profile.H9qNMO. First attempt stopped because Lazy's installed-plugin census excludes directory symlinks; the installed moonfly checkout exists. Corrected only the scratch fixture to copy the already-installed plugin checkouts into its private data root (no install/update/config repair), preserving evidence-attempt-1-symlink-census. Second attempt exposed a fixture assertion passing gsub's replacement count as fs_realpath's callback; parenthesized that expression, preserving evidence-attempt-2-realpath-arity. Neither correction changed product code or authored operator configuration.
+
+Both installed0.11.7 and preferred0.12.5 now pass immediate profile startup and normal file-open assertions (live S1 owner, no identity/controller/sidecar, typed not-protected band), then fail before native input: the first nvim_exec_lua probe awaiting the held real lookup completion does not answer within the helper's15000ms bound. Operator evidence: evidence-attempt-3-operator-rpc-timeout; preferred evidence: evidence/. Both manifests verify exact children gone and private runtime roots removed. No acceptance pass or admission defect is inferred from this pre-input RPC failure. Stopped further profile runs and requested bounded read-only fresh-eyes fixture diagnosis. Next: report the live-check blocker to the hub, diagnose the fixture/profile interaction before another run, and await hub SHIP only after acceptance succeeds or the hub explicitly decides its disposition. PR333 remains unlanded; no stage, suite or profile process remains running.
+
+### 2026-10-22 — copied actual-profile acceptance passed on both runtimes
+
+Resolved the pre-input blocker with captured evidence, not an admission patch: fast nvim_get_mode showed r/rm prompts; prompt-only dismissal captured E5560 from the fixture's uv.spawn wrapper reading vim.env in a fast callback. Cached its immutable ledger path before installing the wrapper. All rejected attempts and cleanup manifests are retained under the preparation root. Subsequent strict raw-v:errmsg checks exposed intentionally caught/silent missing-map cleanup in installed nvim-autopairs and ordinary FileType replay; traces identify both. Fresh-eyes static review approved treating sticky v:errmsg/map/FileType traces as retained diagnostics, while initial startup failures, displayed errors, ERROR notifications, uncaught exec exceptions, blocking prompts, unexpected stderr and every behavior assertion remain fatal. Raw stderr remains preserved; only exact OSC111 background-reset frames at normal UI shutdown are excluded. No authored-profile repair, installation, product/test change, or bypassed admission assertion.
+
+Final authorized copied-profile command exited0 on both operator0.11.7 and preferred0.12.5, all three scratch cases each. Actual copied config/parser/autosave/keymaps with private copied installed plugins loaded this issue checkout. Before discovery completion each case had a live S1 owner and no registration/controller/lock; the typed parent displayed not protected. Parent/side first input saw confirmed real Couch protection and externally refreshed content: operator123.75/184.47ms, preferred178.92/184.08ms. Late input stayed editable/unconfirmed/unlocked at502.23ms/506.26ms, then adopted the held lookup after actual X application/save; Escape/autosave retained the original edit baseline's protection. Every case counted one discovery and one acquisition total; late acquisition occurred only after its timed-out input scope. No displayed errors or ERROR notifications. Exact process-identity cleanup succeeded and both owned runtime roots are removed. This checks an embedded editor sourcing the copied profile, not a separate full VimEnter or :0 installation; no :0 stage was used or needed for the authorized isolated alternative.
+
+Evidence root: /Volumes/TestScratch/tmp/parley.nvim-slot4/parley-410-profile.H9qNMO/evidence. Manifest SHA2561db5ed54d1f7d2c77592b33ec3ee876b46e04b6e9c7d9df8dfc4fc46bbc9741d; profile0.11 SHA2565a3b2ce3f5d2de8d47f6eef5e6f9fa567068ba8520551642b617195806af653d; profile0.12 SHA256b0f7bdcc7b4bcf010f3b975060c1dac72543e108d93eb9e6de9edcc1689ecb47. Fixture run.py SHA2568d3d2185ece5f9ea4117002b09412bd2e63dffee4d84346b09a5ae643e7de306; drive.lua SHA2560bfbe2a694e049fa81b6905523fad35e76b3ebec0c704240ff4e376a24092842. Product/test/script/Makefile diff from recorded ff71df2b is still empty. Recorded suite and fresh close review passed; profile acceptance now passed. No running jobs or stage. Next: publish this evidence and report READY to the hub; wait for explicit hub SHIP before sdlc merge --yes. PR333 remains unlanded.
+
+### 2026-10-22 — hub SHIP; resolve README integration conflict before landing
+
+Authenticated TL delivery53bbdb23 authorizes SHIP after the recorded suite, clean round4 close and both-runtime copied-profile acceptance. Entered sdlc merge --yes immediately. Its origin/main integration1752271061691fd0780994a45b93d46463c8c747 stopped on one textual conflict in README.md and aborted cleanly. Following the tool's next action, manually merged that exact origin/main and kept BOTH adjacent sections: #410 explicit old-lock recovery/standalone launch and #411 registered-file external-write behavior. Other incoming main paths auto-merged, including session_sync's #411 handling and the #409 test lease. No new admission mechanism or feature change. Next: commit/push this integration, record the required full suite on it, re-close the conflict resolution with --fixed-then-ship and measured full-suite evidence, then retry sdlc merge --yes under existing SHIP authorization. Earlier branch/profile passes remain evidence for their tested product; no integrated-suite pass is claimed yet.
+
+### 2026-10-22 — README resolution re-close clean; retain integration suite
+
+Fixed-then-ship re-close completed exit0: round5 SHIP, no findings/open blockers, evidence4f2ff92a1aad985f8fdd3de2b31d21f621013cfc. The interdiff rebased onto main17522710 contains only the documentation conflict resolution and evidence bookkeeping; no code conflict required the code-resolution full-suite evidence flag. The reviewer confirms both README behaviors are preserved. The integration's full recorded suite is nevertheless mandatory and queued on pushed7b8452dfc3fa90be1118d1d07aac6c5881cb038b: lease-1477672515, attempt5bf683b0775d50f804f0d2bffea491f9, retained terminal session27629, isolated checkout /Volumes/TestScratch/local-checks/sdlc-local-3378790661. Log /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/inflight/5bf683b0775d50f804f0d2bffea491f9/run.log. Last normal FIFO position12 after363s. No integrated pass yet. Keep this run and queue place; no continuation/restart while owned check is queued/running. On pass retry sdlc merge --yes under authenticated existing TL SHIP53bbdb23; tool owns any later main movement/integration. No new live-profile run, :0 stage or mechanism patch.
+
+### 2026-10-22 — integrated recorded suite passed; resume authorized landing
+
+Retained integration suite lease-1477672515 / attempt5bf683b0775d50f804f0d2bffea491f9 completed exit0 in5m18s on7b8452dfc3fa90be1118d1d07aac6c5881cb038b. Recorded sdlc-local/suite, log SHA256 prefix6c9a680a01ef; saved /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/7b8452dfc3fa90be1118d1d07aac6c5881cb038b/suite.log. Both preferred and operator0.11.7 full passes include agentic_document, native session_sync and #411 file-changed coverage; all process censuses clean and no flake rerun. Narrow re-close round5 already SHIP/no findings at4f2ff92a1aad; copied-profile acceptance remains passed on both runtimes. Following commits change only documentation/evidence. Next action: sdlc merge --yes under authenticated TL SHIP53bbdb23, letting its landing turn verify current main and all publication gates; then report the verified landing to the hub. No suite/profile/review job or stage remains running.
+
+### 2026-10-22 — retained landing stopped on #412 conflict; freeze checkpoint
+
+Authenticated fleet noticee817a5f5 prohibits new merges/landings and new items before the planned22:00–23:00 shutdown; existing admitted runners may finish well before21:45, otherwise preserve queued work. The already-running sdlc merge reached its turn and stopped on one conflict in tests/integration/session_sync_native_spec.lua against origin/main a4c4b7f3e174dcf1ff2065ffa60acb07d4b69ad2. It exited1 and aborted its integration cleanly; HEAD remained2a0fdba51ae5b1aa58d2861c8519f3cdad869b7c. No new merge runner or suite was started after this failure. Prior integrated suite7b8452df and profile/review passes remain valid for their tested heads, not for an unmade #412 integration.
+
+Prepared a read-only virtual merge and a concrete resolution outside the checkout: /Volumes/TestScratch/tmp/parley.nvim-slot4/parley-410-conflict.69eheZ/session_sync_native_spec.lua, SHA256235f58c8886c58475b7cbc6ac71124c2452a16a020355ac594e552bdd94a3fe3. luac -p exits0. The one conflict is refuse_insert_entry's two old mode-i/modifiable-only assertions versus #412's completed-admission observer and diagnostic assertions. Resolution keeps incoming observe_insert_admission(); keys("I"); local outcome=completed_entry(); diagnostic entry/load; assertions result.kind=refused, result.error=operator-lock and modifiable=false. All #410 pending-lookup/deadline/counter cases remain intact; #412's arrival.MS override remains confined to its refusal/retry helper. No product or tracked test edit applied, no behavioral run/pass claimed for the draft.
+
+Exact restart step after the hub lifts the freeze or explicitly authorizes this recovery: merge freshly fetched origin/main on this issue branch, resolve only the helper hunk as above (recheck the prepared draft against then-current main), commit/push the integration, run the required recorded full suite on that pushed final code, then sdlc close --issue 410 --fixed-then-ship --full-suite '<actual integrated run evidence>' --verified '<resolution and behavior evidence>'. Only after those gates and the freeze lift, resume sdlc merge --branch 000410-pending-lookup-admission --yes under the prior SHIP53bbdb23 and report the actual landing. Do not bypass the suite/re-close or change the real500ms #410 timing cases. Report this blocker to the hub. Everything is committed/pushed; no runner, suite, review, profile or stage remains active. PR333 is unlanded; preserve the unrelated generated-workflow stash.
+
+### 2026-10-22 — restart recovery; #412 conflict resolved for integrated verification
+
+Authenticated freeze-lift deliverya64ca9b4 authorizes resuming the existing item and landing. Reread the checkpoint and workflow rules, confirmed Go1.27.3 and ariadne:0 PATH sdlc, then rebuilt the slot4 private ariadne tools with make build (exit0; sdlc skipped by its sentinel). sdlc queue status still reports suite helper inspect unavailable: exit status2 after that rebuild; reported to the hub (submitted receiptaa5ad264) as requested. No machine configuration or primary checkout changed.
+
+Fetched origin/main bbf1294da084d456cb82b2de78aeea2fd30e3e4a and performed the recorded manual integration. The single native-spec helper conflict is unchanged from the checkpoint. Kept #412 observe_insert_admission/completed_entry diagnostics and its disposable refusal/retry arrival.MS override. Diff from pre-integration HEAD adds only #412's helper and deterministic outcome controls in that code file; every #410 pending deadline/counter/retirement case is untouched, with production500ms bounds. Other current-main changes auto-merged. luac -p and git diff --check exit0. No new behavior/mechanism or product-code edit. Next: push this integration and run its mandatory recorded full suite; no integrated pass claimed. Re-close with --fixed-then-ship and --full-suite actual evidence, then resume sdlc merge --yes under existing SHIP. The copied-profile acceptance remains the prior recorded pass; no new profile or :0 stage.
+
+### 2026-10-22 — resumed integrated suite retained; queue display warning classified
+
+Pushed integration d74f24b1 to PR333. Mandatory recorded suite is retained on that code: lease-1027819902, attemptc2c4dbbdbfc2dc8a8b8a35131c503fb2, terminal session93861, isolated checkout /Volumes/TestScratch/local-checks/sdlc-local-998411332; log /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/inflight/c2c4dbbdbfc2dc8a8b8a35131c503fb2/run.log. Last observed queued normally at position4; no pass yet. Authenticated TL2ed8b0ad classifies helper inspect exit2 as DISPLAY ONLY: this checkout's old queue-order helper lacks ariadne#560's command; suite admission uses a working separate call. Ariadne:3 owns the fix. Do not report that display warning again or treat it as blocked admission. No additional rebuild, mechanism/test change or profile run.
+
+Keep this own queued run and FIFO place; do not restart or write a continuation while it is queued/running. On its actual pass, record the measured result and run the code-conflict fixed-then-ship re-close with full-suite evidence, then land under the existing SHIP and authenticated freeze lift. This bookkeeping commit is docs-only relative to the pinned suite code.

@@ -2,6 +2,12 @@
 -- returns their witnesses unchanged; no editor state or IO is read here.
 local M = {}
 
+--- A typed S1 document is editable but unprotected until registration confirms.
+function M.unprotected_view(snapshot, typed)
+    if typed ~= true or snapshot.registration ~= nil then return nil end
+    return { label = "not protected · Alt+Return registers", hl = "WarningMsg" }
+end
+
 local function copy(value)
     if type(value) ~= "table" then return value end
     local result = {}

@@ -1,5 +1,14 @@
 # Lessons
 
+## 2026-10-22 (#410 — one native admission budget)
+
+- A recovery path that depends on launch context must name that prerequisite and give the exact launch command in every user guide. “Outside Couch” is insufficient when inherited environment variables select the authority; check the guide against the successful recovery fixture.
+
+- Native InsertEnter can still report Normal mode during its callbacks. Carry the exact entry's insert intent through asynchronous adoption rather than infer it again from mode; test queued first input across the callback boundary.
+- Check an absolute monotonic deadline in a native event-loop wait's predicate as well as its timeout argument. A timeout-only pending-lookup wait reached the 15-second registry deadline; the explicit predicate restored the measured 500 ms input budget.
+- Supply outstanding edit observations before an attachment can automatically acquire an already-active insert turn. Auto-saved modified=false text is not its original baseline; exercise this ordering on every supported Neovim runtime.
+- Preserve production attachment order in native fixtures. Detaching a header-driven controller before S1 discovery hides the existing-controller consumer and its earlier InsertEnter callback; verify both consumers route through the same admission scope.
+- An ordinary release retires history; an ownership handoff must not borrow it as an intermediate step. Keep a witnessed handoff continuation inside the original owner so failure or expiry cannot lose saved edits or temporarily reopen a refused edit gate.
 ## 2026-10-22 (#409 — a census is not run ownership)
 
 - Persistence and a recognizable command prove that a process exists, not that
@@ -963,6 +972,12 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   presence on an actual attached buffer, using the existing executable fake
   for attachment's status/round queries; even a declaration check can spawn IO.
 
+- #410 R2: deferring an existing owner's effect needs a settlement rule for
+  every terminal result and every initiating context, including normal edits
+  and completion after an input scope expires. Test the established fallback
+  regression mapping as well as the new successful handoff; native insert-only
+  coverage cannot prove background absence/unavailability preserves policy.
+  A second hole in the admission mechanism goes to the TL/operator before code.
 - #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
 
 - #412: A refusal/retry behavioral fixture must not assume its external producer
@@ -971,3 +986,15 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   product-deadline controls, and assert the completed outcome before protection.
   Failure diagnostics include outcome, elapsed time, mode, runtime and load.
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
+
+- #410 copied-profile acceptance: cache immutable vim.env paths before wrapping
+  libuv callbacks; vim.env can call Vimscript getenv and fail in a fast event.
+  A child RPC timeout after file open may be a blocking editor prompt: probe
+  fast nvim_get_mode before another ordinary Lua request, preserve the prompt's
+  messages, and fail the run rather than silently clearing it into acceptance.
+- #410 copied-profile acceptance: Lazy's installed census excludes directory
+  symlinks. Copy installed checkouts into disposable data roots when preserving
+  normal plugin discovery. Keep sticky v:errmsg as runtime diagnostic: caught
+  mapping deletion and silent ftplugin undo can set it without an observable
+  error. Judge displayed errors, ERROR notifications, uncaught exceptions,
+  blocking prompts and behavior; preserve raw diagnostics and cleanup proof.

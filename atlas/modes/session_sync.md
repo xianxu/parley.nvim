@@ -6,12 +6,34 @@ registers it with Couch, attaches the existing session-sync turn engine and send
 no `type`, owner or instruction frontmatter is added or changed. Opening a
 registered file restores that identity through a bounded registry lookup. A
 positive null lookup proves a file plain; lookup failure leaves membership
-unknown. Plain files take no session-sync lock or watcher before admission.
-Insert admission below begins once that registration identity is known (from
-cache or a completed lookup). While an uncached lookup is still pending, S1
-keeps editing available and records outstanding edits for reconciliation on
-attachment. It does not block every Markdown insert on discovery. Sharing the
-500 ms budget with an already-pending lookup is tracked separately in #410.
+unknown. Before confirmed registration, S1 owns admission for all these files,
+including `type: session-sync`: opening and editing create no tokenless turn or
+legacy session-sync controller. Typed unregistered files stay editable and show
+`not protected · Alt+Return registers` while lookup is pending, absent or
+unavailable. The warning survives edits, saves and confirmed absence; first
+submit registers the document. The pure `document_session.unprotected_view`
+projects that warning from the lifecycle snapshot and typed header, without
+adding admission state. Outside a live S1 controller, standalone typed legacy
+admission and submission retain their existing behavior.
+Existing move-journal recovery runs before cached identity can initiate ordinary
+admission. A validated journal resumes its persisted operation with its existing
+proof.
+Insert admission below uses confirmed registration identity (from cache or a
+completed lookup). On InsertEnter, S1 can join an existing lookup for the exact
+buffer/controller incarnation and operation witness. That lookup and any
+resulting attachment/acquisition share one absolute 500 ms deadline (#410).
+The wait predicate checks the monotonic deadline itself; the native wait timeout
+alone can overrun inside InsertEnter. No new discovery request starts on input.
+A lookup still pending at expiry keeps editing available and retains its normal
+discovery lifetime. S1 records outstanding unknown-period edits for reconciliation
+on attachment, including edits already auto-saved.
+
+A native rename or saveas of an unregistered typed file is an ordinary file
+operation: it creates no registration, turn or move journal. Its first submit
+registers the current path. The explicit Parley move command keeps its existing
+typed-header registration before moving; it is a separate deliberate operation.
+Registered files keep their owned-move behavior.
+
 
 The default owner is the agent in this editor's own Couch pane, resolved from
 `COUCH_THREAD_SCOPE` / `COUCH_THREAD_TAG`. An explicit `couch-owner:` is an owner
@@ -33,7 +55,8 @@ couch-owner: ops:0
 | `<M-CR>` outside a Couch pane | Existing [review behavior](review.md#altreturn-process-instruction-and-the-slot-send-316), including the typed legacy session-sync path. |
 
 **Offline membership.** Unknown/unavailable Couch membership stays editable,
-with the exact band `Couch unavailable: agentic state unknown`. Parley never
+with `Couch unavailable: agentic state unknown`. Typed unregistered files
+compose that detail with `not protected · Alt+Return registers`. Parley never
 makes an unknown file read-only because Couch is unreachable. A known attached
 identity, or a validated namespace-scoped cache hit, retains full operator-turn
 protection while offline. The cache holds at most 256 registrations / 1 MiB;
@@ -68,6 +91,45 @@ global ones. Refusal never creates a writable gap.
 No automatic retry or guessed unlock. The commands run locally without the
 Couch supervisor; its absence alone is not a degraded condition.
 
+An ephemeral S1 input scope carries the deadline through adoption to attachment
+and observed-edit acquisition. Session-sync claims one acquire attempt per
+scope, including refused/unavailable outcomes; it supplies only remaining time
+to the child and native process wait. Expiry before acquisition starts launches
+no child and uses the existing unavailable policy. Late attachment inside the
+InsertEnter callback uses the scope's insert intent because native mode still
+reports Normal there. S1 closes the exact scope on return/error; session-sync
+clears only the matching reference. No budget/history survives to another
+controller, input event or buffer. The original background lookup is not
+cancelled by the input deadline. The private operator_admission owner below
+continues to own all baseline, token, proof and outcome transitions.
+
+S1's own input callback joins the pending lookup; session-sync does not start a
+second wait. Its live controller is the authority for retiring new tokenless
+admission, regardless of the file's header or lookup outcome. Registration
+adopts unknown-period edits against their original observed baseline, including
+already saved edits, through the same registered acquisition owner.
+
+Old tokenless protection is a compatibility completion, never an automatic
+handoff. If this editor already owns its exact proof, registered acquisition
+refuses without emitting an effect or changing its baseline, content, history,
+proof or token. Alt+Return explicitly saves and finishes that old owned turn;
+ordinary input, acquisition and baseline-equality checks do not remove it.
+An unproven sidecar remains in place. For a stale typed tokenless lock:
+
+open it in nvim outside Couch and press Alt+Return to release
+
+Launch the standalone editor with both inherited Couch variables removed:
+
+```sh
+env -u COUCH_THREAD_SCOPE -u COUCH_THREAD_TAG nvim /absolute/file.md
+```
+
+Then press Alt+Return in that file.
+
+That uses the existing standalone typed submit path. Other unknown or foreign
+protection requires its owner to finish/release it. Retry cannot sweep a lock,
+reconstruct proof or convert tokenless protection to a registered turn.
+
 The pure `operator_admission.lua` owner retains the original baseline, token and
 proof through unavailable/refused retries, saved edits and status refreshes.
 A clean native reload carries its before/after hashes: an exact known baseline
@@ -90,10 +152,12 @@ Existing journals retain their exact legacy ownership witnesses without a
 format migration. Unrelated registered legacy/foreign protection is refused.
 Producer availability is required before shipping this consumer contract.
 
-Unchanged insert exit releases the owned turn. `<M-CR>` saves and releases it;
+Unchanged insert exit releases an owned registered turn. `<M-CR>` explicitly
+saves and releases an owned turn, including retained exact tokenless proof;
 the next insert entry or edit takes it again.
-Undoing back to the acquisition content silently releases the turn outside
-insert mode, without submitting or notifying the owner; redo away takes it again.
+Undoing back to the acquisition content silently releases a registered turn
+outside insert mode, without submitting or notifying the owner; redo away takes
+it again. Inside S1, retained tokenless turns require explicit completion.
 Restoring the baseline while inserting retains protection until insert exit.
 InsertLeave and ModeChanged share one departure handler: Ctrl-C skips
 InsertLeave, but still ends unchanged intent. Completion/replace submodes keep
@@ -104,11 +168,16 @@ permission is rechecked at recovery admission and immediately before cleanup,
 including protection/retire replay. If fresh insert intent conflicts, the move
 stays interrupted: leave insert mode and reopen the destination to finish it.
 No lock or journal is overwritten to force recovery.
-Attachment completed during insert mode takes the same lock. No idle-release
+Registered attachment completed during insert mode takes the same lock, unless
+old tokenless protection requires explicit completion. No idle-release
 timer or new watcher is added; failed release retains the existing band/recovery. This acquisition baseline is an in-memory content hash: explicit saves
 and immediate auto-save never advance it. A save of changed text keeps the turn.
-A pre-existing registered lock after a restart has no proven local ownership; it is not adopted or removed by guessing. Its owner must release it before a new turn can acquire. Legacy unregistered session files retain their previous submit behavior. A legacy `holder: agent` lock reads as no lock and is
-overwritten by insert entry or an edit. A failed send leaves the file free; `<M-CR>`
+A pre-existing registered lock after a restart has no proven local ownership;
+it is not adopted or removed by guessing. Its owner must release it before a
+new turn can acquire. Standalone legacy session files retain their previous
+submit and lock behavior outside S1, including treating a legacy
+`holder: agent` lock as free on insert entry or an edit. A failed send leaves the
+file free; `<M-CR>`
 resends. The lock is read from disk, so a reopened buffer shows it too. While
 the buffer is loaded, parley watches the file once a second: during a free
 turn an agent write reloads the unmodified buffer silently (and so does a
@@ -124,7 +193,7 @@ write after acquisition goes through the violation path below with the
 operator's text kept. Outside the operator's turn, submit refuses to
 overwrite a file rewritten under a modified buffer.
 
-**Edit ordering (#324).** Buffer edit notifications acquire the lock before
+**Edit ordering (#324).** Registered buffer edit notifications acquire the lock before
 `TextChanged` / `InsertLeave` auto-save can clear `modified`, for Normal and
 Insert edits alike. Recognition at attachment survives temporary edits to the
 frontmatter. Baseline-equality release is deferred until the edit settles and
@@ -230,7 +299,8 @@ loaded model, the namespace cache, or an earlier background answer.
   NEW, refusing an occupied destination (`destination_registered =
   "authority"`), and the journal carries the metadata rename forward.
 - A positively plain document renames plainly.
-- An unknown identity or a legacy `type: session-sync` file refuses at once
+- An unknown identity, including an unregistered `type: session-sync` file,
+  refuses at once
   with nothing moved (`move not confirmed: … Run the move again`), and asks
   Couch in the background, so the rerun proceeds. A background "absent"
   answer holds for `ANSWER_TTL_MS` (60 s). A rerun after that asks again, so a
@@ -247,8 +317,11 @@ loaded model, the namespace cache, or an earlier background answer.
 - interrupted: `move interrupted: reopen to finish; REASON`; reopen is the
   recovery action. Internal journal phases are never shown as choices.
 
-Reopening rechecks filesystem and editor witnesses and resumes the same intent.
-A refusal before any effect aborts cleanly. After an effect, changed or unknown
+Reopening rechecks filesystem and editor witnesses and resumes the same intent
+before ordinary cached-identity admission. Recovery retains the existing v1/v2
+format and exact persisted ownership witnesses; it does not run registered
+acquisition to replace legacy protection. A refusal before any effect aborts
+cleanly. After an effect, changed or unknown
 bytes keep the move interrupted with its concrete reason; nothing is rolled
 back or overwritten to force progress. Older v1 journals remain readable and
 retain their earlier feedback while being recovered.

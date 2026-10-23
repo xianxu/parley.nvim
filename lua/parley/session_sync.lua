@@ -262,7 +262,20 @@ local function lock_bytes(path)
     return bytes
 end
 
+-- This is recovery guidance, never authority to adopt or remove protection.
+local function old_lock_message(buf, message)
+    local bytes = lock_bytes(M.lock_path(buf))
+    local fields = bytes and ("\n" .. bytes) or ""
+    if header(buf) and bytes and M.turn(bytes) == "operator"
+        and not fields:match("\n%s*document%s*:") and not fields:match("\n%s*turn%s*:") then
+        return message .. "; " .. file_of(buf)
+            .. ": open it in nvim outside Couch and press Alt+Return to release"
+    end
+    return message
+end
+
 local function write_lock(buf, holder, baseline)
+	if require("parley.agentic_document").owns_admission(buffer_id(buf)) then return false end
 	local s = state[buffer_id(buf)]
     if s and admission(s).acquire_token then return false end
 	local path = M.lock_path(buf)
@@ -331,7 +344,7 @@ local function release_owned(buf, path, expected)
     elseif expected and (expected:find("\ndocument:", 1, true) or expected:find("\nturn:", 1, true)) then
         return false, "operator ownership evidence is invalid"
     elseif s.identity.ID and (not expected or expected ~= owned.owned_lock) then
-        return false, "registered operator protection has no confirmed ownership"
+        return false, old_lock_message(buf, "registered operator protection has no confirmed ownership")
     end
     if not owned.owned_lock and not s.identity.ID then
         local adopted, reason = dispatch_admission(buf, { type = "legacy_adopt", proof = expected, content = s.content })
@@ -430,7 +443,7 @@ end
 
 -- The shell runs effects; only the private owner advances admission history.
 -- Every completion carries its operation witness back, including release.
-dispatch_admission = function(buf, event, release_path)
+dispatch_admission = function(buf, event, release_path, input_scope)
     local s = state[buf]
     if not s then return false, "document is detached" end
     local effect, error_message = s.operator_admission.dispatch(event)
@@ -441,7 +454,7 @@ dispatch_admission = function(buf, event, release_path)
     while effect do
         local outcome = { witness = effect.witness }
         if effect.kind == "acquire" then
-            local result = couch.operator_lock("acquire", s.identity, effect.token)
+            local result = couch.operator_lock("acquire", s.identity, effect.token, input_scope and input_scope.deadline_ms)
             if result.kind == "confirmed" and lock_bytes(M.lock_path(buf)) ~= result.lock.LockText then
                 result = { kind = "refused", error = "operator protection changed after acknowledgment" }
             end
@@ -450,7 +463,7 @@ dispatch_admission = function(buf, event, release_path)
             else
                 outcome.type = result.kind
                 outcome.message = result.kind == "unavailable"
-                    and "not locked: Couch unreachable; edits may conflict" or refusal_message(result.error)
+                    and "not locked: Couch unreachable; edits may conflict" or old_lock_message(buf, refusal_message(result.error))
             end
         elseif effect.kind == "freshen" then
             restore_edit_gate(buf, s)
@@ -479,6 +492,7 @@ dispatch_admission = function(buf, event, release_path)
                 else reason = "operator protection changed" end
             end
             outcome.type = ok and "released" or "release_failed"
+            outcome.message = not ok and refusal_message(reason) or nil
             error_message = not ok and reason or nil
         else
             error("unknown operator admission effect: " .. tostring(effect.kind))
@@ -723,21 +737,27 @@ local function define_highlights()
 end
 
 --- Install the turn autocmds on a session-sync buffer and render its turn. Idempotent.
-M.attach = function(buf, identity, observed, restoring_move)
+M.attach = function(buf, identity, observed, restoring_move, input_scope)
     buf = buffer_id(buf)
+    if not identity and require("parley.agentic_document").owns_admission(buf) then
+        local old = state[buf]
+        if old and not old.identity.ID and not admission(old).history then M.detach(buf) end
+        return
+    end
     if state[buf] then
-        local current = state[buf].identity
+        local s = state[buf]
+        local current = s.identity
         if identity and identity.File == current.File and (not current.ID or current.ID == identity.ID) then
-            state[buf].identity = vim.deepcopy(identity)
+            s.identity = vim.deepcopy(identity)
         end
-        if observed then M.acquire_observed(buf, observed) end
+        s.complete_attach(observed, restoring_move, input_scope)
         return
     end
     local h = header(buf)
     if not identity and not h then return end
     identity = identity or { File = file_of(buf), Owner = h.owner }
     if type(identity.File) ~= "string" or identity.File:sub(1, 1) ~= "/" then return end
-    local s = { stale = false, identity = vim.deepcopy(identity), epoch = 0,
+    local s = { stale = false, identity = vim.deepcopy(identity), epoch = 0, input_scope = input_scope,
         previous_autoread = vim.bo[buf].autoread, operator_admission = operator_admission.new() }
     state[buf] = s
 	require("parley.highlight_groups").keep("session_sync", define_highlights)
@@ -760,7 +780,10 @@ M.attach = function(buf, identity, observed, restoring_move)
 
     -- One admission policy serves insert intent and normal-mode first edits.
     -- Only a clean insert entry is allowed to establish a fresh native baseline.
-    local function acquire_registered(baseline, entering)
+    local function acquire_registered(baseline, entering, scope)
+        scope = scope or s.input_scope
+        if scope and scope.closed then scope = nil; s.input_scope = nil end
+        if scope and scope.attempted then return scope.admitted == true end
         local owned = admission(s)
         if owned.phase == "held" and owned.owned_lock and couch.operator_proof(owned.owned_lock)
             and lock_bytes(M.lock_path(buf)) == owned.owned_lock then return true end
@@ -771,8 +794,12 @@ M.attach = function(buf, identity, observed, restoring_move)
                 token = (random:gsub(".", function(byte) return ("%02x"):format(byte:byte()) end))
             end
         end
-        return dispatch_admission(buf, { type = "acquire", baseline = baseline,
-            content = content_hash(buf), token = token, clean = entering and not vim.bo[buf].modified })
+        if scope then scope.attempted = true end
+        local admitted = dispatch_admission(buf, { type = "acquire", baseline = baseline,
+            content = content_hash(buf), token = token, clean = entering and not vim.bo[buf].modified,
+            message = old_lock_message(buf, "existing legacy turn requires explicit completion") }, nil, scope)
+        if scope then scope.admitted = admitted end
+        return admitted
     end
 
     s.acquire_turn = acquire_registered
@@ -785,6 +812,7 @@ M.attach = function(buf, identity, observed, restoring_move)
         if s.identity.ID then
             if not acquire_registered(baseline, false) then return end
         else
+            if require("parley.agentic_document").owns_admission(buf) then return end
             if not write_lock(buf, "operator", baseline) then return end
             refresh(buf)
         end
@@ -808,6 +836,15 @@ M.attach = function(buf, identity, observed, restoring_move)
             else take_turn(baseline) end
         end
         restart_idle(buf)
+    end
+    s.complete_attach = function(edits, restoring, scope)
+        s.input_scope = scope
+        local observed_turn = edits and edits.outstanding
+        if observed_turn then M.acquire_observed(buf, edits, scope) end
+        -- Native InsertEnter still reports Normal mode during its callbacks.
+        if vim.api.nvim_get_current_buf() == buf and (scope or vim.fn.mode():match("^[iR]")) then
+            if restoring or observed_turn then s.inserting = true else insert_enter() end
+        end
     end
     vim.api.nvim_create_autocmd("InsertEnter", {group=group, buffer=buf, nested=true, callback=insert_enter})
     vim.api.nvim_buf_create_user_command(buf, "ParleySessionRetry", function() M.retry(buf) end,
@@ -962,10 +999,13 @@ M.attach = function(buf, identity, observed, restoring_move)
     refresh(buf)
     restart_idle(buf)
     require("parley.edit_round").refresh(buf)
-    if observed then M.acquire_observed(buf, observed) end
-    if vim.api.nvim_get_current_buf() == buf and vim.fn.mode():match("^[iR]") then
-        if restoring_move then s.inserting = true else insert_enter() end
-    end
+    s.complete_attach(observed, restoring_move, input_scope)
+end
+
+-- S1 closes this exact input event; a stale cleanup cannot retire a new scope.
+M.finish_input_scope = function(buf, scope)
+    local s = state[buf]
+    if s and s.input_scope == scope then s.input_scope = nil end
 end
 
 -- Restore only the values this attachment still owns; never release a turn.
@@ -1000,17 +1040,15 @@ end
 
 -- Unknown-period edits can already have been auto-saved: modified is not
 -- evidence that the operator has no outstanding edit turn.
-M.acquire_observed = function(buf, observed)
+M.acquire_observed = function(buf, observed, input_scope)
     buf = buffer_id(buf)
     local s = state[buf]
     if not s or s.moving or not observed or not observed.outstanding then return false end
     if observed.loaded then s.loaded = observed.loaded end
-    if read_turn(buf) == "free" then
-        if s.identity.ID then
-            if not s.acquire_turn(observed.baseline, false) then return false end
-        elseif not write_lock(buf, "operator", observed.baseline) then return false end
-    end
     dispatch_admission(buf, { type = "observed", baseline = observed.baseline, content = content_hash(buf) })
+    if s.identity.ID then
+        if not s.acquire_turn(observed.baseline, false, input_scope) then return false end
+    elseif read_turn(buf) == "free" and not write_lock(buf, "operator", observed.baseline) then return false end
     observe_content(buf, s, content_hash(buf))
     refresh(buf)
     restart_idle(buf)
@@ -1084,6 +1122,8 @@ end
 M.release_if_baseline = function(buf)
     buf = buffer_id(buf)
     local s = state[buf]
+    if s and require("parley.agentic_document").owns_admission(buf)
+        and admission(s).owned_lock and not admission(s).acquire_token then return false end
     if not s or s.moving or not automatic_release_eligible(buf, s) or content_hash(buf) ~= admission(s).baseline then return false end
     if not admission(s).owned_lock or lock_bytes(M.lock_path(buf)) ~= admission(s).owned_lock then return false end
     if disk_changed(buf) then
@@ -1174,25 +1214,6 @@ submit_now = function(buf, h)
 end
 
 
--- Suspend the existing engine after preserving any foreign write. The token
--- is also the ownership proof for every later migration operation.
-M.begin_move = function(buf)
-    buf = buffer_id(buf)
-    local s = state[buf]
-    if not s or s.moving then return nil, "document already moving or detached" end
-    if disk_changed(buf) then
-        if read_turn(buf) ~= "operator" or not violation(buf) then return nil, "foreign change requires reconciliation" end
-    end
-    if mtime_moved(buf) then return nil, "disk change could not be reconciled" end
-    local token = { old_path = file_of(buf), path = file_of(buf), lock = lock_bytes(M.lock_path(buf)), baseline = admission(s).baseline }
-    s.moving = { token = token, old_path = token.old_path, lock = token.lock, baseline = admission(s).baseline }
-    s.epoch, s.edit, s.probing = s.epoch + 1, nil, false
-    close_timer(s.watch)
-    close_timer(s.idle)
-    s.watch, s.idle = nil, nil
-    return token
-end
-
 -- Finalization can authorize an absent lock as an after-state. Only ENOENT
 -- proves absence: unreadable files, directories and symlinks remain unknown.
 local function finalization_lock(path)
@@ -1208,6 +1229,32 @@ local function finalization_lock(path)
     local closed, close_error = stream:close()
     if not bytes or not closed then return false, read_error or close_error or "lock could not be read" end
     return true, bytes
+end
+
+-- Suspend the existing engine after preserving any foreign write. The token
+-- is also the ownership proof for every later migration operation.
+M.begin_move = function(buf)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s or s.moving then return nil, "document already moving or detached" end
+    if require("parley.agentic_document").owns_admission(buf) then
+        local known, protection = finalization_lock(M.lock_path(buf))
+        if not known then return nil, "operator protection is unknown: " .. tostring(protection) end
+        if protection and (protection ~= admission(s).owned_lock or not couch.operator_proof(protection)) then
+            return nil, old_lock_message(buf, "operator protection must be acquired before starting a move")
+        end
+    end
+    if disk_changed(buf) then
+        if read_turn(buf) ~= "operator" or not violation(buf) then return nil, "foreign change requires reconciliation" end
+    end
+    if mtime_moved(buf) then return nil, "disk change could not be reconciled" end
+    local token = { old_path = file_of(buf), path = file_of(buf), lock = lock_bytes(M.lock_path(buf)), baseline = admission(s).baseline }
+    s.moving = { token = token, old_path = token.old_path, lock = token.lock, baseline = admission(s).baseline }
+    s.epoch, s.edit, s.probing = s.epoch + 1, nil, false
+    close_timer(s.watch)
+    close_timer(s.idle)
+    s.watch, s.idle = nil, nil
+    return token
 end
 
 -- Recovery runs only under the caller's validated journal and ID lease.

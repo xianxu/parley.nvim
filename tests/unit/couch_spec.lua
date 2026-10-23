@@ -162,6 +162,17 @@ end)
 
 
 -- #408: the synchronous registry transaction admits input only on a proved ack.
+describe("couch remaining deadline", function()
+    it("floors and clamps the immutable deadline's remaining milliseconds", function()
+        for _, case in ipairs({
+            {1500, 1000, 500}, {1500, 1375, 125}, {1500, 1500, 0},
+            {1500, 1600, 0}, {1500.9, 1500, 0}, {1500.9, 1499, 1},
+        }) do
+            assert.equals(case[3], couch.remaining_ms(case[1], case[2]))
+        end
+    end)
+end)
+
 describe("couch operator transaction", function()
     local identity = { ID = "doc-408", File = "/scratch/doc.md" }
     local token = string.rep("a", 32)
@@ -256,6 +267,88 @@ describe("couch operator transaction", function()
         assert.equals(500, opts.timeout)
         assert.equals(500, waited)
         assert.is_true(opts.text)
+    end)
+
+    it("uses only the residual deadline for spawning and subtracts spawn time before waiting", function()
+        local original, hrtime = vim.system, vim.uv.hrtime
+        local now, opts, waited = 1200e6
+        vim.uv.hrtime = function() return now end
+        vim.system = function(_, options)
+            opts = options
+            now = 1250e6
+            return {wait = function(_, timeout) waited = timeout; return result() end}
+        end
+        local ok, answer = pcall(couch.operator_lock, "acquire", identity, token, 1500)
+        vim.system, vim.uv.hrtime = original, hrtime
+        assert.is_true(ok)
+        assert.equals("confirmed", answer.kind)
+        assert.equals(300, opts.timeout)
+        assert.equals(250, waited)
+    end)
+
+    it("does not renew the budget when spawning consumes its last milliseconds", function()
+        local original, hrtime = vim.system, vim.uv.hrtime
+        local now, waited = 1499e6
+        vim.uv.hrtime = function() return now end
+        vim.system = function()
+            now = 1501e6
+            -- Native wait(0) kills the child but may return before exit delivery.
+            return {wait = function(_, timeout) waited = timeout; return nil end}
+        end
+        local ok, answer = pcall(couch.operator_lock, "acquire", identity, token, 1500)
+        vim.system, vim.uv.hrtime = original, hrtime
+        assert.is_true(ok)
+        assert.equals("unavailable", answer.kind)
+        assert.equals(0, waited)
+    end)
+
+    it("does not spawn after the admission deadline has expired", function()
+        local original, hrtime = vim.system, vim.uv.hrtime
+        local spawned = 0
+        vim.uv.hrtime = function() return 1500e6 end
+        vim.system = function()
+            spawned = spawned + 1
+            return {wait = function() return result() end}
+        end
+        local ok, answer = pcall(couch.operator_lock, "acquire", identity, token, 1500)
+        vim.system, vim.uv.hrtime = original, hrtime
+        assert.is_true(ok)
+        assert.equals("unavailable", answer.kind)
+        assert.equals(0, spawned)
+    end)
+
+    it("retains the default release child and wait budget", function()
+        local original, opts, waited = vim.system
+        vim.system = function(_, options)
+            opts = options
+            return {wait = function(_, timeout) waited = timeout; return result("released") end}
+        end
+        local ok, answer = pcall(couch.operator_lock, "release", identity, token)
+        vim.system = original
+        assert.is_true(ok)
+        assert.equals("confirmed", answer.kind)
+        assert.equals(500, opts.timeout)
+        assert.equals(500, waited)
+    end)
+
+    it("kills and reaps a real hung child using the residual input budget", function()
+        local original, child, requested = vim.system
+        vim.system = function(_, opts)
+            requested = opts.timeout
+            child = original({"sleep", "30"}, opts)
+            return child
+        end
+        local started = vim.uv.hrtime()
+        local deadline = started / 1e6 + 120
+        local ok, answer = pcall(couch.operator_lock, "acquire", identity, token, deadline)
+        local elapsed = (vim.uv.hrtime() - started) / 1e6
+        vim.system = original
+        assert.is_true(ok)
+        assert.equals("unavailable", answer.kind)
+        assert.is_true(requested > 0 and requested <= 120, tostring(requested))
+        assert.is_true(elapsed >= 80, tostring(elapsed))
+        assert.is_true(elapsed < 450, tostring(elapsed))
+        assert.equals(124, child:wait().code)
     end)
 
     it("refuses spawn failures instead of treating missing binaries as permission", function()
