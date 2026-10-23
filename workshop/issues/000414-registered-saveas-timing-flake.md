@@ -1,13 +1,13 @@
 ---
 id: 000414
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '866e311dd20d099429749b06165a5b9c37cd08c6' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '21eb09cbd8d956cb073a3d772c4ee82ef6a23b92' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T05:49:02-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "20be0eae", done: "4de86a78"}
+actual_hours: 2.08
 ---
 
 # Investigate registered-saveas timing flake under load
