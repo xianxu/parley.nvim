@@ -75,6 +75,13 @@ Authenticated TL delivery a5452e45-2afd-4b84-a9a1-a397a1f26214 confirms ariadne#
 
 The gate recorded PQ-1 (owned-edit-operation-validity) and PQ-2 (function-test-strategy). Verified PQ-1 against production: on_lines dispatches changed while busy, and document_session cancels save, so the original inside-save insertion would strand its own submit. The plan now specifies one witnessed preparation stage before ordinary save on the same model operation, recognizing only its exact before/after edit and retaining invalidation for unrelated edits/reload/detach. No observer mute flag or second owner. Added named function strategies with generated malformed metadata and deterministic real-observer interruption coverage, replacing test inventories. This design delta is pending TL approval before rerunning change-code; no runtime code has started. TL b47c8af9 confirms mixed per-span presentation is #419, and pair:9 has been told.
 
+
+### 2026-10-23 — implementation checkpoint after accepted revised plan
+
+Authenticated TL delivery 464b8701-86f6-4d63-92fe-4a8d7893b928 approved the exact before/after preparation witness and instructed rerunning change-code. Full-flow change-code passed: plan-quality CLEAN, derived estimate 3.61 hours accepted with nonblocking INFO about optimistic native/live verification allocation. Accepted design is committed. The pure resolver/filler now passes its first four cases after the expected missing-module RED: pinned eight producer cases, generated presentation precedence, unknown metadata preservation and atomic invalid-header refusal. This is partial implementation, not completion evidence. The helper's pure lifecycle run passed 55 cases on both supported runtimes; it is extending the compact projection payload and running native observer integration. Its active files are intentionally excluded from this checkpoint.
+
+Recovery gap: previous TTY capture is unavailable. Git branch, this Log, gate ledger and the current diff establish the resumed state. Next: finish native exact-edit preparation, migrate whole-document presentation/local-review readers, extend malformed/limit/growth and interruption coverage, then run the required recorded check and close review. Live acceptance still needs the hub-scheduled operator session-document check. Authenticated pair:9 schema notice 7f759ac0-0451-4860-82a6-e2589d0103fc is reserved for #419: optional per-span presentation direct/highlight/propose, absent falls back to round presentation then highlight; #418 remains whole-document.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

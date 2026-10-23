@@ -195,7 +195,8 @@ local function root_fields(lines, close)
                 flow_balance(content, stack)
             elseif indent == base then
                 local key, value = field_line(content)
-                current = { key = key, value = value, children = {} }
+                local _, raw = field_line(trim(line))
+                current = { key = key, value = value, raw = raw, row = row, children = {} }
                 entries[#entries + 1] = current
                 if value:match("^[%[{]") then flow_balance(value, stack) end
             else
@@ -211,6 +212,51 @@ local function root_fields(lines, close)
     end
     if #stack > 0 then fail("unclosed flow value in root mapping") end
     return entries
+end
+
+--- Shared root mapping scan for additive editorial fill. Unknown values stay
+--- opaque; callers inspect only the fields they own. The original lines are
+--- never rewritten. Limits cover interactive metadata, not the document body.
+function M.header(lines)
+    if lines[1] ~= "---" then return { entries = {}, fields = {}, scanned = 0 } end
+    local close, size = nil, 0
+    for row = 2, #lines do
+        size = size + #lines[row] + 1
+        if row > 8192 or size > 1024 * 1024 then
+            return nil, "frontmatter exceeds 8192 lines or 1 MiB; shorten the header before submitting"
+        end
+        if lines[row] == "---" then close = row; break end
+    end
+    if not close then return nil, "frontmatter is not closed" end
+    local ok, entries = pcall(root_fields, lines, close)
+    if not ok then return nil, "frontmatter: " .. tostring(entries) end
+    local fields = {}
+    for _, entry in ipairs(entries) do
+        local key = entry.key:lower()
+        fields[key] = fields[key] or {}
+        fields[key][#fields[key] + 1] = entry
+    end
+    return { close = close, entries = entries, fields = fields, scanned = close - 1, bytes = size }
+end
+
+--- A known scalar from the root scanner. Legacy process-instruction retains
+--- its historical plain-text reading (including an unquoted #).
+function M.scalar(entry, legacy)
+    if #entry.children > 0 then return nil, "expected one scalar value" end
+    local text = trim(legacy and entry.raw or entry.value)
+    if text == "" then return "" end
+    local span = frontmatter.quoted_span(text)
+    if span then
+        local tail = trim(text:sub(#span + 1))
+        if tail ~= "" and tail:sub(1, 1) ~= "#" then return nil, "unexpected text after quoted scalar" end
+        local ok, value = pcall(unquote, span)
+        if not ok then return nil, tostring(value) end
+        return value
+    end
+    if legacy then return text end
+    local ok, value = pcall(decode, text)
+    if not ok or type(value) ~= "string" then return nil, "expected a scalar string" end
+    return value
 end
 
 local function parse(lines)
