@@ -198,6 +198,12 @@ describe("arch: the pre-write placement guard", function()
         assert.equals(1, guard(base .. "/root").code)
     end)
 
+    it("ignores a marker-named directory, as repo detection does", function()
+        vim.fn.mkdir(base .. "/scratch/" .. marker, "p")
+        assert.equals(0, guard(base .. "/scratch/" .. marker .. "/env").code)
+        assert.is_nil(require("parley.repo_mode").detect_root(base .. "/scratch/" .. marker, marker))
+    end)
+
     it("refuses a root inside the checkout even without a marker", function()
         local result = guard(base .. "/checkout/.test-env")
         assert.equals(1, result.code, result.stderr)

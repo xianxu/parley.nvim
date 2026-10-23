@@ -29,7 +29,8 @@ refuse() {
 }
 while :; do
     [ "$dir" = "$checkout" ] && refuse "is inside the checkout $checkout"
-    [ -e "$dir/$marker" ] && refuse "is under $dir, which carries $marker"
+    # The product's predicate (repo_mode.detect_root): a readable regular file.
+    [ -f "$dir/$marker" ] && [ -r "$dir/$marker" ] && refuse "is under $dir, which carries $marker"
     [ "$dir" = / ] && break
     dir=$(dirname "$dir")
 done

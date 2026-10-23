@@ -73,3 +73,5 @@ Evidence:
 
 Sent ariadne:4 the capture /Volumes/TestScratch/tmp/r422-review.log, the probe target, and the reviewed heads (45086838, 09f68966).
 
+
+Close review R1 returned SHIP with one Minor (guard-rule-diverges-from-product-predicate): the guard's `[ -e ]` also matched a `.parley` directory, which detect_root ignores. Fixed at the site and across its class: the guard now uses `-f` and `-r`, the product's readable-regular-file predicate, so the atlas and plan claim that both state the same rule is now true. Added a directory-marker case. infra/test_harness 230/0/0, clean census. Cancelled superseded suite on 50ed7eba (not pass evidence); requeued on the fixed head.
