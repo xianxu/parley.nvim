@@ -307,3 +307,35 @@ The existing-path probe also passed 1/0/0 on operator Neovim 0.11.7 (`/tmp/parle
 ### 2026-10-22 — clarify native and explicit Parley move behavior
 
 TL 84d246e3 confirms native rename/saveas of a clean unregistered typed file remains plain under RETIRE; its first submit registers the current canonical path. The old auto-register-on-native-rename expectation depended on a legacy attachment as the typed-owner signal. TL ba57d44c separately preserves the existing deliberate Parley move command's typed-header registration (independent of lock attachment). No registration side effects are added to native file operations and no existing explicit Parley feature is removed. Tests and atlas record the asymmetry; registered move and persisted-journal behavior remain unchanged.
+
+### 2026-10-23 — scope revision: bounded atomic fold-case diagnostics (#420)
+
+TL90ab1620 /1eed042d authorize this genuine harness change inside #410 after the exact-head full rerun passed all tests but the previous unstructured failure prevented success publication. Production admission is frozen. This does not adopt #415, make old evidence attributable, claim a root-cause fix for the occasional hang, or remove the old failure.
+
+**Core concepts**
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| Case deadline (name, monotonic start/deadline, residual milliseconds) | tests/helpers/embedded_nvim.lua | new |
+| Timeout observation (pending RPC, elapsed, child PID/channel, signal-0 result, bounded last stderr) | tests/helpers/embedded_nvim.lua | modified |
+
+The deadline arithmetic is pure: request budget is min(existing request cap, ceil(nonnegative case residual)); zero residual refuses before sending another RPC. The clock, child RPC, stderr stream and signal-0/kill are the thin IO seam. Reuse the helper's ONE timer and child teardown (ARCH-DRY); no independent watchdog or extra diagnostic RPC. Case metadata and stderr tail die with Child; no new durable artifact (ARCH-FUNERAL). A case starts after the existing before_each child setup; its budget is the existing load-scaled Embedded.request_ms(), with no budget increase. Ordinary callers without case metadata keep their current request behavior. The stderr tail is capped at4096bytes, not an accumulating log.
+
+| Integration | Lives in | Status | Wraps |
+|-------------|----------|--------|-------|
+| Embedded case envelope | tests/helpers/embedded_nvim.lua | modified | existing child RPC timer and jobstart stderr callback |
+| Atomic fold checkpoints | tests/integration/document_fold_uncertainty_retirement_spec.lua | modified | existing one-RPC fold regression |
+
+Keep the original fold fixture in ONE child nvim_exec_lua call. Splitting it into RPCs could dispatch pending fold callbacks between stages and weaken the scenario. A child-local stage(label) writes a short stderr marker with label, elapsed and current mode immediately before each potentially expensive block: fixture construction, document drain, initial manual folds/setup, uncertainty/suspension loop, detachment hook preparation, and restoration/flush. These are nonblocking progress observations, not synchronization or await points. Parent jobstart on_stderr stores a bounded diagnostic tail while its existing RPC waits. At timeout the existing timer captures elapsed/request and case budgets, method, pending/unresponsive editor state, PID/channel and signal-0 liveness BEFORE killing the same child. Mode in stderr is explicitly last checkpoint mode; unavailable current mode stays unknown rather than issuing a second request into a hung editor. Job/channel IDs and signal probe are current timeout observations; post-kill exit status is identified separately if reported. No fabricated mode or inferred absence. Callback uses only fast-safe state/uv calls.
+
+**Implementation and evidence (one close boundary, no Mx tags)**
+
+- [ ] Red: extend tests/integration/embedded_nvim_spec.lua with a real child that writes a distinctive stage/mode marker then wedges. Assert named case/stage, elapsed/budget, pending editor state and child liveness diagnostic, bounded failure, and exact child reaping. Existing helper lacks this case envelope/diagnostic so the test must fail before implementation. Use the existing short REQUEST_MS test seam and arrival bounds; restore globals after_each.
+- [ ] Red: a real-child multi-request case consumes part of its total budget in one request and wedges in the next. Assert the second request receives only residual budget and that the same case deadline is not reset. Add a successful ordinary/named return case and exhausted-before-dispatch coverage. Keep negative wedges in the existing bounded helper tests and clean every child.
+- [ ] Green: add Child:begin_case(name,budget_ms) and bounded stderr capture in Embedded.start; make Child:request reuse its timer with residual case budget and emit captured timeout diagnostics before its existing exact-PID kill. No change to production code, suite configuration, adapter, global default timeout or existing unnamed error prefix. Prove bounded stderr retention through an oversized marker stream.
+- [ ] Instrument only the uncertainty-retirement fixture with the case envelope and six stderr checkpoints, preserving original line counts, folds, mutation order, one RPC, detach callback and all final behavior assertions.
+- [ ] Run helper and both fold-retirement specs on preferred and installed0.11.7 via make test-spec with a scratch map. Check syntax, whitespace, lint and clean process censuses. Record negative deadline proof and successful original behavior.
+- [ ] Update atlas/infra/test_harness.md and issue Log with the case envelope, bounded last-checkpoint diagnostics, honest unknown-mode semantics and #415 distinction. Commit/push genuine harness code, then ONE new recorded full suite. Do not restart a queued/running check. If the new suite fails, diagnose its named evidence and stop/report rather than another blind rerun.
+- [ ] On real recorded suite pass, perform the required fixed-then-ship re-close including full-suite evidence (cover the #412 conflict and harness scope revision), then sdlc merge --yes under existing SHIP. If any gate refuses, retain its evidence/report instead of bypass.
+
+Alternatives rejected: changing only the timeout cannot locate a hang; splitting the atomic fixture across RPCs changes event ordering; an independent watchdog duplicates the helper timer; synchronous mode/job diagnostic RPCs can hang behind the same request. The selected stderr seam preserves atomic child execution and reuses existing parent-side RPC waiting. Mandatory fresh plan-quality precedes implementation; the TL approves this concrete design before code.

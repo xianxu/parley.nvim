@@ -1,13 +1,13 @@
 ---
 id: 000410
-status: codecomplete
+status: working
 deps: [parley.nvim#408]
 github_issue:
 created: 2026-10-21
-updated: 2026-10-22
+updated: 2026-10-23
 estimate_hours: 1.987
 collaboration-mode: collaboration
-card_mirror: 'd16a0d44f753b1a7a27f930d5a1b8b1a5d5e7b1d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c53bb59e15c8fa1e1f7b2daaf3b007ad889c1de8' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T11:48:38-07:00
 claimant:
     operator: Xian Xu
@@ -36,6 +36,8 @@ Operator-approved retirement revision (Couch 8f18c995): S1 owns admission from f
 
 ## Done when
 
+- Authorized #420 harness revision preserves the atomic fold regression while enforcing one shared per-case deadline and bounded stage/elapsed/editor-job diagnostics; negative wedge tests and both-runtime verification prove it.
+
 - Native queued-input tests hold an existing lookup, complete it before the deadline, then race an external write against acquisition; first input follows confirmed protection and clean freshness.
 - Lookup plus acquisition share a measured total 500 ms bound, including callback/late-attach nesting; no fresh per-stage deadline can exceed it.
 - A lookup that remains pending permits today's unknown-period input after the bound, and later completion reconciles outstanding edits safely.
@@ -46,6 +48,8 @@ Operator-approved retirement revision (Couch 8f18c995): S1 owns admission from f
 - Standalone editors outside S1 retain legacy locks, submit, unchanged-exit and undo behavior; no automatic sweep or new generic unlock is introduced.
 
 ## Plan
+
+- [ ] Complete the 2026-10-23 bounded atomic fold-case diagnostic scope revision in the durable plan, then one new-code recorded suite and fresh re-close before SHIP.
 
 - [x] Agree the active [RETIRE plan](../plans/000410-pending-lookup-admission-plan.md), especially old-lock/journal recovery, with the TL; clear fresh plan-quality before code.
 - [x] Replace the superseded handoff/deferred-write mechanism with S1-first ownership, one admission route and the not-protected presentation; prove retirement and compatibility through red/green tests.
@@ -266,3 +270,7 @@ First exact-rev launch refused before running because d74f24b1 was no longer an 
 Authorized rerun attempt4ac5d9e4e20d0309844e6009bc7651ab finished make exit0 on EXACT d74f24b15ae4fa9d9393e4bf1b5b166335887eb1, wall457.845s (7m38s), after4958.436s queue wait. Both runtimes and all censuses passed. Fold-retirement passed3s preferred/2s installed; session_sync_native passed55s/52s. Immutable attempt JSON records outcome passed, exit0, timed_out=false. Saved full log /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/d74f24b15ae4fa9d9393e4bf1b5b166335887eb1/suite.log, SHA256f821f308bbd40c08e9449384897da96ed7f60ba9b939dbfa61027e51e264cc4a. SDLC outer command exited1: automatic success guard refuses publication because original c2c4dbbdbfc2dc8a8b8a35131c503fb2 remains unattributable-failure; explicit diagnostic says flake registration cannot explain it and requires a genuine fix/new passing code commit. Therefore no recorded green gate or re-close/landing is claimed. Both attempts preserved; no jobs remain running. Sent blocker receiptf76ed137-5935-4e86-95a7-99cd6c1fba8f. No docs-only SHA, status overwrite, forced gate or second rerun.
 
 Authenticated TL90ab1620-1401-411b-9e32-cb251b2c3dbb authorizes a genuine bounded per-case/stage diagnostic improvement for the fold fixture, referencing #420, followed by one new-code suite, re-close and existing SHIP if all pass. Correction sent to hub: original request was already bounded and printed the exact Plenary case; lack of structured producer (#415 unadopted) causes SDLC attribution, so fixture diagnostics do not retrospectively make the old attempt resumable. Next: shape the narrowly scoped harness revision before code; product admission unchanged. The real new diagnostic fix must identify stage/elapsed/editor and job state without adding blocking diagnostic RPCs after a hung child.
+
+### 2026-10-23 — authorized harness revision planned; code remains unchanged
+
+Reopened codecomplete→working with the status setter because this is new authorized harness scope, then re-entered start-plan. Appended the concrete #420 revision to the durable plan: preserve one child RPC, report six nonblocking stderr stages, reuse one existing timer with absolute per-case residual budget, capture bounded stderr and exact timeout process observations before kill, and describe last-known mode honestly. Add real-child wedge/residual/oversize and ordinary-success coverage before implementation. No product admission or suite-gate configuration change. Await TL concrete design approval and fresh change-code plan-quality before code.
