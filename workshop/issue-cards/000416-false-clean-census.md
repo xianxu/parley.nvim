@@ -1,6 +1,6 @@
 ---
 id: 000416
-status: working
+status: codecomplete
 created: 2026-10-22
 updated: 2026-10-22
 estimate_hours: 2.68
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.88
+tracker:
+    version: 1
+    completion:
+        token: close-109b42bdd319
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 8548f3b68b79592f013367172bc4340d66cfd6b7
+        evidence_commit: 20e14388f3243f9799b3eb5ed527fd4687a78640
 ---
 
 # Test census reports clean while an orphaned embedded Neovim survives
