@@ -161,7 +161,7 @@ ARCH-DRY: one canonical/legacy resolution owner, existing selectors, registry, s
 
 - [x] Map all new pure/native cases under the existing `modes/review` and affected `modes/session_sync` specs; include arrival, buffer-mutation and source/authoring guards in focused preflight. Update the atlas's current no-header-edit claim and the optional-key examples.
 - [x] Run `make test-spec SPEC=modes/review` and `make test-spec SPEC=modes/session_sync` sequentially in this checkout on preferred Neovim, then with `PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim`. Confirm exact runtime versions first. Run `make lint` and `git diff --check`.
-- [ ] Stage via `sdlc stage --build` only when ready for the required operator live acceptance. The hub schedules the operator's check on a session document (approval 7acabe36), covering plain/partial front matter, owner resolution and visible feedback for the original pane submission path. Keep artifacts disposable; do not send a live operator message without its specific authorized check. Clear stage afterward unless landing clears it.
+- [x] Stage via `sdlc stage --build` only when ready for the required operator live acceptance. The hub schedules the operator's check on a session document (approval 7acabe36), covering plain/partial front matter, owner resolution and visible feedback for the original pane submission path. Keep artifacts disposable; do not send a live operator message without its specific authorized check. Clear stage afterward unless landing clears it.
 - [x] Push the tested branch. Run one recorded `sdlc local-check run --name affected` if main declares affected policy; otherwise `--name suite`. Retain its runner through completion; classify any failure by name, no blind passing retry.
 - [ ] Close #418 and #322 through the binary-owned review with each issue's own verified evidence; follow the binary's combined-issue handling rather than bypass ownership/branch gates. Enter `sdlc merge --yes`, accept its authoritative main integration checks, verify merged/archive evidence and report both outcomes to the hub.
 
@@ -188,3 +188,7 @@ The shared root-mapping scanner lives in collaboration_value.lua, whose existing
 ### 2026-10-23 — exported API inventory checkpoint
 
 The architecture sweep found that the Core-concepts table described the modules but omitted exact names for their new public functions. Added the eight existing API names and classified project/apply/prepare as native IO. This documents the implemented approved mechanism; no runtime scope changes.
+
+### 2026-10-23 — live acceptance completed
+
+TL delivery 3b3b276e reports operator acceptance passed at 09:25 and directs close/landing for #418 and #322. Staging and its live check are complete. The final close/merge workflow checkbox remains pending until those gates actually finish; each issue's implementation acceptance checklist now distinguishes that future gate from completed behavior proof.

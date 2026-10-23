@@ -51,7 +51,7 @@ missing keys, never overwriting or dropping the operator's existing keys or valu
 ## Plan
 
 - [x] Implement the approved shared [first-submit plan](../plans/000418-first-submit-frontmatter-plan.md), including canonical/legacy readers and additive undoable preparation before save/register/send.
-- [ ] Prove this issue's Done-when and #322's separate visible-outcome acceptance on both runtimes, record the required check, obtain the binary-owned close review and complete live acceptance/landing after ariadne#562.
+- [x] Prove this issue's Done-when and #322's separate visible-outcome acceptance on both runtimes, record the required check, and complete operator live acceptance after ariadne#562. Binary-owned close review and landing follow as workflow gates.
 
 ## Log
 
@@ -159,6 +159,11 @@ Authenticated TL dc2c735f confirms pair#823 landed as PR557 at 09:19 and its fix
 
 Authenticated peer 0c807306-0796-4026-ac26-d4d21d6f68e1 supplies landed pair#823 revision aba41239d6473e2da5d3f0ce00e82129a47a2ba3 (PR557), verified by Git as an ancestor of producer origin/main. Future #419 should pin cmd/internal/sessionsync/testdata/editorial-rounds/presentation.json from that revision, superseding the unlanded handoff hashes above. It contains the agreed mixed and legacy policies plus review-record/resume preservation. Semantic/operator end-to-end acceptance belongs to #419; no fixture copy or mixed-span runtime work is added to #418.
 
+
+### 2026-10-23 — operator live acceptance passed; close authorized
+
+Authenticated TL delivery 3b3b276e-1cdf-4742-a9b1-0476de1d51e3 reports operator live acceptance PASSED at 09:25: a plain file received all three mode defaults and submitted to ops:0; after keys were removed, Alt+Return restored only missing keys and retained the body edit. TL directs closing both cards and landing, then taking #419. The automated suite on 22ee10d0 passed preferred/compat runtimes in 5m9s, including repeat-submit idempotence and failure/receipt coverage. No runtime changes followed that tested head. Close review and landing are the remaining workflow gates, not completed implementation evidence. The hub will clear scratch documents.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
@@ -181,3 +186,7 @@ item: real-api-discovery design=0 impl=0.16
 design-buffer: 0.15
 total: 3.61
 ```
+
+### 2026-10-23 — acceptance checklist separates subsequent gates
+
+The acceptance checklist now records the completed automated/live proof and names close review/landing as subsequent workflow gates. This avoids marking those gates complete before running them; no acceptance or scope was removed.

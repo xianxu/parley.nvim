@@ -32,7 +32,7 @@ Every Alt+Return ends with a visible outcome: confirmed sent owner/time, an expl
 ## Plan
 
 - [x] Implement and verify the visible-outcome portion of the [shared #418 plan](../plans/000418-first-submit-frontmatter-plan.md), retaining the original incident as historical evidence.
-- [ ] Complete this card's separate automated/live acceptance and binary-owned close/landing evidence with #418.
+- [x] Complete this card's separate automated/live acceptance with #418. Binary-owned close review and landing follow as workflow gates.
 
 ## Log
 
@@ -51,6 +51,11 @@ The shared #418 implementation now owns exact witnessed preparation before ordin
 
 PR 338 is staged on parley.nvim:0 at code head 9a5967f4768a181522ba89fa2ddfaf5d746750a7. Authenticated TL cf318a62 schedules the morning operator check of plain/partial headers and second press, with submissions to ops:0; waiting for the relayed result. The #418 Log owns current recorded-suite lease and remaining automated preflight. This card is authoritatively working/claimed via tracker verbs despite its checkout's old mirror; do not edit mirrored card fields manually. Exact next step: collect that acceptance and the final corrected-head check, then close this card with its separate verified evidence through the binary.
 
+
+### 2026-10-23 — operator live acceptance passed; close authorized
+
+Authenticated TL delivery 3b3b276e-1cdf-4742-a9b1-0476de1d51e3 reports operator live acceptance PASSED at 09:25: a plain file received all three mode defaults and submitted to ops:0; after keys were removed, Alt+Return restored only missing keys and retained the body edit. TL directs closing both cards and landing, then taking #419. The automated suite on 22ee10d0 passed preferred/compat runtimes in 5m9s, including repeat-submit idempotence and failure/receipt coverage. No runtime changes followed that tested head. Close review and landing are the remaining workflow gates, not completed implementation evidence. The hub will clear scratch documents.
+
 ## Revisions
 
 ### 2026-10-23 — reopen for combined first-submit acceptance
@@ -60,3 +65,7 @@ The new TL dispatch supersedes the duplicate-only disposition, preserving the ol
 ### 2026-10-15 — Superseded by #332 at operator request
 
 The requested Couch-pane workflow now uses save→register→submit rather than the original process-instruction prompt→placement→resubmit route. #332 owns visible owner/time success and visible errors, plus the remaining combined live check. Preserve the original report and acceptance text as evidence; close this card as a superseded duplicate, not as a claim that its original prompt route or outside-pane flow was newly implemented.
+
+### 2026-10-23 — acceptance checklist separates subsequent gates
+
+The acceptance checklist now records the completed automated/live proof and names close review/landing as subsequent workflow gates. This avoids marking those gates complete before running them; no acceptance or scope was removed.
