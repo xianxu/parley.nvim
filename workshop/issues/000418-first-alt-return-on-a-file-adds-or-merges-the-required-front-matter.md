@@ -121,6 +121,11 @@ Current targeted evidence: modes/review completes 19 files with no failures on e
 
 Exact next step: collect session 28887's completed result on dbb3cd1e (or confirm that exact live lease after recovery), classify every failure before any retry, and receive the hub's morning live acceptance for plain/partial/second press. Then finish plan/issue acceptance ticks and run the binary-owned closes for #418 and #322, PR/merge gates and final report. Do not claim SHIP or land before those remaining requirements. Stage remains held on parley.nvim:0 at unchanged runtime code 9a5967f4 for the scheduled operator check; clear through sdlc after acceptance unless landing handles it.
 
+
+### 2026-10-23 — future #419 fixture handoff recorded
+
+Authenticated peer delivery 1045ba73-849b-47ca-9c76-b190bcaf4722 reports the agreed #823 fixture at cmd/internal/sessionsync/testdata/editorial-rounds/presentation.json, with mixed explicit/absent span policies, both legacy fallbacks, document/result hashes and positions, expected effective values, opaque metadata and review-record/resume consistency. Git resolves the reported producer commit to 4619aee1f0aaad327101110fb401c09b61e8c27d. This is an unlanded handoff reference only: future #419 must wait for pair:9's landed revision before pinning, with no stack/runtime dependency here. #418 scope and staged code remain unchanged. The retained recorded suite is still live on dbb3cd1e and has advanced to FIFO position 4; no suite result or operator live acceptance has arrived. Keep session 28887/lease-2976986650 and the existing next-step instructions above.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
