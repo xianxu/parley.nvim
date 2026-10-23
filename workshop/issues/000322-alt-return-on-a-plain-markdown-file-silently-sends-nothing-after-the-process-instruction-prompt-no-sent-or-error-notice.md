@@ -55,6 +55,7 @@ The adapter adds constant work (one short notice and one owner call), removes a 
 ### 2026-10-14
 
 ### 2026-10-23 — reopened for mode-free local submission
+- 2026-10-23: closed — Both runtimes: submit25, review-admission39, invocation64, document-lifetime10, guards2+2 and native attached-UI8 pass; clean census, no prompt/submit rewrite/blocked input, lint and docs4 pass. Recorded suite lease-2691705198 and operator live acceptance pending; landing waits for both. Measured window includes parley.nvim#418 tail (11:18–14:30) because #322 was claimed on the same slot concurrently; clean #322 effort began 14:30; no typed hours. TL35643b0f explicitly directs --no-actual.; review verdict: SHIP
 
 TL49bad7d4 assigned real mode-free outside-Couch work here, superseding the earlier acceptance-only/no-actual proposal and duplicate close; TL1341251d dispatches this item after #418 landed. start-plan created a fresh main-based branch and rebuilt slot tools during catch-up; seeded merge-check regeneration was correctly deferred, with no local-gates file mutation. Inspection confirms the existing local prompt returns silently on cancellation; the local review already owns no-marker/pending/provider outcomes. Keep that owner and remove only standing-instruction submission. Previous TTY unavailable; current source and authenticated dispatch are the evidence.
 
