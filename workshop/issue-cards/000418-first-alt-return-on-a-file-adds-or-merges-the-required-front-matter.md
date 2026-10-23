@@ -23,6 +23,6 @@ tracker:
         evidence_commit: 87fdc7db447dedb0feb8564775e0e7c3edc9551f
 ---
 
-# First Alt+Return on a file adds or merges the required front matter
+# Legacy chat reader tolerates quotes in unrelated plain metadata
 
 ## Problem
