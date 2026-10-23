@@ -134,6 +134,145 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: b0ae51fe-05cf-4bd9-b6d6-c97d4f499528
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000416"
+            recipe: milestone-review
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Volumes/TestScratch/review-checkouts/a5a3b318e5c94607
+            reviewed_head: fee0af023b597fded78c36facb08c559085aaf5b
+            slot: parley.nvim:3
+            requested_at: "2026-10-23T00:12:30.056533Z"
+          phase: finished
+          pid: 59533
+          started_at: "2026-10-23T00:12:30.216475Z"
+          finished_at: "2026-10-23T00:16:08.418423Z"
+          session_id: 01a1661a-2022-7700-b88e-50d198b40adb
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: fee0af023b597fded78c36facb08c559085aaf5b
+        tracker_head: 9e66cffb8b1729bf8f889b146dd99a752b8e3103
+        branch_point: 1752271061691fd0780994a45b93d46463c8c747
+        since: "2026-10-22T16:14:29-07:00"
+        until: "2026-10-22T17:11:54-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-22T16:14:29-07:00"
+              end: "2026-10-22T17:11:54-07:00"
+              began: "2026-10-22T16:14:29-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a15a7c-a7ef-7492-9684-887d55dc4a8d
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: a6ba95f98080086609ff475d69c191dcf362df85e6acff1fb2d0e4a577160916
+              started: "2026-10-20T18:04:41.786Z"
+              spawned: false
+              bytes: 10372633
+              windows:
+                - start: "2026-10-22T16:14:29-07:00"
+                  end: "2026-10-22T17:11:54-07:00"
+            - harness: codex
+              id: 01a165e9-7944-7bf0-a615-1ffaba584dd0
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: d6f8e5a09f33eb611d6289ffcdcbed98f52c5bdb4be81dbc539a7338272f7766
+              started: "2026-10-22T23:19:23.106Z"
+              spawned: false
+              bytes: 617194
+              windows:
+                - start: "2026-10-22T23:19:23.106Z"
+                  end: "2026-10-22T17:11:54-07:00"
+            - harness: codex
+              id: 01a165eb-9540-75d0-8d38-10b11d67edd1
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 561f3cb3852b0645f02607dd0d4afbde3e39cf8d3840b4cdf36125ca541926ba
+              started: "2026-10-22T23:21:40.848Z"
+              spawned: false
+              bytes: 500977
+              windows:
+                - start: "2026-10-22T23:21:40.848Z"
+                  end: "2026-10-22T17:11:54-07:00"
+            - harness: codex
+              id: 01a165ec-83eb-71f1-ba11-6c087e76b404
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 741c368cec0dfa98a537a1fbf87540a1c8503f67d19ada0f19414109598bb872
+              started: "2026-10-22T23:22:41.875Z"
+              spawned: false
+              bytes: 450161
+              windows:
+                - start: "2026-10-22T23:22:41.875Z"
+                  end: "2026-10-22T17:11:54-07:00"
+            - harness: codex
+              id: 01a165ec-e7d1-7b71-a305-93fb695efdaf
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 4041fe919424ad69568f55115592d08794f1ae6e550d6ced9f065a9f77b38a3d
+              started: "2026-10-22T23:23:07.433Z"
+              spawned: false
+              bytes: 379419
+              windows:
+                - start: "2026-10-22T23:23:07.433Z"
+                  end: "2026-10-22T17:11:54-07:00"
+            - harness: codex
+              id: 01a165ed-7d8d-7312-8f92-c9b2853a593f
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              parent_id: 01a15a7c-a7ef-7492-9684-887d55dc4a8d
+              digest: fd2af9187728f0e77096ab0a74c93feb2012f6d157dd7b18af0f2a19d9f7a027
+              started: "2026-10-22T23:23:45.497Z"
+              spawned: true
+              bytes: 1006247
+              windows:
+                - start: "2026-10-22T23:23:45.497Z"
+                  end: "2026-10-22T17:11:54-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 15.0748
+        cuts:
+            - dispatched: "2026-10-22T17:03:45-07:00"
+              finalized: "2026-10-22T17:08:01-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-22T17:16:09-07:00"
+      dispatched: "2026-10-22T17:12:30-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Publication preserves validated raw unknown-member slices. The numeric-text regression passes at head and fails with the preceding module, exposing 9007199254740993 becoming 9007199254740992.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: Atomic mkdir reserves canonical bounded slots. The controlled two-allocator regression passes at head and fails with the preceding module because both callers are admitted.
+          round: 2
+      findings:
+        - kind: defect
+          id: BR-3
+          severity: Important
+          title: Concurrent scope retirement incorrectly rejects healthy admission
+          detail: 'tests/helpers/test_processes.lua:273-277 treats every failed lstat of an enumerated scope as invalid evidence. Reproduced on both runtimes: pause allocation after fs_scandir, prune an existing empty spec-1, then resume; scope() returns nil with "unknown or legacy registry scope" despite available capacity. spec_runner.lua:66 consequently returns code 125 before launching the spec; parallel suite workers routinely allocate while siblings retire. This is the 2nd finding in family atomic-capacity-admission. State and enforce the admission rule across allocation/allocation, allocation/retirement and retirement/reuse interleavings: explicit ENOENT from concurrent retirement must permit continued atomic reservation, while unreadable or invalid existing evidence must still refuse. Add controlled regressions covering that enumeration.'
+          family: atomic-capacity-admission
+          round: 2
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#416 (boundary-review)
@@ -150,7 +289,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-2** [Important] `atomic-capacity-admission` (kind: defect) Concurrent scope allocation exceeds the census's accepted capacity
   tests/helpers/test_processes.lua:242 checks the scope count separately from fs_mkdtemp(). With 63 existing scopes and two callers synchronized after enumeration, both allocations succeed, producing 65 scopes against the default limit of 64. The terminal verifier then exits 2 with "registry entry limit reached" before reconciling records. Make capacity reservation atomic across parallel runners and add a controlled concurrent-admission regression (ARCH-CONSTRAINTS, ARCH-ORDER).
 
+## Round 2 — 2026-10-22T17:16:09-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Publication preserves validated raw unknown-member slices. The numeric-text regression passes at head and fails with the preceding module, exposing 9007199254740993 becoming 9007199254740992.
+- BR-2 — addressed — Atomic mkdir reserves canonical bounded slots. The controlled two-allocator regression passes at head and fails with the preceding module because both callers are admitted.
+
+### Raised
+
+- **BR-3** [Important] `atomic-capacity-admission` (kind: defect) Concurrent scope retirement incorrectly rejects healthy admission
+  tests/helpers/test_processes.lua:273-277 treats every failed lstat of an enumerated scope as invalid evidence. Reproduced on both runtimes: pause allocation after fs_scandir, prune an existing empty spec-1, then resume; scope() returns nil with "unknown or legacy registry scope" despite available capacity. spec_runner.lua:66 consequently returns code 125 before launching the spec; parallel suite workers routinely allocate while siblings retire. This is the 2nd finding in family atomic-capacity-admission. State and enforce the admission rule across allocation/allocation, allocation/retirement and retirement/reuse interleavings: explicit ENOENT from concurrent retirement must permit continued atomic reservation, while unreadable or invalid existing evidence must still refuse. Add controlled regressions covering that enumeration.
+
 ## Open findings
 
-- **BR-1** [Critical] `persisted-unknown-value-preservation` (kind: defect) Birth publication silently changes unknown JSON numbers
-- **BR-2** [Important] `atomic-capacity-admission` (kind: defect) Concurrent scope allocation exceeds the census's accepted capacity
+- **BR-3** [Important] `atomic-capacity-admission` (kind: defect) Concurrent scope retirement incorrectly rejects healthy admission

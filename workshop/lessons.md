@@ -978,3 +978,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 
 - #416 close BR-1: a JSON round-trip oracle using the same native decoder cannot detect numeric precision loss. Preserve unknown raw values when the host number type cannot represent every JSON number; assert exact large integer, decimal and exponent text independently.
 - #416 close BR-2: a count followed by allocation is not capacity reservation across parallel runners. Reserve one of a fixed number of directories with atomic mkdir, and drive two callers through the final-slot interleaving in a deterministic test.
+
+- #416 close BR-3: an atomic capacity reservation still needs retirement semantics. Enumerate allocation/allocation, allocation/retirement and retirement/reuse together. Only explicit ENOENT permits proceeding after a stale directory snapshot; unreadable entries remain unknown. Drive each ordering with a controlled barrier.

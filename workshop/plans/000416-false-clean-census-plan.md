@@ -173,3 +173,19 @@ Targeted implementation verification is complete on both runtimes and the broade
 BR-1: publication must retain raw top-level unknown member slices from the validated JSON, including nested numeric tokens, rather than round-tripping them through Lua's number representation. Rewrite only known birth fields. Regression oracles compare original numeric text directly, covering large signed integers, precise decimals, exponents and negative zero; decoding both sides would hide the defect.
 
 BR-2: reserve one of 64 canonical scope directories with native atomic mkdir, so simultaneous runners cannot both consume the final slot. New outer contexts are fresh; noncanonical leftovers are a visible refusal at allocation, while census still reads old random scopes. A controlled two-caller barrier at 63 slots must admit exactly one caller and keep the retained tree within the census bound. Scope retirement remains observed-death cleanup, with no extra lock that can strand after owner death.
+
+
+### 2026-10-22 — BR-3: admission and retirement as one slot protocol
+
+The second review disposes BR-1 and BR-2 but demonstrates a normal sibling retirement between enumeration and lstat. Re-plan the full `atomic-capacity-admission` family rather than treating a nil probe as absence. The finite slot directory is the single occupancy resource; mkdir is acquisition and successful empty rmdir is release. An extra count or independent lock is unnecessary: count cannot reserve, and a separate lock adds an owner-death cleanup obligation.
+
+| Ordering / observation | Admission behavior | Evidence / recovery |
+| --- | --- | --- |
+| Two allocators see the final slot free | Exactly one mkdir succeeds; the other reports full | Native EEXIST is contention, not ownership |
+| A sibling retires a listed empty slot before lstat | Explicit ENOENT permits continued reservation | No stale snapshot veto; mkdir owns the decision |
+| A retired slot is reused before another caller reserves it | Existing canonical private directory remains occupied | EEXIST skips it; never returns another caller's scope |
+| lstat cannot inspect an existing entry | Refuse visibly and retain evidence | EACCES/other errors never mean absent |
+| Entry is malformed, foreign, writable, a symlink, or legacy random | Refuse allocation and retain it | Census still consumes legacy records under its existing rules |
+| All canonical slots are occupied | Bounded visible full refusal | Retry after a runner reconciles and retires its scope |
+
+Enumerate every scope creator/collector: `M.scope` alone acquires current-run slots; each spec runner calls `M.prune` only after shared reconciliation establishes death; terminal census collects drained scopes after runners complete; lease admission prunes prior empty runs before allocating a fresh context. Recursive lease reuse allocates no run and prunes nothing. Add controlled retirement-after-snapshot, retirement/reuse/contention and unreadable-existing-entry tests alongside the two-allocator regression. Preserve census and exact process-identity semantics.

@@ -270,10 +270,16 @@ function M.scope(base)
     for _, scope in ipairs(scopes) do
         local digits = scope.name:match("^spec%-(%d+)$")
         local slot = tonumber(digits)
-        local info = uv.fs_lstat(scope.path)
-        if not slot or tostring(slot) ~= digits or slot < 1 or slot > M.MAX_SCOPES
-            or not info or info.type ~= "directory" or info.uid ~= uv.getuid()
-            or bit.band(info.mode, 18) ~= 0 then
+        local info, why, code = uv.fs_lstat(scope.path)
+        if not info then
+            -- A sibling may retire an empty slot after our directory snapshot.
+            -- Only explicit absence permits continuing to the atomic mkdir;
+            -- unreadable or unclassified evidence remains unknown.
+            if code ~= "ENOENT" then
+                return nil, "cannot inspect registry scope: " .. scope.path .. ": " .. tostring(why)
+            end
+        elseif not slot or tostring(slot) ~= digits or slot < 1 or slot > M.MAX_SCOPES
+            or info.type ~= "directory" or info.uid ~= uv.getuid() or bit.band(info.mode, 18) ~= 0 then
             return nil, "unknown or legacy registry scope: " .. scope.path
         end
     end
