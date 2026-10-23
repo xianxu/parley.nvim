@@ -77,9 +77,9 @@ follows a file or recognized artifact reference; `<M-o>` also follows Parley
 branch references before falling back to smart `gf`. See [Branching](../chat/inline_branch_links.md)
 and [Drill-In](../chat/drill_in.md) for placement and selection details.
 
-In a markdown file `<M-CR>` sends the document to the agent in this pair
-slot, steered by its `process-instruction:` frontmatter line (outside pair, a
-review round runs here); see [Review](../modes/review.md#altreturn-process-instruction-and-the-slot-send-316).
+In a Markdown file `<M-CR>` submits the document to its Couch owner. Outside
+Couch, it requests local review without prompting for or inserting a standing
+instruction; see [Review](../modes/review.md#altreturn-pane-submission-and-local-review-322).
 A `type: session-sync` file submits instead; see
 [Session-Sync Files](../modes/session_sync.md).
 

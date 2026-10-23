@@ -66,6 +66,14 @@ RED: outside-Couch plain/partial files still prompt, and an unknown retired inst
 
 The complete focused owner map passes on both Neovim0.12.5 and0.11.7: submit25, review-admission39, invocation64, document-lifetime10, arrival2 and admission-owner2, with clean terminal process censuses. Native UI8 passes on each runtime separately. No code changes beyond the thin adapter deletion and truthful local-request notice. Clarified that byte preservation is submit preparation, not a ban on later provider-owned edits. Atlas and traceability include the new native regression. No full suite or operator acceptance result yet. Next: commit/push this exact code, retain one recorded branch suite, and ask hub for staging/live acceptance before landing.
 
+### 2026-10-23 — published candidate, retained suite and authorized stage
+
+PR344 contains code b9135976daa17a4a2986cb1fd1b8e02fd4708e9d. Recorded suite terminal81302, lease-2691705198, checkout /Volumes/TestScratch/local-checks/sdlc-local-2867989229, inflight log .git/sdlc/test-stats/inflight/2f462d85c36ec3d495801235b68a6e90/run.log; last seen FIFO6, not yet admitted. Preserve that runner and do not restart/requeue for these documentation-only descendants. No full-suite result yet.
+
+Authenticated TL7f03823a approves staging; stage --build completed on parley.nvim:0 at the exact candidate b9135976daa17a4a2986cb1fd1b8e02fd4708e9d. This Lua plugin has no Go entrypoints/binaries, so no Go build was needed. Hub received three operator steps (plain no-work; ready comment; unnamed save-first) and a fresh-plugin-load caution; receipt1c6f1f7a is submitted. Operator acceptance remains pending. Clear stage after acceptance or landing through the existing SDLC lease, without touching editor processes.
+
+A documentation sweep corrected standing-instruction descriptions and links to the renamed Alt+Return atlas section; documentation_spec4 passes with clean census. Exact next step: read retained terminal81302 to completion, receive live result, then binary-owned close review/merge. No new full run is authorized merely by queue delay; classify any failure and retain all attempts. #419 remains separate, waiting for the landed #576 fixture revision.
+
 ## Revisions
 
 ### 2026-10-15 — Superseded by #332 at operator request
