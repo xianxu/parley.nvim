@@ -89,6 +89,10 @@ The first close proposed4.59h and a dominant203.5m interval11:18–14:42; this i
 
 The restarted --no-actual close returned SHIP, no blocking findings, one Minor advisory: attention-finder recording text was broadened incorrectly during terminology cleanup. Verified session_sync.release_and_send records successful submitted-path deliveries before its stale guard; corrected the exception to local review requests only and added the general lesson. Reviewer independently passed complete modes/review on both supported runtimes and skills/skill-system lifecycle coverage, lint and clean censuses. Close evidence252d3dff07c1fd8fee61d7cdb49a3d5893ea198b binds codecomplete with actual N/A; the rejected4.59h was not adopted. ariadne#580 holds the attribution defect, unclaimed. No runtime code changed after the recorded-suite head b9135976. Suite terminal81302/lease-2691705198 remains FIFO3; operator acceptance remains pending. Preserve the runner and stage; landing waits for those results.
 
+### 2026-10-23 — operator live acceptance passed
+
+Authenticated TL9e240bf8 relays the operator's outside-Couch acceptance at about14:55: “works”. An earlier inside-Couch plain-file check correctly registered/submitted to ops:0 and was retained as the unchanged control; TL then requested a fresh plain Ghostty tab without COUCH_THREAD_SCOPE/TAG for the local path. The staged runtime is unchanged b9135976. Hub directs landing on the suite and clearing the stage afterward. Close remains SHIP with actual N/A; branch suite terminal81302/lease-2691705198 is still queued (last FIFO3). Exact next step: finish that retained suite, classify any failure, then sdlc merge --yes; after verified landing clear the original stage with sdlc stage --clear parley.nvim:0 and report outcome. #419 follows separately once #576 fixtures land.
+
 ## Revisions
 
 ### 2026-10-15 — Superseded by #332 at operator request
