@@ -7,7 +7,7 @@ created: 2026-10-22
 updated: 2026-10-23
 estimate_hours: 3.61
 collaboration-mode: collaboration
-card_mirror: '657d651a63fe978f0674221cdd85b69b80e26402' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '398729b0fb066157fbcf543b19ec55933db85721' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T00:21:40-07:00
 claimant:
     operator: Xian Xu
@@ -17,7 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: operator}
-actual_hours: 4.29
+actual_hours: 4.93
 ---
 
 # Legacy chat reader tolerates quotes in unrelated plain metadata
