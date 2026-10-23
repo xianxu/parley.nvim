@@ -1,13 +1,21 @@
 ---
 id: 000417
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '26cdece25b8fcc00cbf31fd0a27cf3aa71c1f0a8' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2191b7c1be53cd4179409df50c365fdc90a7e5ab' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-22T18:01:39-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Alt+i pastes a clipboard image without a confirmation prompt; error if no image
@@ -31,8 +39,15 @@ it immediately; if it doesn't, show a clear one-line error ("No image in the cli
 
 ## Plan
 
-- [ ]
+- [ ] Reproduce the prompt with a native UI and fake clipboard. The async save path currently has no explicit confirmation; guard against builtin notification hit-enter as well as input/confirm dialogs.
+- [ ] Keep existing default attachment naming, placement, writer/shrink and rollback (ARCH-DRY). Remove the paste completion's blocking feedback; emit one-line error `No image in the clipboard` for no-image, with buffer/disk unchanged.
+- [ ] Cover Normal/Insert mappings, image bytes, no prompt and absent-image no mutation through the existing fake and native UI on both supported Neovim versions. Update README/atlas, run suite and close review.
+
 
 ## Log
 
 ### 2026-10-22
+
+### 2026-10-22 — quick-flow design
+
+The existing clipboard-to-assets path does not call a confirmation dialog; its full-path success notice can trigger builtin hit-enter UI. First reproduce this through a real attached native UI instead of deleting an imaginary naming prompt. No new state, dependency or save protocol; existing terminal cleanup and shrink/error diagnostics remain authoritative (ARCH-PURPOSE/DRY). Posted the bounded plan to the hub, proceeding unless it objects.
