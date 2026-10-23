@@ -970,3 +970,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 ## 2026-10-22 (#417 — notification prompts after a completed edit)
 
 - A successful asynchronous edit can still block the next key on builtin notification hit-enter. Keep the real notification surface in attached-UI regressions; an injected recording notifier hides this failure. Inspect fast `nvim_get_mode` before ordinary Lua RPC when a prompt may be active, then prove subsequent typing reaches the buffer.
+
+- #417 BR-1: enumerate every producer of completion diagnostics before declaring feedback nonblocking. A short prefix with an unbounded suffix still blocks; native UI tests must cover conversion-limit refusal, tool resolution and converter failure, alongside the plain success case.

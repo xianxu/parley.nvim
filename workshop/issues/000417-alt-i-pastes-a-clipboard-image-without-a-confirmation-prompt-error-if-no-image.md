@@ -41,8 +41,8 @@ it immediately; if it doesn't, show a clear one-line error ("No image in the cli
 ## Plan
 
 - [x] Reproduce the prompt with a native UI and fake clipboard. The async save path currently has no explicit confirmation; guard against builtin notification hit-enter as well as input/confirm dialogs.
-- [x] Keep existing default attachment naming, placement, writer/shrink and rollback (ARCH-DRY). Remove the paste completion's blocking feedback; emit one-line error `No image in the clipboard` for no-image, with buffer/disk unchanged.
-- [x] Cover Normal/Insert mappings, image bytes, no prompt and absent-image no mutation through the existing fake and native UI on both supported Neovim versions. Update README/atlas.
+- [ ] Keep existing default attachment naming, placement, writer/shrink and rollback (ARCH-DRY). Remove the paste completion's blocking feedback; emit one-line error `No image in the clipboard` for no-image, with buffer/disk unchanged.
+- [ ] Cover Normal/Insert mappings, image bytes, no prompt and absent-image no mutation through the existing fake and native UI on both supported Neovim versions. Update README/atlas.
 Publication follows the recorded suite and the SDLC close/merge gates; it is not an implementation checkbox.
 
 
@@ -67,3 +67,11 @@ RED native UI tests on0.12.5 independently observed Normal/Insert become mode `r
 ### 2026-10-22 — review-ready checkpoint
 
 Implementation and targeted verification are complete at fdb9808f953b4fb35ef6945d39e500ccd114a9d7 (PR337). Publication remains conditional on the recorded suite, boundary review and merge gates; removed the self-referential close/land checkbox rather than ticking future work as done. The attached-UI matrix is the operator-confirmed reproduction surface; no live :0 stage performed.
+
+### 2026-10-22 — BR-1 presentation revision approved
+
+R1 is REWORK with Critical BR-1, family paste-completion-must-not-block-input: the shared success emission still appended shrink notes, so retained-original successes reproduced mode r on both n/i. The class enumeration is all3 note sources in image_shrink.shrink (conversion-limit admission, converter resolution/configuration, converter execution/output) plus ordinary successful conversion sizes. Reopened completion/coverage checkboxes until that matrix is green.
+
+TL5a199558 approves one short one-line summary for every successful paste, with full shrink diagnostics and sizes silently retained in :messages and a short notice pointing there. Keep one policy at the existing success emission, no new UI, queue or state. Qualify native message-history capture semantics and quote/newline safety on both supported versions; :silent echomsg is not assumed to preserve history. Add native note-source/mode coverage red first, then implement. Update the atlas guarantee to match actual presentation.
+
+Cancelled only superseded recorded suite lease-3257249525 on ff795ebb through sdlc (attempt1fed1f57ba59ba07475c9bffce1e6593); it is not passing evidence. The fixed code gets a new pushed-head recorded suite and another close review.
