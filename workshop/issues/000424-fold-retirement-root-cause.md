@@ -7,7 +7,8 @@ created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'f83b8a28ab4804ab97ce4768ee7e41be065f5442' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '98f233afee120a4fc872ce7daa0c2afbd944f7cf' # card fields mirrored from issue-cards; edit via sdlc
+flake_tests: [lua:tests/integration/document_fold_uncertainty_retirement_spec.lua#native suspended fold retirement restores the operator preference and view when detach interrupts suspended uncertainty]
 ---
 
 # fold retirement timeout: root cause from captured evidence
@@ -42,3 +43,6 @@ An isolated run of the original unmodified spec and unchanged product code subse
 ## Log
 
 Filed unclaimed at hub direction ff4e7f1b-f39a-4575-8ccf-0f9ef5f8b6a6. Root-cause investigation is intentionally separate from #420's completed evidence-capture deliverable. No new rerun or guessed guard is authorized by this filing.
+
+
+Registration evidence: sdlc flake register accepted the exact Lua case above on #424 with explicit external evidence. Recorded failure attempt c2c4dbbdbfc2dc8a8b8a35131c503fb2 on d74f24b15ae4fa9d9393e4bf1b5b166335887eb1 timed out after27862ms on installed0.11.7; immutable failure log and hash are in Spec. The original unchanged fixture/product subsequently passed1/0/0 outside test-stats (repro.log and hash in Spec). This is historical fail/pass evidence, not a typed exact-head recorded pass. Registration remains active; the card is unclaimed.
