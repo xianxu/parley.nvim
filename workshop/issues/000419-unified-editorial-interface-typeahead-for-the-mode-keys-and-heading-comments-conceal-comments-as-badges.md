@@ -16,7 +16,7 @@ card_mirror: 'a019415ce83fb5acae8c51b830ac683b5fc535a2' # card fields mirrored f
 
 ## Spec
 
-**Settled with the operator (10-22, design chat in brain `chat.side/2026-10/2026-10-22-01-editorial-modes.md`):**
+**Settled with the operator (10-22, design chat in brain `session.side/2026-10/2026-10-22-01-editorial-modes.md`):**
 - **Uniform names:** `collaboration-mode` (where an answer goes: discussion / collaboration / chat),
   `presentation-mode` (how edits are shown: highlight / direct / propose), `processing-mode` (how an edit is made:
   the review modes in `ariadne/construct/local/universal-review/modes/`: copy-editing, developmental, fact-check,
