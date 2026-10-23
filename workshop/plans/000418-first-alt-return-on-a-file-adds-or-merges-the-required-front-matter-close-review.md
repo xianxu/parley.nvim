@@ -196,3 +196,97 @@ findings:
    Add a `## Revisions` entry defining scalar-context compatibility: root plain scalars retain interior flow punctuation, actual collections remain invalid for string settings, and all canonical/legacy read-and-fill paths receive preservation and native-submit coverage.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"af8e98c2-6632-433d-98c6-0f6bcc1fa727","repository":"github.com/xianxu/parley.nvim","issue_id":"000418","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/0849fc9bc9c49259","reviewed_head":"46d9d0d195905092cf27f466d93ae1921b1bbbf7","slot":"parley.nvim:3","requested_at":"2026-10-23T16:45:29.720946Z"},"phase":"finished","pid":56622,"started_at":"2026-10-23T16:45:29.934339Z","finished_at":"2026-10-23T16:49:09.222372Z","session_id":"01a169a7-3d63-76b3-a9a5-18570676b62b","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-23T10:05:03-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 418 — First Alt+Return on a file adds or merges the required front matter |
+| repo | parley.nvim |
+| issue file | workshop/issues/000418-first-alt-return-on-a-file-adds-or-merges-the-required-front-matter.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 3bec977814f3648275f9e2f3f2fcb4f9aea8dcc9..2617a3b471acf68263b917b341d32d34c7963d69 |
+| command | sdlc close --issue 418 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-23T10:05:03-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The implementation delivers additive, undoable preparation through the existing submission owner, with meaningful native and lifecycle tests. Documentation covers the new settings. BR-4 remains blocking: root-scalar decoding was corrected, but the preceding header scanner still applies quoted-value rules inside valid plain instruction strings.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      editorial_frontmatter.lua:84–97 preserves materialized string types and escapes controls. Regression tests pass; removing JSON encoding in memory produces four failing cases.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      editorial_frontmatter.lua:118–120 preserves root indentation. Pure width-1–4 and native submission cases pass; removing indentation in memory makes the regression fail.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Both plan inventory rows now classify instruction.lua as unchanged, reused (lines 53 and 73), supported by its empty pinned-range diff and the explanation at line 203.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Critical; family persisted-scalar-roundtrip; ARCH-PURPOSE / ARCH-EVOLVE. collaboration_value.lua:18–20 still recognizes a quote following punctuation as a quoted-value opener inside a root plain scalar. Valid processing-instruction: Keep commas, "please therefore fails with frontmatter: unclosed quoted value, including a complete header needing no insertion. The same occurs for Keep ["asides] intact and Keep -"voice intact: all 12 canonical/legacy × partial/complete combinations were rejected on Neovim 0.11.7, with representative failures also reproduced on 0.12.5. Ruby YAML accepts these strings. An in-memory extension of the existing native complete-header regression fails at editorial_submit_spec.lua:147 with no submission. Correct lexical context throughout header scanning, comment handling and scalar decoding; enumerate embedded quotes after punctuation across plain/quoted canonical/legacy values and partial/complete headers. Retain actual collection/type rejection and original-byte preservation.
+```
+
+1. **Strengths**
+   - Preparation uses the existing operation and exact edit witnesses; native tests verify cancellation on unrelated edits and reload.
+   - Tests inspect saved bytes and persisted registration at the fake transport boundary, proving save/register/send ordering.
+   - Additive insertion preserves existing metadata and body bytes, including indented mappings.
+   - README and atlas describe defaults, legacy precedence, refusals, and submission routes.
+
+2. **Critical findings**
+   
+   **BR-4 remains open** at `lua/parley/skills/review/collaboration_value.lua:18`. The scanner must distinguish quotes that begin YAML scalars from literal quotes inside an already-started plain scalar. Fix the shared lexical rule across the reader pipeline; adding punctuation exceptions would leave the family unresolved.
+
+3. **Important findings**
+   
+   None newly raised. Extend BR-4’s existing regressions with the failing combinations documented above.
+
+4. **Minor findings**
+   
+   None.
+
+5. **Test coverage notes**
+   - `make test-spec SPEC=modes/review` passed on Neovim 0.12.5.
+   - Editorial pure tests: **20 passed**; native submission tests: **24 passed**, on both supported runtimes.
+   - Document lifecycle tests: **57 passed** on 0.12.5.
+   - Removing BR-4’s decoder-context fix in memory produced **two regression failures**, confirming reachability.
+   - The additional native plain-scalar probe produced the expected blocking failure.
+   - Writer and indentation mutation controls also failed as expected. Repository files remained unchanged; process censuses were clean.
+   - Full suite and complete session-sync mapping were not rerun during this review.
+
+6. **Architectural notes for upcoming work**
+
+   | Principle | Result |
+   |---|---|
+   | ARCH-DRY | Pass: shared resolver, insertion seam, and existing selectors reused. |
+   | ARCH-PURE | Pass: settings and transitions remain pure; native editing stays at the boundary. |
+   | ARCH-PURPOSE | **Flag BR-4:** valid existing settings still prevent submission. |
+   | ARCH-MOCK | Pass: native flow uses the persistent fake Couch boundary; existing conformance probes remain available. |
+   | ARCH-CONSTRAINTS | Pass: header bounds and counted growth tests exercise the declared envelope. |
+   | ARCH-SECURE | Pass: malformed metadata refuses visibly; tests isolate external state. |
+   | ARCH-ORDER | Pass: witnessed transitions and reproducible interruption tests cover preparation ownership. |
+   | ARCH-FUNERAL | Pass: no new durable artifact family; operation state has existing terminal cleanup. |
+   | ARCH-EVOLVE | **Flag BR-4:** valid persisted plain strings remain unreadable. |
+
+7. **Plan revision recommendations**
+   
+   Add a `## Revisions` entry extending BR-4’s root-context rule to **header lexical scanning and comment handling**, with embedded quote/punctuation combinations, canonical/legacy readers, and partial/complete native submissions. The current revision at plan line 207 describes the correct intent but does not yet have complete implementation or regression coverage.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"bdad0e79-c0a4-467b-a731-5c5706528596","repository":"github.com/xianxu/parley.nvim","issue_id":"000418","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/563af1230bae8ddb","reviewed_head":"2617a3b471acf68263b917b341d32d34c7963d69","slot":"parley.nvim:3","requested_at":"2026-10-23T17:00:56.913048Z"},"phase":"finished","pid":17336,"started_at":"2026-10-23T17:00:57.080144Z","finished_at":"2026-10-23T17:05:02.362414Z","session_id":"01a169b5-62fa-70c0-a68a-1264cc5af9cc","outcome":"returned"}] -->

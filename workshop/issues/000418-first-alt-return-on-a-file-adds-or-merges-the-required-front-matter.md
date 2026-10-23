@@ -188,6 +188,14 @@ BR-4 now decodes owned root scalar values outside flow context, preserving comma
 
 After the observed RED, both installed runtimes pass editorial pure 20, existing collaboration-value 20, collaboration resolver 10 and instruction 9 cases; native submission 24 and operation lifecycle 57 also pass on both runtimes. All censuses are clean. Architecture guards (arrival budget, mutation seam and source inventory), targeted luacheck and diff whitespace pass. Exact next step: commit/push corrected bytes, cancel the obsolete queued lease via local-check, stage the corrected head, enqueue its recorded suite once and run close round 3. Operator live plain/partial evidence remains recorded; final suite, close and landing remain outstanding.
 
+### 2026-10-23 — close round 3 REWORK; stop and re-plan
+
+Round 3 retains BR-4: root scalar decoding is corrected, but the preceding uncomment scanner still recognizes an embedded quote after punctuation as a new quoted value. Review reproduces canonical/legacy × partial/complete failures for plain text such as Keep commas, "please, Keep ["asides] intact and Keep -"voice intact, including native no-op-header submission. BR-1/2/3 remain addressed. Although the ledger records no new ID, this is the third review round in the scalar code; implementation is stopped under TL's explicit rule. Returned sidecars preserve exact evidence.
+
+Sent the hub a single lexical-context owner alternative, then received authenticated TL 385c9119 proposing a simpler fill-only subset: exotic headers are unchanged, submitted as-is, with one short notice. Read-only inventory identifies a decision needed before revising: outside-Couch local review still requires effective canonical/legacy settings and collaboration protection, and both existing semantic readers reject the same header even when fill is skipped. Defaulting them would lose processing/presentation intent or weaken routing. Asked the hub to choose the fill-only boundary with existing semantic refusals, or a bounded root-plain correction in the existing scanner. No additional production/test edits have been made after review; no close/merge is finalized.
+
+Retained runner: terminal 75738, lease-208842730 on pushed 2617a3b471acf68263b917b341d32d34c7963d69; last observed FIFO 7 with two Pair suites admitted. Its log is .git/sdlc/test-stats/inflight/779fe1f22435f79e2109774432306e3a/run.log. Do not restart/continue-checkpoint while it is live. Exact next step: receive the contract decision, append the approved re-plan and its full enumeration, commit it and rerun change-code before implementation. Retain or cancel the known-obsolete queued suite only through supported local-check control as coordinated with the hub.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
