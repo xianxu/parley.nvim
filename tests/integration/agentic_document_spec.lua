@@ -95,9 +95,28 @@ describe("agentic markdown admission", function()
         after_each(function()
             if before then config.agentic_submit_timeout_ms, config.agentic_move_timeout_ms = before[1], before[2] end
             before, vim.env.FAKE_COUCH_REGISTRY_DELAY, vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = nil, nil, nil
+            vim.env.FAKE_COUCH_REGISTRY_GATE, vim.env.FAKE_COUCH_REGISTRY_TRACE = nil, nil
         end)
         local function band() return vim.wo[vim.fn.bufwinid(buf)].winbar end
         local function sends() return vim.fn.filereadable(root .. "/sent") == 1 and #vim.fn.readfile(root .. "/sent") or 0 end
+        -- A registry that holds its answer until the spec opens the gate, and
+        -- for GATE_MS at most (#414). The move timeout outlasts GATE_MS, so any
+        -- synchronous wait on Couch receives an answer before it gives up, and
+        -- the gate records each answer it lets through. "It did not wait on
+        -- Couch" is then "nothing was answered when the call returned", whether
+        -- the wait used the answer or not. Only a stall of GATE_MS could fake it;
+        -- the path itself measured 91 ms at most under load.
+        local GATE_MS = 3000
+        local function gate_couch(ops)
+            local gate = root .. "/gate"
+            config.agentic_move_timeout_ms = 2 * GATE_MS
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", tostring(GATE_MS / 1000)
+            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS, vim.env.FAKE_COUCH_REGISTRY_GATE = ops, gate
+            return function() vim.fn.writefile({}, gate) end
+        end
+        local function unanswered(what)
+            assert.equals(0, vim.fn.filereadable(root .. "/gate.answered"), what)
+        end
         local function registered()
             await(function() return document.status(buf).phase == "plain" end)
             submit(); await_submitted()
@@ -182,13 +201,12 @@ describe("agentic markdown admission", function()
             with_timeouts(1000, 500)
             registered()
             local target = root .. "/moved.md"
-            -- The rename outlasts the 1 s deadline and lands within its own
-            -- three deadlines; v2 keeps the single moving/wait view throughout.
-            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
-            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "rename"
-            local started = vim.uv.hrtime()
+            -- The rename outlasts the 1 s deadline (the gate holds it) and lands
+            -- once Couch answers; v2 keeps the single moving/wait view throughout.
+            local open_gate = gate_couch("rename")
             local handled, moved, err = document.move_path(file, target)
-            assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500, "the move waited on Couch")
+            unanswered("the move waited on Couch")
+            assert.truthy(document.status(buf).operation, "the move waited on Couch")
             assert.is_true(handled)
             assert.equals(vim.fn.resolve(target), moved, tostring(err))
             assert.equals(0, vim.fn.filereadable(file))
@@ -198,6 +216,7 @@ describe("agentic markdown admission", function()
             -- still out: this elapsed wait tests stable presentation, not arrival.
             vim.wait(1100)
             assert.truthy(band():find("moving: confirming with Couch", 1, true), band())
+            open_gate()
             await(function()
                 local identity = document.identity(buf)
                 return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
@@ -208,11 +227,15 @@ describe("agentic markdown admission", function()
         it("an unknown identity refuses at once, nothing moved, and the rerun has the answer (row 3)", function()
             with_timeouts(15000, 500)
             document.detach(buf); vim.api.nvim_buf_delete(buf, { force = true })
-            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            local open_gate = gate_couch()
             local target = root .. "/unknown-moved.md"
-            local started = vim.uv.hrtime()
             local handled, moved, err = document.move_path(file, target)
-            assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500, "the move waited on Couch")
+            unanswered("the move waited on Couch")
+            -- Unanswered, the question stands (and is not asked twice).
+            local member, why = document.move_membership(file)
+            assert.is_nil(member, "the move waited on Couch")
+            assert.equals(err, why)
+            open_gate()
             assert.is_true(handled)
             assert.is_nil(moved)
             assert.equals("move not confirmed: Couch hasn't confirmed this document yet; nothing moved. Run the move again", err)
@@ -248,13 +271,15 @@ describe("agentic markdown admission", function()
         end)
 
         it("a registered :saveas onto an absent file returns at once and lands (row 1)", function()
-            with_timeouts(15000, 500)
+            with_timeouts(15000, 5000)
             registered()
             local target = root .. "/renamed.md"
-            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
-            local started = vim.uv.hrtime()
+            local open_gate = gate_couch()
             assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
-            assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500, "the rename waited on Couch")
+            unanswered("the rename waited on Couch")
+            assert.truthy(document.status(buf).operation, "the rename waited on Couch")
+            assert.equals(file, document.identity(buf).File, "the rename waited on Couch")
+            open_gate()
             await(function()
                 local identity = document.identity(buf)
                 return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
@@ -265,11 +290,20 @@ describe("agentic markdown admission", function()
             with_timeouts(15000, 500)
             await(function() return document.status(buf).phase == "plain" end)
             local target = root .. "/plain-renamed.md"
-            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
-            local started = vim.uv.hrtime()
+            local trace = root .. "/registry-trace"
+            gate_couch(); vim.env.FAKE_COUCH_REGISTRY_TRACE = trace
             assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
-            assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500, "the plain rename waited on Couch")
+            unanswered("the plain rename waited on Couch")
             assert.equals(1, vim.fn.filereadable(target))
+            -- The renamed buffer is identified in the background, like any file
+            -- opened at that path; the rename itself asks Couch nothing. A
+            -- request the rename waits for is traced before it answers, so this
+            -- holds; a background one may not be traced yet, and is not the
+            -- regression this row guards.
+            for _, line in ipairs(vim.fn.filereadable(trace) == 1 and vim.fn.readfile(trace) or {}) do
+                local argv = vim.json.decode(line)
+                assert.same({ "--session-sync", "lookup", vim.fn.resolve(target), "--json" }, argv, "the plain rename asked Couch")
+            end
         end)
 
         it("a legacy session file registers in the background; the move refuses at once, then the rerun moves it (row 4)", function()
@@ -281,11 +315,14 @@ describe("agentic markdown admission", function()
             require("parley").setup_markdown_keymaps(buf)
             await(function() return document.status(buf) and document.status(buf).phase == "plain" end)
             local target = root .. "/legacy-moved.md"
-            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
-            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "register"
-            local started = vim.uv.hrtime()
+            local open_gate = gate_couch("register")
             local handled, moved, err = document.move_path(file, target)
-            assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500, "the move waited on Couch")
+            unanswered("the move waited on Couch")
+            -- Unanswered, the question stands (and is not asked twice).
+            local member, why = document.move_membership(file)
+            assert.is_nil(member, "the move waited on Couch")
+            assert.equals(err, why)
+            open_gate()
             assert.is_true(handled)
             assert.is_nil(moved)
             assert.equals("move not confirmed: registering this document first; nothing moved. Run the move again", err)
