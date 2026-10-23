@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6c748c2d", done: "8119f216"}
 ---
 
 # Alt+i pastes a clipboard image without a confirmation prompt; error if no image
