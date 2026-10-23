@@ -7,7 +7,7 @@ created: 2026-10-22
 updated: 2026-10-23
 estimate_hours: 3.61
 collaboration-mode: collaboration
-card_mirror: '36c9e1b2d2811e060b2ed2b8bef7d0095c152e32' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '9ab80bcd1147ab027fb711d0870d1ec142780f61' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T00:21:40-07:00
 claimant:
     operator: Xian Xu
@@ -17,7 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: operator}
-actual_hours: 4.04
+actual_hours: 4.29
 ---
 
 # First Alt+Return on a file adds or merges the required front matter
