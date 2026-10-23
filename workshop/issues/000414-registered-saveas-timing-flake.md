@@ -88,3 +88,30 @@ What row 2 still misses: a plain rename that waits on its own lookup of the targ
 
 Commit 54f6e4c8 has its Agent line as a body paragraph rather than a trailer: it is claude/claude-opus-5-5/medium.
 
+
+2026-10-23: Close review round 1 returned REWORK.
+- BR-1 (Critical): a synchronous wait that the move timeout cuts off left rows 1, 3 and 4 passing. With a 60 s gate and a 5 s timeout, the wait timed out unanswered, so the operation was still pending.
+- BR-2 (Important): row 2 had no negative control.
+- Minor: a gate path with no directory part.
+
+Fixes:
+- The gate's bound (GATE_MS = 3 s) is now below the move timeout (2 × GATE_MS), so every synchronous wait receives an answer before it gives up.
+- The gate appends each answer it lets through to gate.answered. Each row asserts that nothing had been answered when its call returned, so "did not wait on Couch" holds whether or not the wait used the answer, with no clock involved. Only a GATE_MS stall could fake it; the measured worst case is 91 ms.
+- An empty dirname is treated as ".".
+
+An intermediate version used a wall-clock bound of GATE_MS / 2. It caught all six controls, but it was a clock, so the answered record replaced it.
+
+Controls, run one at a time in the disposable clone (agentic_document_spec 48/0/0 without any):
+
+| Control | Rows failing | Caught by |
+|---|---|---|
+| A: wait_destination forced | row 1 | unanswered |
+| C1: the reviewer's ignored lookup before begin | row 1 | unanswered |
+| B: synchronous bounded_request in move_membership | rows 3, 4 | unanswered |
+| B2: ignored synchronous wait before ask_in_background | rows 3, 4 | unanswered |
+| D: plain saveas waits on its own lookup of the target | row 2 | unanswered (this closes the row-2 gap logged earlier) |
+| E: move_path waits for the rename | rows 1/5 | the operation-pending check |
+
+E is caught by the pending check, not the answered record, because the rename's own 1 s request deadline cancels it before the gate answers.
+
+With the answer checks disabled, only B and E failed. The pending and refusal checks alone miss waits whose answer leaves the operation pending, which is why the answered record exists.

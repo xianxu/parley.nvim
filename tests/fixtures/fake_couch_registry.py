@@ -150,7 +150,8 @@ def main():
         # FAKE_COUCH_REGISTRY_GATE (a path): answer once it exists, the delay
         # being only the upper bound, so a spec decides when Couch answers
         # instead of racing a clock (#414). Its directory going away (the spec's
-        # cleanup) opens it too.
+        # cleanup) opens it too. Each answer it lets through appends a line to
+        # PATH.answered, so a spec can tell that nothing was answered yet.
         only = os.environ.get("FAKE_COUCH_REGISTRY_DELAY_OPS")
         if not only or (args[1] if len(args) > 1 else "") in only.split(","):
             delay = float(os.environ.get("FAKE_COUCH_REGISTRY_DELAY") or "1")
@@ -158,8 +159,11 @@ def main():
             if gate:
                 deadline = time.monotonic() + delay
                 while (time.monotonic() < deadline and not os.path.exists(gate)
-                       and os.path.isdir(os.path.dirname(gate))):
+                       and os.path.isdir(os.path.dirname(gate) or ".")):
                     time.sleep(0.02)
+                if os.path.isdir(os.path.dirname(gate) or "."):
+                    with open(gate + ".answered", "a") as answered:
+                        answered.write(("gate" if os.path.exists(gate) else "bound") + "\n")
             else:
                 time.sleep(delay)
     state_path = Path(os.environ["FAKE_COUCH_REGISTRY"])
