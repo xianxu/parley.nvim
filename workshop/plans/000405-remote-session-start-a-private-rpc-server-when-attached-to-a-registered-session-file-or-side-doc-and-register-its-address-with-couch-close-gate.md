@@ -1458,6 +1458,321 @@ rounds:
       isolation: fenced
       reviewed: 4508683883564bbd676e42c2ee50d15935a95454
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 4ca3fc2c-873d-4919-b307-bf484900c457
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000405"
+            recipe: milestone-review
+            round: 8
+            attempt: 1
+            agent: codex
+            root: /Volumes/TestScratch/review-checkouts/ca7558981ab4af4d
+            reviewed_head: fcde202739ba3364c3015c1d0da9724a6a4f700d
+            slot: parley.nvim:1
+            requested_at: "2026-10-23T06:48:40.142714Z"
+          phase: finished
+          pid: 11170
+          started_at: "2026-10-23T06:48:40.267884Z"
+          finished_at: "2026-10-23T06:55:03.667126Z"
+          session_id: 01a16784-d44d-7750-a402-32d909052ddc
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: fcde202739ba3364c3015c1d0da9724a6a4f700d
+        tracker_head: d217f21348a04a525b947a637d82c4602bfe505a
+        branch_point: 69657dfa119c3b70cd27dccca42db5c088bdf255
+        since: "2026-10-22T04:55:52-07:00"
+        until: "2026-10-22T23:46:37-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-22T04:55:52-07:00"
+              end: "2026-10-22T23:46:37-07:00"
+              began: "2026-10-22T04:55:52-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: fc302a81a290dedc67aab76e8325c10d0d5a0992d9b6d72b685b50626186f4dd
+              started: "2026-10-14T05:35:58.09Z"
+              spawned: false
+              bytes: 115761224
+              windows:
+                - start: "2026-10-22T04:55:52-07:00"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a16378-985a-76f0-ad76-6ef3e4dfec1e
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 1726f861f9ce9080cfa0f957a9b25fc43cc9d3ff894ce378c1a63b24b9700dd3
+              started: "2026-10-22T11:56:50.234Z"
+              spawned: true
+              bytes: 2170263
+              windows:
+                - start: "2026-10-22T11:56:50.234Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a16386-b503-73f3-934d-1c36ecd543ba
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 864c95f43326d6cfa30962fc82d3c7840342543291376c403dbd0783e9b89f76
+              started: "2026-10-22T12:12:15.322Z"
+              spawned: false
+              bytes: 616149
+              windows:
+                - start: "2026-10-22T12:12:15.322Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a1638a-8d3e-73c2-8e2a-0aed5bf28af9
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 534340d99d4ff0bc9c8ad41342fbb50568e89f9372d668f867f6fc280f779175
+              started: "2026-10-22T12:16:27.346Z"
+              spawned: false
+              bytes: 465654
+              windows:
+                - start: "2026-10-22T12:16:27.346Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a1638c-6e36-7142-94d2-59f91265ff08
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 06189877b85000f3bbf7e024dc87c8eba47ac797591173d925a806ec13051cb4
+              started: "2026-10-22T12:18:30.499Z"
+              spawned: false
+              bytes: 471863
+              windows:
+                - start: "2026-10-22T12:18:30.499Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a1638c-e3cf-7b91-a5c2-fb326f3ae063
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 7fe16589d51c8c31b02ecbf061c1615352b117f78a66687145005ee7b65d939d
+              started: "2026-10-22T12:19:00.509Z"
+              spawned: false
+              bytes: 434932
+              windows:
+                - start: "2026-10-22T12:19:00.509Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a1638e-cd57-7dc1-897b-893fc3112bb1
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 6e5921f3bd05652c6d20799a3ede34c9ed2df82423f23e6af78f6414bed1cbb3
+              started: "2026-10-22T12:21:05.59Z"
+              spawned: true
+              bytes: 3362403
+              windows:
+                - start: "2026-10-22T12:21:05.59Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a1638f-48c4-7b70-8bd6-fcd4d9154e4b
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: e7da4fd101c759892f4e37a8bad101d185c91694d3877c103770c806ec735763
+              started: "2026-10-22T12:21:37.186Z"
+              spawned: true
+              bytes: 5348521
+              windows:
+                - start: "2026-10-22T12:21:37.186Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a16581-c3a0-7d91-b8cc-7370e4f9a388
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: f08c4168c76c8cb7bd108b96cc68b0753a2f39223b0a74a99f30fd69c543e7dd
+              started: "2026-10-22T21:26:05.787Z"
+              spawned: true
+              bytes: 689933
+              windows:
+                - start: "2026-10-22T21:26:05.787Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a16590-7404-7410-8786-e00f43757dc5
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: eaccbce52bbfaf6bb551627eadba9e277dfbdf1dc368286c979fbfa4983628df
+              started: "2026-10-22T21:42:08.267Z"
+              spawned: true
+              bytes: 1023075
+              windows:
+                - start: "2026-10-22T21:42:08.267Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a16757-eeb8-7c22-81ed-8ca60a3ab76d
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 5e50a4b95341a68615c93c12db1633fe796a70d1cdbdd3e500ef030eccd914e3
+              started: "2026-10-23T05:59:38.525Z"
+              spawned: true
+              bytes: 454873
+              windows:
+                - start: "2026-10-23T05:59:38.525Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a1675d-65b8-7733-8d95-fed455d12d74
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: d9ec0847e5bcbda2efe1a8824f4156a2a1103445466ed1704596c4d2c2fd76f8
+              started: "2026-10-23T06:05:36.68Z"
+              spawned: true
+              bytes: 626239
+              windows:
+                - start: "2026-10-23T06:05:36.68Z"
+                  end: "2026-10-22T23:46:37-07:00"
+            - harness: codex
+              id: 01a1676f-c412-78d2-aad9-5b8289acb4a4
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: c60ee3a9cf1e015e3abee6736d84b65cb8617ad18c7af00d96df08e83a70d4d8
+              started: "2026-10-23T06:25:40.569Z"
+              spawned: true
+              bytes: 335938
+              windows:
+                - start: "2026-10-23T06:25:40.569Z"
+                  end: "2026-10-22T23:46:37-07:00"
+        queue_waits:
+            - attempt_id: 03b79fe303c4473bd688542de9302c6b
+              slot: parley.nvim:1
+              record_digest: 93fa8a766d93cac1e26d50e8571ff57a0be03d26b614d37134716e1a7935e6cd
+              start: "2026-10-22T14:45:52.190947Z"
+              end: "2026-10-22T16:04:57.90039Z"
+              queue_seconds: 4745.709443
+              raw_seconds: 4745.709443
+              exact: true
+            - attempt_id: 5e80962d43811d5f3a8a39098aa0037c
+              slot: parley.nvim:1
+              record_digest: 99d7a927271707e8a83f72df76c243c25ff3ee7a06476b2b100c63ea4ee6c3d4
+              start: "2026-10-22T16:35:46.792367Z"
+              end: "2026-10-22T18:49:44.703658Z"
+              queue_seconds: 8037.911291
+              raw_seconds: 8037.911291
+              exact: true
+            - attempt_id: f2bf5c7b2996847ab0a5adcedf83cdb0
+              slot: parley.nvim:1
+              record_digest: 1640c77c9f4488d9f7ce03e484d0e8d7e04dcabcd4f0472c2da3b0f6ce4d78d5
+              start: "2026-10-22T22:45:11.470906Z"
+              end: "2026-10-23T00:48:47.140357Z"
+              queue_seconds: 7415.669451
+              raw_seconds: 7415.669451
+              exact: true
+        protected:
+            - issue: "413"
+              slot: parley.nvim:1
+              start: "2026-10-22T19:56:15.6Z"
+              end: "2026-10-22T20:09:41.441Z"
+            - issue: "417"
+              slot: parley.nvim:1
+              start: "2026-10-23T01:01:43.764Z"
+              end: "2026-10-22T18:11:02-07:00"
+            - issue: "417"
+              slot: parley.nvim:1
+              start: "2026-10-22T18:11:02-07:00"
+              end: "2026-10-23T01:34:34.464Z"
+            - issue: "417"
+              slot: parley.nvim:1
+              start: "2026-10-23T01:04:05.561Z"
+              end: "2026-10-22T18:11:02-07:00"
+            - issue: "417"
+              slot: parley.nvim:1
+              start: "2026-10-22T18:11:02-07:00"
+              end: "2026-10-23T01:22:49.851Z"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 256.6123
+        cuts:
+            - boundary: M1
+              dispatched: "2026-10-22T06:06:25-07:00"
+              finalized: "2026-10-22T06:12:16-07:00"
+              finalizing: false
+            - boundary: M1
+              dispatched: "2026-10-22T06:30:25-07:00"
+              finalized: "2026-10-22T06:35:03-07:00"
+              finalizing: false
+            - boundary: M1
+              dispatched: "2026-10-22T07:04:21-07:00"
+              finalized: "2026-10-22T07:09:19-07:00"
+              finalizing: false
+            - boundary: M1
+              dispatched: "2026-10-22T07:19:27-07:00"
+              finalized: "2026-10-22T07:26:19-07:00"
+              finalizing: false
+            - boundary: M1
+              dispatched: "2026-10-22T07:46:18-07:00"
+              finalized: "2026-10-22T07:49:52-07:00"
+              finalizing: true
+            - boundary: M2
+              dispatched: "2026-10-22T23:20:36-07:00"
+              finalized: "2026-10-22T23:24:09-07:00"
+              finalizing: false
+            - boundary: M2
+              dispatched: "2026-10-22T23:42:06-07:00"
+              finalized: "2026-10-22T23:46:36-07:00"
+              finalizing: true
+      "n": 8
+      timestamp: "2026-10-22T23:55:05-07:00"
+      dispatched: "2026-10-22T23:48:40-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Exact listener handles and queued publication are canceled on retirement; controlled startup-stage, held-acquisition, and queued-register regressions pass.
+          round: 8
+        - id: BR-2
+          disposition: addressed
+          note: resource.startup_deadline carries acquisition's absolute deadline through first-listener durability; both delayed-fsync regressions pass.
+          round: 8
+        - id: BR-3
+          disposition: addressed
+          note: The plan's Core concepts table names lua/parley/remote_runtime_record.lua, where the implemented codec and cleanup decision reside.
+          round: 8
+        - id: BR-4
+          disposition: addressed
+          note: The final-consumer drain automatically closes its runtime; final-detach directory-removal and attachment-during-drain regressions pass.
+          round: 8
+        - id: BR-5
+          disposition: addressed
+          note: README.md:214 documents --editor-endpoints --fake-only; that exact invocation passed, including the corrupted-reply control.
+          round: 8
+        - id: BR-6
+          disposition: addressed
+          note: The owner normalizes rejected confirmations and the dispatcher reports its accepted result. The regression passes at head and fails against the pre-fix model with confirmed instead of uncertain.
+          round: 8
+        - id: BR-7
+          disposition: addressed
+          note: Shared pending/listening validation precedes allocation and activation; rejected-input and constructor cases verify completion, cleanup, subsequent attachment, and close.
+          round: 8
+        - id: BR-8
+          disposition: addressed
+          note: Discovery failures share a lifetime-scoped notice owner. Native failure/reopen/stale-callback controls pass; the unavailable-command regression fails against the pre-fix implementation.
+          round: 8
+        - id: BR-9
+          disposition: addressed
+          note: README.md:222 supplies the required absolute --bridge invocation, supported by argument validation in scripts/check-couch-registry-conformance.py; adjacent text covers build, PATH, and candidate selection.
+          round: 8
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: fcde202739ba3364c3015c1d0da9724a6a4f700d
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#405 (boundary-review)
@@ -1548,6 +1863,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - BR-8 — addressed — remote_session.lua:378-388 reports unavailable discovery and rejected attachment through one incarnation-owned notice. remote_session_native_spec.lua:133-200 covers failure classes, silent absence, deduplication and reopen. Removing the correction in a disposable pinned-head copy produced five regression failures with zero errors; all 21 native lifecycle cases pass at head.
 - BR-9 — addressed — README.md:216-230 now documents the Pair bridge build, real --editor-endpoints --bridge invocation, absolute executable requirement, native nvim selection through PATH, and optional --couch candidate. These instructions match the driver's argument validation and atlas/modes/remote_session.md. Inspection establishes this prose-only correction without a wording-presence test.
+
+## Round 8 — 2026-10-22T23:55:05-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Exact listener handles and queued publication are canceled on retirement; controlled startup-stage, held-acquisition, and queued-register regressions pass.
+- BR-2 — addressed — resource.startup_deadline carries acquisition's absolute deadline through first-listener durability; both delayed-fsync regressions pass.
+- BR-3 — addressed — The plan's Core concepts table names lua/parley/remote_runtime_record.lua, where the implemented codec and cleanup decision reside.
+- BR-4 — addressed — The final-consumer drain automatically closes its runtime; final-detach directory-removal and attachment-during-drain regressions pass.
+- BR-5 — addressed — README.md:214 documents --editor-endpoints --fake-only; that exact invocation passed, including the corrupted-reply control.
+- BR-6 — addressed — The owner normalizes rejected confirmations and the dispatcher reports its accepted result. The regression passes at head and fails against the pre-fix model with confirmed instead of uncertain.
+- BR-7 — addressed — Shared pending/listening validation precedes allocation and activation; rejected-input and constructor cases verify completion, cleanup, subsequent attachment, and close.
+- BR-8 — addressed — Discovery failures share a lifetime-scoped notice owner. Native failure/reopen/stale-callback controls pass; the unavailable-command regression fails against the pre-fix implementation.
+- BR-9 — addressed — README.md:222 supplies the required absolute --bridge invocation, supported by argument validation in scripts/check-couch-registry-conformance.py; adjacent text covers build, PATH, and candidate selection.
 
 ## Open findings
 
