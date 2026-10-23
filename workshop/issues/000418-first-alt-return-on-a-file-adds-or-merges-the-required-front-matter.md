@@ -58,6 +58,7 @@ missing keys, never overwriting or dropping the operator's existing keys or valu
 ### 2026-10-22
 
 ### 2026-10-23 — claimed and planned with #322
+- 2026-10-23: closed — Final bounded-fill re-plan admitted at change-code; authenticated operator plain/partial live acceptance 3b3b276e remains valid. Both Neovim runtimes pass editorial26/parser22, native58/lifecycle57, local-review31/edit-round13/presentation17 and40 architecture cases; preferred modes/review map, 25 Python export cases, pinned snapshot check, lint and whitespace pass. Final-head recorded suite queued on pushed 197c3fb6 and remains mandatory before landing. Legacy maps read unchanged; complex fill skips with named notice; semantic readers refuse unreadable lines without guessed defaults.; review verdict: SHIP
 
 TL dispatch 24886cea-c7ae-4329-a81f-ec5c69c35332 assigns #418 and #322 together, one plan with separate acceptance. Claimed #418 and started this main-based issue branch; #322 was a wontfix duplicate of #332 and is reopened through the status verb under this new assignment. Current `agentic_document` already saves/registers/submits plain named Markdown without front matter; it needs neither `type: session-sync` nor guessed owner metadata. Existing `review_send` outside-Couch path still requires legacy process-instruction, and `presentation.value` still reads only presentation. No implementation has started.
 

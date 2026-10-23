@@ -290,3 +290,87 @@ dispose:
    Add a `## Revisions` entry extending BR-4’s root-context rule to **header lexical scanning and comment handling**, with embedded quote/punctuation combinations, canonical/legacy readers, and partial/complete native submissions. The current revision at plan line 207 describes the correct intent but does not yet have complete implementation or regression coverage.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"bdad0e79-c0a4-467b-a731-5c5706528596","repository":"github.com/xianxu/parley.nvim","issue_id":"000418","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/563af1230bae8ddb","reviewed_head":"2617a3b471acf68263b917b341d32d34c7963d69","slot":"parley.nvim:3","requested_at":"2026-10-23T17:00:56.913048Z"},"phase":"finished","pid":17336,"started_at":"2026-10-23T17:00:57.080144Z","finished_at":"2026-10-23T17:05:02.362414Z","session_id":"01a169b5-62fa-70c0-a68a-1264cc5af9cc","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-23T10:31:37-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 418 — First Alt+Return on a file adds or merges the required front matter |
+| repo | parley.nvim |
+| issue file | workshop/issues/000418-first-alt-return-on-a-file-adds-or-merges-the-required-front-matter.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 3bec977814f3648275f9e2f3f2fcb4f9aea8dcc9..197c3fb608f39e83cfbe73db6a4c2c37fbe0aee5 |
+| command | sdlc close --issue 418 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-23T10:31:37-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation matches the revised plan: additive preparation preserves existing bytes, unsupported headers follow the documented skip/refusal rules, and submission retains its existing lifecycle owner. BR-4 is addressed with regression tests that fail when its fix is removed. No new blocking findings.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      collaboration_value.lua:294 decodes root scalars in block context. Canonical/legacy and plain/quoted matrices verify punctuation, effective-value preservation and idempotence; native submission tests pass. Removing only the block-context argument in memory makes three existing regression tests fail (23 pass, 3 fail).
+  - id: BR-1
+    disposition: addressed
+    note: |
+      editorial_frontmatter.lua:130-143 guards plain output by round-trip decoding and escapes unsafe string contents. Pure and native tests pass for implicit-type spellings, newlines, NUL and control bytes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      editorial_frontmatter.lua:173-175 preserves existing root indentation. Widths 1–4 and native submission are covered; nested counterparts follow the explicitly revised unchanged-skip contract.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Both original Core-concepts rows classify instruction.lua as unchanged and reused. Its pinned diff is empty; the implementation-ownership revision correctly places canonical selection in editorial_frontmatter.lua.
+```
+
+1. **Strengths**
+
+   - Shared resolution supplies both additive fill and runtime readers, preserving canonical/legacy precedence.
+   - Preparation uses explicit stages and exact edit witnesses in `document_session.lua:230`; native tests exercise reentrant edits, reload, write failure and busy presses.
+   - README and atlas explain the new keys, compatibility rules and flat-header boundary.
+   - All 24 reference fixture files match their pinned producer blobs; the packaged protocol passes generator verification.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None requiring action.
+
+5. **Test coverage notes**
+
+   - Both `modes/review` and `modes/session_sync` test maps passed on Neovim 0.12.5, with clean process censuses.
+   - On Neovim 0.11.7, 122 core tests and all 58 native submission tests passed.
+   - BR-4’s in-memory mutation produced the expected regression failures without modifying repository files.
+   - All 25 Python export tests, three focused architecture guards, and lint passed.
+   - The full repository suite was not rerun. Whitespace checking reported four trailing-whitespace lines in the prior close-review artifact.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared scanner, resolver and preparation seam.
+   - **ARCH-PURE — pass:** deterministic settings/lifecycle logic remains separate from editor IO.
+   - **ARCH-PURPOSE — pass:** fill, runtime interpretation and visible submission outcomes are delivered.
+   - **ARCH-MOCK — pass:** native flows use the existing stateful fake registry/transport seam.
+   - **ARCH-CONSTRAINTS — pass:** header bounds, projected-output limits and linear-growth tests are present.
+   - **ARCH-SECURE — pass:** unsupported semantic input receives diagnostics; tests use isolated state.
+   - **ARCH-ORDER — pass:** production preparation advances through witnessed transitions; interruption sequences are tested.
+   - **ARCH-FUNERAL — pass:** no new cache, sidecar or background-process family.
+   - **ARCH-EVOLVE — pass:** additive insertion preserves existing and unknown metadata bytes.
+
+7. **Plan revision recommendations:** None. The existing `## Revisions` entries accurately describe the final implementation.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"78e860ff-81be-498d-b7c7-5b36256618f4","repository":"github.com/xianxu/parley.nvim","issue_id":"000418","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/93a704f35f7a74a4","reviewed_head":"197c3fb608f39e83cfbe73db6a4c2c37fbe0aee5","slot":"parley.nvim:3","requested_at":"2026-10-23T17:24:54.285719Z"},"phase":"finished","pid":12433,"started_at":"2026-10-23T17:24:54.417871Z","finished_at":"2026-10-23T17:31:37.019952Z","session_id":"01a169cb-51c6-7aa1-babb-b1faa1f272b5","outcome":"returned"}] -->
