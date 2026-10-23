@@ -1,12 +1,21 @@
 ---
 id: 000322
-status: wontfix
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
-updated: 2026-10-15
+updated: 2026-10-23
 estimate_hours:
-card_mirror: 'd56be9bc35ab53437810cc616f9baee33d34518c' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd23dd52108997e5a0bbcce9896a0f4401e923233' # card fields mirrored from issue-cards; edit via sdlc
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "b73075b9", done: "d5ed7ad5"}
+actual_hours: N/A
 ---
 
 # Alt+Return on a plain markdown file silently sends nothing after the process-instruction prompt (no 'sent' or error notice)
@@ -17,20 +26,28 @@ card_mirror: 'd56be9bc35ab53437810cc616f9baee33d34518c' # card fields mirrored f
 
 ## Spec
 
-Covered by #332: Couch-pane Alt+Return saves, registers and submits named Markdown without prompting for process instructions; it shows completed submission owner/time or an explicit visible error. No separate implementation remains on this duplicate card.
+The operator's one-collaborative-mode pivot reopens this formerly superseded card. After #418 landed its narrow legacy-reader fix, #322 owns Alt+Return outside Couch: request the existing local review with no standing instruction or selected mode. It must never prompt for or insert process-instruction, including on a plain or partial-header file, and must visibly identify the local route. Preserve document bytes during submission preparation; ordinary review effects may still edit the document. Preserve review admission, lifecycle, cancellation and errors; Couch and legacy session-sync retain their existing submit owners.
 
-Every Alt+Return ends with exactly one visible outcome: `review: sent to <slot>`, a named error (cannot resolve this slot; couch unavailable; save failed), or, outside pair, an explicit "no slot: running the review here". Find the actual path on the operator's setup (ops:0's right pane, Couch with several hubs since pair#546) and fix the resolution if it's wrong there.
+Reuse review.run_via_invoke(buf, {}) (ARCH-DRY). Its existing marker admission decides whether to invoke, show pending questions, report nothing actionable, or refuse invalid legacy collaboration routing. A plain document without ready comments is a visible no-work outcome, not an implicit whole-document edit. A short local-route notice must describe a request, not claim generation completed. Ignore process-instruction for Alt+Return; preserve every legacy metadata byte. #419 separately owns the v4 bundle, retired-key notices/mapping, @@chat@@ policy and removal of obsolete completion. No new state owner, save path, cache, parser or transport.
+
+Alternatives rejected: retaining the prompt violates the pivot; selecting free-form would retain an obsolete mode and force whole-document work; adding another submit/preparation state would duplicate the current owner. The thin adapter simply removes the asynchronous prompt branch. Existing review and skill_invoke retain in-flight/cancel/retry/source-edit ownership (ARCH-PURE, ARCH-STATE). It creates nothing durable; review's existing journal lifecycle remains unchanged (ARCH-FUNERAL). No persisted formats are rewritten (ARCH-EVOLVE).
+
+The adapter adds constant work (one short notice and one owner call), removes a full-buffer read/expansion and holds no state between events; existing review scans retain their current bounds (ARCH-CONSTRAINTS). The named-buffer check and owned invocation keep source authority unchanged; no credentials or new trust boundary are introduced (ARCH-SECURE). Reuse the stateful fake Couch and native editor harness; provider lifecycle stays behind the existing dispatcher fixtures (ARCH-MOCK). New tests enumerate plain/partial/legacy input and marker/no-work/pending/chat/refusal outcomes, serving the original silent-submit purpose rather than merely deleting a prompt (ARCH-PURPOSE).
 
 ## Done when
 
-The parent #332 owns implementation, verification, review, staging/live acceptance and landing. This duplicate is closed as superseded; it does not claim the parent has landed.
-
-- Reproduced with a test of the prompt → placement → resubmit path; each branch of `own_slot` notifies.
-- In ops:0's right pane, Alt+Return on a plain markdown file reaches ops:0 (`review: sent to ops:0`).
+- Outside Couch, Alt+Return on named plain/partial-header/legacy-instruction Markdown requests exactly one local review with empty args, no prompt, no Couch actor lookup/send, no submit-time metadata or body rewrite, and a visible local-route notice.
+- Real local admission still invokes ready comments and visibly reports no actionable comments, pending-only documents, protected chat or malformed routing; unnamed buffers report save-first. Cancellation and provider failure remain owned and reported by existing review/skill_invoke.
+- Pane and legacy session-sync dispatch retain their existing owners; pane save/register/delivery coverage stays green.
+- Tests pass on both supported Neovim runtimes, native mapping/UI evidence proves the notice permits subsequent input, the recorded suite passes, and the binary-owned close review clears. Hub coordinates live acceptance before landing.
 
 ## Plan
 
-- [ ]
+- [x] Add failing production-mapping regressions for outside-Couch plain/partial/legacy files, exact empty arguments, no prompt/write/send, and local-route/error outcomes; exercise actual review admission as well as the adapter seam.
+- [x] Remove prompt/placement/standing-instruction expansion from review_send.submit; delete unused insertion helpers, keep completion until #419; retain existing coordinator dispatch and invoke the existing local owner with empty args and a short truthful notice.
+- [x] Run focused review-send/review-invoke/native ownership tests on both runtimes, plus native UI notice/input verification and relevant architecture/lint checks; update atlas and checkpoint.
+- [x] Push and retain the recorded suite; coordinate the approved stage and live acceptance with the hub.
+- [x] Admit the tested candidate to binary-owned close review. Landing remains conditional on the recorded suite and live acceptance, then merge owns integration.
 
 ## Log
 
@@ -38,8 +55,82 @@ The parent #332 owns implementation, verification, review, staging/live acceptan
 
 ### 2026-10-14
 
+### 2026-10-23 — reopened for mode-free local submission
+- 2026-10-23: closed — Both runtimes: submit25, review-admission39, invocation64, document-lifetime10, guards2+2 and native attached-UI8 pass; clean census, no prompt/submit rewrite/blocked input, lint and docs4 pass. Recorded suite lease-2691705198 and operator live acceptance pending; landing waits for both. Measured window includes parley.nvim#418 tail (11:18–14:30) because #322 was claimed on the same slot concurrently; clean #322 effort began 14:30; no typed hours. TL35643b0f explicitly directs --no-actual.; review verdict: SHIP
+
+TL49bad7d4 assigned real mode-free outside-Couch work here, superseding the earlier acceptance-only/no-actual proposal and duplicate close; TL1341251d dispatches this item after #418 landed. start-plan created a fresh main-based branch and rebuilt slot tools during catch-up; seeded merge-check regeneration was correctly deferred, with no local-gates file mutation. Inspection confirms the existing local prompt returns silently on cancellation; the local review already owns no-marker/pending/provider outcomes. Keep that owner and remove only standing-instruction submission. Previous TTY unavailable; current source and authenticated dispatch are the evidence.
+
+
+### 2026-10-23 — test-first mode-free adapter implemented
+
+RED: outside-Couch plain/partial files still prompt, and an unknown retired instruction blocks invocation (21 prior cases pass,3 new failures). Native attached UI independently reproduces the prompt in all6 named Normal/Insert cases;2 unnamed error cases pass. GREEN after deleting the prompt/expansion path: submit25, real review-admission39, invocation/lifetime64, document-lifetime10 and two selected architecture guards2+2 pass on the preferred runtime. Native UI8 passes on both preferred and0.11.7, preserving real builtin notification behavior, live/disk bytes, changedtick, and subsequent typing. No native prompt/hit-enter issue remains. Changed Lua lint is0 warnings/errors. Compatibility owner checks are running; no full suite or live acceptance has been claimed. Existing completion stays for #419. Next: finish compatibility, commit/push, queue recorded suite, request hub staging/live acceptance, then binary close review.
+
+### 2026-10-23 — both-runtime focused qualification green
+
+The complete focused owner map passes on both Neovim0.12.5 and0.11.7: submit25, review-admission39, invocation64, document-lifetime10, arrival2 and admission-owner2, with clean terminal process censuses. Native UI8 passes on each runtime separately. No code changes beyond the thin adapter deletion and truthful local-request notice. Clarified that byte preservation is submit preparation, not a ban on later provider-owned edits. Atlas and traceability include the new native regression. No full suite or operator acceptance result yet. Next: commit/push this exact code, retain one recorded branch suite, and ask hub for staging/live acceptance before landing.
+
+### 2026-10-23 — published candidate, retained suite and authorized stage
+
+PR344 contains code b9135976daa17a4a2986cb1fd1b8e02fd4708e9d. Recorded suite terminal81302, lease-2691705198, checkout /Volumes/TestScratch/local-checks/sdlc-local-2867989229, inflight log .git/sdlc/test-stats/inflight/2f462d85c36ec3d495801235b68a6e90/run.log; last seen FIFO6, not yet admitted. Preserve that runner and do not restart/requeue for these documentation-only descendants. No full-suite result yet.
+
+Authenticated TL7f03823a approves staging; stage --build completed on parley.nvim:0 at the exact candidate b9135976daa17a4a2986cb1fd1b8e02fd4708e9d. This Lua plugin has no Go entrypoints/binaries, so no Go build was needed. Hub received three operator steps (plain no-work; ready comment; unnamed save-first) and a fresh-plugin-load caution; receipt1c6f1f7a is submitted. Operator acceptance remains pending. Clear stage after acceptance or landing through the existing SDLC lease, without touching editor processes.
+
+A documentation sweep corrected standing-instruction descriptions and links to the renamed Alt+Return atlas section; documentation_spec4 passes with clean census. Exact next step: read retained terminal81302 to completion, receive live result, then binary-owned close review/merge. No new full run is authorized merely by queue delay; classify any failure and retain all attempts. #419 remains separate, waiting for the landed #576 fixture revision.
+
+### 2026-10-23 — close review overlaps retained suite
+
+TL-worker explicitly permits the binary-owned close review alongside a queued recorded suite, provided a final-code pass precedes landing and any review code fix requeues verification. Enter close on the complete tested candidate; suite lease-2691705198 and operator acceptance are still pending. Plan ticks record review admission and completed stage coordination, not those pending landing conditions. This issue has its own new implementation interval under the revised dispatch, so use measured actual adoption; the historical acceptance-only no-actual proposal was superseded by TL49bad7d4. Never infer a full-suite pass or live result from codecomplete.
+
+### 2026-10-23 — contaminated actual rejected before finalization
+
+The first close proposed4.59h and a dominant203.5m interval11:18–14:42; this includes #418's post-close classification/verification/landing tail through14:30 under the concurrent #322 claim. Authenticated TL35643b0f explicitly says do not adopt it: close with --no-actual and cite the contamination, no typed hours; file the classifier defect unclaimed in Ariadne. Interrupted only the in-flight close review through its terminal; it returned context-cancelled with no verdict or completion. Fresh issue observation confirms working, no completion, no actual adopted. Suite terminal81302/lease-2691705198 remains retained and unchanged. Re-enter close with the precise --no-actual waiver and required reason; no measurement-source repair.
+
+### 2026-10-23 — close SHIP; advisory documentation corrected
+
+The restarted --no-actual close returned SHIP, no blocking findings, one Minor advisory: attention-finder recording text was broadened incorrectly during terminology cleanup. Verified session_sync.release_and_send records successful submitted-path deliveries before its stale guard; corrected the exception to local review requests only and added the general lesson. Reviewer independently passed complete modes/review on both supported runtimes and skills/skill-system lifecycle coverage, lint and clean censuses. Close evidence252d3dff07c1fd8fee61d7cdb49a3d5893ea198b binds codecomplete with actual N/A; the rejected4.59h was not adopted. ariadne#580 holds the attribution defect, unclaimed. No runtime code changed after the recorded-suite head b9135976. Suite terminal81302/lease-2691705198 remains FIFO3; operator acceptance remains pending. Preserve the runner and stage; landing waits for those results.
+
+### 2026-10-23 — operator live acceptance passed
+
+Authenticated TL9e240bf8 relays the operator's outside-Couch acceptance at about14:55: “works”. An earlier inside-Couch plain-file check correctly registered/submitted to ops:0 and was retained as the unchanged control; TL then requested a fresh plain Ghostty tab without COUCH_THREAD_SCOPE/TAG for the local path. The staged runtime is unchanged b9135976. Hub directs landing on the suite and clearing the stage afterward. Close remains SHIP with actual N/A; branch suite terminal81302/lease-2691705198 is still queued (last FIFO3). Exact next step: finish that retained suite, classify any failure, then sdlc merge --yes; after verified landing clear the original stage with sdlc stage --clear parley.nvim:0 and report outcome. #419 follows separately once #576 fixtures land.
+
+### 2026-10-23 — first recorded suite red; bounded native classification approved
+
+Terminal81302/lease-2691705198 finished exit2 in5m35s after3486s admission wait on b9135976daa17a4a2986cb1fd1b8e02fd4708e9d. Preferred runtime passed; compatibility reports2 failures, all remaining tests ran, final censuses clean. Saved attempt2f462d85c36ec3d495801235b68a6e90, raw log .git/sdlc/test-stats/failed/2f462d85c36ec3d495801235b68a6e90.log, SHA256 prefixbad51e771dcc. The registered #430 endpoint admitted-deadline case repeats line199 E484 missing registry.json.editor-pid. A different native case fails: detaches without unlocking and preserves user option overrides, line983 locked()->payload line30, missing complete status.md.lock before detach executes (143 other native cases pass). New #322 specs pass on both runtimes. Both failing test files and their product modules are byte-identical to the issue base.
+
+Stopped after the second unrelated failure; no retry started. TLd28a162c approves exactly10 isolated new-native-case runs on basec50641e7c54bc648d0e3e2b5c3e7ab398343c25f and10 on tested branchb9135976, no whole-spec repetition. If it reproduces on base, add evidence to #431 (or a distinct sibling), register the exact identity and rerun the full suite once. Parley lacks the typed Lua declaration required for narrow resume; #415 owns that adoption and the hub will prioritize it. The official red record stays unattributable-failure, never relabeled by a targeted pass. Native classification is running in detached pinned source, preserving original assertions/hooks/census. Stage and live acceptance remain valid; no product changes inferred. Next: finish those bounded counts, file/publish/register the evidence if established, then the single authorized retry. No full check currently live.
+
+### 2026-10-23 — capped no-repro evidence published; single retry explicitly approved
+
+The exact pre-detach case passes10/10 on basec50641e7 and10/10 on tested branchb9135976,0 failures/errors, original before/after hooks once and clean terminal census for every run. No whole-spec repetition. These results do not establish a base flake or common cause with #431. TL84474907 explicitly authorizes the unreproduced-case exception: append observation/0-of20 evidence to #431, register the exact new case, then one full retry without waiting for #415. Published #431 details through issue publish from this unrelated branch; it retained that issue's original source copy here and made no stacked code change. Registration succeeded for lua:tests/integration/session_sync_native_spec.lua#session-sync native edits detaches without unlocking and preserves user option overrides, preserving the existing #431 registration too.
+
+Evidence36 files (20 rawlogs plus harness/results/commands/metadata/wrappers) copied from /Volumes/TestScratch/parley-322-detach.wFHlYs to .git/sdlc/diagnostics/322-detach-classification. Official first-suite red remains unchanged, attempt2f462d85c36ec3d495801235b68a6e90. No source correction or timeout relaxation. Next: push this checkpoint and enter sdlc merge --yes so its runner owns integration and the single authorized full retry; do not launch another suite beside it. If it refuses readiness, follow its printed check action, still only one retry. If the retry is red, finish all tests, stop any automatic queued baseline, and ask the hub before further runs. After a verified landing clear the staged candidate and report both attempts.
+
 ## Revisions
 
 ### 2026-10-15 — Superseded by #332 at operator request
 
 The requested Couch-pane workflow now uses save→register→submit rather than the original process-instruction prompt→placement→resubmit route. #332 owns visible owner/time success and visible errors, plus the remaining combined live check. Preserve the original report and acceptance text as evidence; close this card as a superseded duplicate, not as a claim that its original prompt route or outside-pane flow was newly implemented.
+
+### Historical duplicate contract retained for provenance
+
+#### Historical Spec
+
+Covered by #332: Couch-pane Alt+Return saves, registers and submits named Markdown without prompting for process instructions; it shows completed submission owner/time or an explicit visible error. No separate implementation remains on this duplicate card.
+
+Every Alt+Return ends with exactly one visible outcome: `review: sent to <slot>`, a named error (cannot resolve this slot; couch unavailable; save failed), or, outside pair, an explicit "no slot: running the review here". Find the actual path on the operator's setup (ops:0's right pane, Couch with several hubs since pair#546) and fix the resolution if it's wrong there.
+
+#### Historical Done when
+
+The parent #332 owns implementation, verification, review, staging/live acceptance and landing. This duplicate is closed as superseded; it does not claim the parent has landed.
+
+- Reproduced with a test of the prompt → placement → resubmit path; each branch of `own_slot` notifies.
+- In ops:0's right pane, Alt+Return on a plain markdown file reaches ops:0 (`review: sent to ops:0`).
+
+#### Historical Plan
+
+- [ ]
+
+
+### 2026-10-23 — active local-submit contract replaces superseded duplicate
+
+The historical #332 duplicate closure and #418 acceptance-only proposal no longer describe remaining work. #418 delivered only the legacy parser correction. This issue now delivers mode-free local Alt+Return and its visible route, without frontmatter insertion. #419 follows with v4 fixtures and the tag/legacy policy. Plan is quick-flow sized: deletion of the old prompt/expansion path, no new state or transport, under 100 added runtime lines.
