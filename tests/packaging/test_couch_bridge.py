@@ -32,6 +32,42 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
                              lifetime_s=kw.pop('lifetime_s', 4), stop_s=kw.pop('stop_s', .15),
                              margin_s=kw.pop('margin_s', .3), **kw)
 
+    async def test_fixture_exits_with_parent_while_stdin_remains_open(self):
+        read_fd, write_fd = os.pipe()
+        parent = None
+        try:
+            # Keep the fixture's stdin open independently of its direct parent:
+            # parent death must release it even when stdin cannot deliver EOF.
+            code = ('import subprocess,sys; '
+                    'subprocess.Popen(sys.argv[1:-1], stdin=int(sys.argv[-1])); '
+                    'sys.stdin.buffer.read(1)')
+            parent = await asyncio.create_subprocess_exec(
+                sys.executable, '-c', code, sys.executable,
+                str(ROOT / 'tests/fixtures/fake_couch_bridge.py'),
+                str(self.root), 'ok', str(read_fd), pass_fds=(read_fd,),
+                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE)
+            readiness = await asyncio.wait_for(parent.stdout.readline(), 4)
+            self.assertIn(b'"Version": 1', readiness)
+            self.assertFalse((self.root / 'eof').exists())
+            parent.terminate()
+            # wait() may wait for the inherited stdout pipe too; observe its
+            # EOF first so a surviving fixture cannot hide behind parent exit.
+            try:
+                remaining = await asyncio.wait_for(parent.stdout.read(), 4)
+            except asyncio.TimeoutError:
+                self.fail('fixture survived parent death with stdin still open')
+            self.assertEqual(remaining, b'')
+            self.assertFalse((self.root / 'eof').exists())
+            self.assertFalse((self.root / 'cleaned').exists())
+        finally:
+            os.close(read_fd)
+            os.close(write_fd)
+            if parent is not None:
+                if parent.returncode is None:
+                    parent.terminate()
+                await asyncio.wait_for(parent.communicate(), 4)
+
     async def test_success_and_full_environment(self):
         s = self.session()
         async with s:

@@ -7,6 +7,10 @@ import signal
 import sys
 import time
 
+sys.dont_write_bytecode = True
+from fixture_watchdog import exit_with_parent
+
+exit_with_parent()
 root = Path(sys.argv[1])
 mode = sys.argv[2]
 root.mkdir(exist_ok=True)

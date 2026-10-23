@@ -76,8 +76,9 @@ describe('default discovery registry fixture', function()
         child = Embedded.start()
         local result = child:exec([[
             local result
+            local arrival = require('tests.helpers.arrival')
             require('parley.document_registry').request('lookup', { ... }, {}, function(value) result = value end)
-            assert(vim.wait(5000, function() return result ~= nil end, 10))
+            assert(vim.wait(arrival.MS, function() return result ~= nil end, 10))
             return result
         ]], root .. '/embedded.md')
         assert.equals('absent', result.kind)
