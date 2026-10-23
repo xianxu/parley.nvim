@@ -72,6 +72,76 @@ rounds:
       isolation: checkout
       reviewed: 50ed7eba83107880c5e83904deccbdc4129547b1
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: ea89e27d-8e10-41c9-80cd-ad910efc2493
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000422"
+            recipe: fix-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Volumes/TestScratch/review-checkouts/7b7ddbe96655e29c
+            reviewed_head: f5bd5052ddd7f48fd515a88e0d4f2b38466f8af4
+            slot: parley.nvim:1
+            requested_at: "2026-10-23T09:18:21.713299Z"
+          phase: finished
+          pid: 3795
+          started_at: "2026-10-23T09:18:21.814659Z"
+          finished_at: "2026-10-23T09:22:05.310032Z"
+          session_id: 48ae8be6-63db-43d4-a6ad-9aace3d4b76a
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: f5bd5052ddd7f48fd515a88e0d4f2b38466f8af4
+        tracker_head: 5047ae62b825bf5aa40c52d4e0fc6f2decf39584
+        branch_point: 091392db58ad91f7f937e2e977d496894beab962
+        since: "2026-10-23T01:58:47-07:00"
+        until: "2026-10-23T02:17:57-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-23T01:58:47-07:00"
+              end: "2026-10-23T02:17:57-07:00"
+              began: "2026-10-23T01:58:47-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: claude
+              id: d993777e-4c43-455a-b373-52b1dc0fc833
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 430e0c84f99cd8e664eb74a1ab6e756705f5caa4a8186451873cb59914ea425f
+              started: "2026-10-23T07:59:20.816Z"
+              spawned: false
+              bytes: 2143068
+              windows:
+                - start: "2026-10-23T01:58:47-07:00"
+                  end: "2026-10-23T02:17:57-07:00"
+        cuts:
+            - dispatched: "2026-10-23T02:12:02-07:00"
+              finalized: "2026-10-23T02:16:00-07:00"
+              finalizing: true
+      "n": 2
+      timestamp: "2026-10-23T02:22:06-07:00"
+      dispatched: "2026-10-23T02:18:21-07:00"
+      agent: claude
+      reviewer: claude (anthropic; author anthropic)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: test-placement.sh:33 now uses -f and -r, the detect_root predicate; new spec case at scratch_placement_spec.lua:201 fails with -e restored (guard rc=1), passes on the fix; the in-process sibling already calls detect_root.
+          round: 2
+      recipe: fix-review
+      isolation: checkout
+      reviewed: f5bd5052ddd7f48fd515a88e0d4f2b38466f8af4
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#422 (boundary-review)
@@ -86,6 +156,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-1** [Minor] `guard-rule-diverges-from-product-predicate` (kind: defect) test-placement.sh treats any existing .parley (file or dir) as a marker; detect_root only counts a readable file
   scripts/test-placement.sh:32 uses [ -e ] while lua/parley/repo_mode.lua:8 uses filereadable, so the guard refuses scratch under a .parley directory the product ignores, contradicting the plan and atlas claim (atlas/infra/test_harness.md:60) that the two state the same rule. Use [ -f ] && [ -r ] and add a directory-marker case to tests/arch/scratch_placement_spec.lua.
 
+## Round 2 — 2026-10-23T02:22:06-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — test-placement.sh:33 now uses -f and -r, the detect_root predicate; new spec case at scratch_placement_spec.lua:201 fails with -e restored (guard rc=1), passes on the fix; the in-process sibling already calls detect_root.
+
 ## Open findings
 
-- **BR-1** [Minor] `guard-rule-diverges-from-product-predicate` (kind: defect) test-placement.sh treats any existing .parley (file or dir) as a marker; detect_root only counts a readable file
+(none — every finding has been disposed)

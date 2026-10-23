@@ -71,3 +71,60 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"83bc23b6-a3ec-4828-a2f1-7bf4f1081007","repository":"github.com/xianxu/parley.nvim","issue_id":"000422","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/1486cb91ba8f4dd1","reviewed_head":"50ed7eba83107880c5e83904deccbdc4129547b1","slot":"parley.nvim:1","requested_at":"2026-10-23T09:12:02.00237Z"},"phase":"finished","pid":81740,"started_at":"2026-10-23T09:12:02.099614Z","finished_at":"2026-10-23T09:15:59.833907Z","session_id":"af374464-a5bf-4c28-a251-4541dd731a59","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-23T02:22:05-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 422 — Zero-config chat escapes scratch in review clones |
+| repo | parley.nvim |
+| issue file | workshop/issues/000422-zero-config-chat-escapes-scratch-in-review-clones.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 24ced116fa23a1b2b7bf3db7b6ec266f354fce3e..f5bd5052ddd7f48fd515a88e0d4f2b38466f8af4 |
+| command | sdlc close --issue 422 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-23T02:22:05-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Both prior-fix sites check out on read; now running the guard spec, then reverting the fix to confirm the new test goes red.
+
+The three failures are the same reviewer-confinement ones R1 reported (git init refused, spawn EPERM), unrelated to this diff. Now the revert check.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+BR-1 is fixed, and it ships. The guard at `scripts/test-placement.sh:33` now uses `[ -f ] && [ -r ]`, the same rule as the product's `repo_mode.detect_root` (`filereadable`, which is false for a directory and for an unreadable file). I checked the rest of that class. The in-process scratch check in `tests/arch/scratch_placement_spec.lua:54-62` already calls `detect_root` directly, so after this fix no copy of the rule is left that could drift. A new test at `scratch_placement_spec.lua:201-205` covers the directory-marker case. I confirmed it catches a regression: with the old `[ -e ]` put back, the guard refuses a root under a `.parley` directory (rc=1), so the new `assert.equals(0, …)` would fail. With the fix restored it accepts (rc=0), and an unreadable `.parley` file is also accepted, as the product treats it. Running `TMPDIR=<outside> make test-spec SPEC=infra/test_harness` at the head, all six guard tests pass. The run still has three failures, the same reviewer-confinement ones round 1 recorded (`git init` refused outside the reviewer's directories, a spawn blocked with EPERM); none comes from this diff. The issue-file diff only changes status and metadata and adds log lines. Spec and Done-when are unchanged, and the change adds no behavior no finding asked for, so this is not a scope change.
+
+1. **Strengths**
+   - `scripts/test-placement.sh:32-33`: the comment names the product predicate the guard mirrors, which makes the shared rule explicit.
+   - `tests/arch/scratch_placement_spec.lua:204` checks the guard and `detect_root` against the same fixture, so the test pins agreement between them, not just the guard's own behavior.
+   - The fix covers the whole class (one guard site plus the two doc claims that the rules match), not just the line the finding named.
+
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none new.
+5. **Test coverage:** The directory-marker case catches the regression (verified by reverting the fix). There is no test for an unreadable marker file. I checked it by hand and it matches the product, so this is not worth a finding.
+6. **Architecture (interdiff only)**
+   - ARCH-DRY: pass. The guard still restates the predicate in shell because it can't call Lua. The new test ties it to `detect_root`, which is the right way to enforce that.
+   - ARCH-PURE: pass. No logic moved into IO.
+   - ARCH-PURPOSE: pass. The class is enumerated and covered: one shell site, and the Lua site already derives from `detect_root`.
+   - ARCH-EVOLVE: not applicable. No persisted format changes.
+7. **Plan revisions:** none. The plan and atlas say the guard and the product state the same rule, and that is now accurate.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      test-placement.sh:33 now uses -f and -r, the detect_root predicate; new spec case at scratch_placement_spec.lua:201 fails with -e restored (guard rc=1), passes on the fix; the in-process sibling already calls detect_root.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ea89e27d-8e10-41c9-80cd-ad910efc2493","repository":"github.com/xianxu/parley.nvim","issue_id":"000422","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/7b7ddbe96655e29c","reviewed_head":"f5bd5052ddd7f48fd515a88e0d4f2b38466f8af4","slot":"parley.nvim:1","requested_at":"2026-10-23T09:18:21.713299Z"},"phase":"finished","pid":3795,"started_at":"2026-10-23T09:18:21.814659Z","finished_at":"2026-10-23T09:22:05.310032Z","session_id":"48ae8be6-63db-43d4-a6ad-9aace3d4b76a","outcome":"returned"}] -->
