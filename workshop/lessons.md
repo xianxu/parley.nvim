@@ -4,6 +4,8 @@
 
 - #418 generated properties: when the shared presence scanner normalizes key case, every downstream reader must use that same identity; otherwise filling can preserve a present setting while routing as if it were missing. Test quoted and mixed-case keys through both resolution and fill. Header byte budgets include fences and must also validate the projected additions.
 
+- #418 full-suite correction: a repeat-submit fixture must locate its body after metadata preparation. Fixed line numbers can overwrite a newly inserted fence and make downstream receipt/attention tests fail for the wrong reason. Preserve per-file header variants and assert the intended body target before editing.
+
 ## 2026-10-22 (#409 — a census is not run ownership)
 
 - Persistence and a recognizable command prove that a process exists, not that

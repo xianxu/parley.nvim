@@ -126,6 +126,20 @@ Exact next step: collect session 28887's completed result on dbb3cd1e (or confir
 
 Authenticated peer delivery 1045ba73-849b-47ca-9c76-b190bcaf4722 reports the agreed #823 fixture at cmd/internal/sessionsync/testdata/editorial-rounds/presentation.json, with mixed explicit/absent span policies, both legacy fallbacks, document/result hashes and positions, expected effective values, opaque metadata and review-record/resume consistency. Git resolves the reported producer commit to 4619aee1f0aaad327101110fb401c09b61e8c27d. This is an unlanded handoff reference only: future #419 must wait for pair:9's landed revision before pinning, with no stack/runtime dependency here. #418 scope and staged code remain unchanged. The retained recorded suite is still live on dbb3cd1e and has advanced to FIFO position 4; no suite result or operator live acceptance has arrived. Keep session 28887/lease-2976986650 and the existing next-step instructions above.
 
+
+### 2026-10-23 — recorded suite completed red; attention fixture diagnosis
+
+Retained session 28887 finished: recorded suite on dbb3cd1e failed exit 2 after 2m36s execution. Immutable attempt 781b67e502e28036977da46605addba4 retains /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/781b67e502e28036977da46605addba4.log, SHA256 prefix e59c2fb8c3aa. The runner classified its unstructured summary as unattributable-failure; the complete log identifies exactly one failed file, attention_record_spec.lua, with two cases: records two pending IDs with the real breadcrumb seam, and with the unavailable breadcrumb seam. Both first submits succeed; second edit overwrites the new closing fence at old fixed row 8, then fill visibly refuses unclosed frontmatter. This is a deterministic test-fixture defect, not flake evidence. All remaining unit/integration files in that execution passed and both censuses were clean; the test command stopped before its later compatibility pass.
+
+Next: reproduce the two cases in a focused run, target the fixture body heading instead of row 8 while preserving pending-ID/breadcrumb assertions, prove the full spec on both runtimes, then commit/push and run one new recorded suite on that corrected head. Do not resume/register a flake or blindly rerun the failed old head. Live acceptance remains pending; staged runtime is unchanged.
+
+Authenticated peer delivery 76f8ce1c-b33f-4994-b60b-e50ce62b53a0 supersedes the future #419 fixture handoff revision with Git-verified dcef993baf17ff93db5b6b2410661cc45f87cb51 (PR557), same presentation.json path. Peer reports actual minimal proposals, narrowed valid spans/digests and resume occurrences, no schema change. Pin only after its landing; no runtime dependency on that branch.
+
+
+### 2026-10-23 — attention fixture correction verified
+
+Focused reproduction confirmed the same two deterministic failures (11 pass, 2 fail, 0 errors). The fixture edit helper now finds its ## Needs you body heading before editing the following row, retaining both pending message-ID and breadcrumb assertions. The complete attention_record_spec then passed 13/13 on Neovim 0.12.5 and 0.11.7, with zero failures/errors and clean censuses. Its luacheck and diff whitespace checks pass. No runtime code changed. Commit/push this test correction and one fresh recorded suite; the earlier failed attempt stays immutable and is not mislabeled a flake. Live acceptance and close/landing remain outstanding.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

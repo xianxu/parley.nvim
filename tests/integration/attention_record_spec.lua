@@ -97,7 +97,12 @@ describe("attention: a session-sync file's Alt+Return", function()
         p.setup_markdown_keymaps(buf)
     end
     local function edit(text)
-        vim.api.nvim_buf_set_lines(buf, 7, 8, false, { text })
+        local body
+        for row, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line == "## Needs you" then body = row; break end
+        end
+        assert.is_not_nil(body, "fixture body heading is missing")
+        vim.api.nvim_buf_set_lines(buf, body, body + 1, false, { text })
         vim.api.nvim_exec_autocmds("BufModifiedSet", { buffer = buf })
     end
     before_each(function()
