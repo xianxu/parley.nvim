@@ -43,7 +43,7 @@ it immediately; if it doesn't, show a clear one-line error ("No image in the cli
 - [x] Reproduce the prompt with a native UI and fake clipboard. The async save path currently has no explicit confirmation; guard against builtin notification hit-enter as well as input/confirm dialogs.
 - [x] Keep existing default attachment naming, placement, writer/shrink and rollback (ARCH-DRY). Remove the paste completion's blocking feedback; emit one-line error `No image in the clipboard` for no-image, with buffer/disk unchanged.
 - [x] Cover Normal/Insert mappings, image bytes, no prompt and absent-image no mutation through the existing fake and native UI on both supported Neovim versions. Update README/atlas.
-- [ ] Run the recorded suite, close review and land on SHIP.
+Publication follows the recorded suite and the SDLC close/merge gates; it is not an implementation checkbox.
 
 
 ## Log
@@ -63,3 +63,7 @@ Native attached-UI reproduction and TL/operator confirmation identify the long s
 ### 2026-10-22 — targeted verification
 
 RED native UI tests on0.12.5 independently observed Normal/Insert become mode `r` after `Parley: pasted assets/...`; the no-image contract also failed as expected (3 intended failures total, /tmp/parley-417-native-mode-red.log). Fast nvim_get_mode observes the prompt; Enter is sent only after recording failure for inspection/teardown. GREEN native tests keep builtin notify, assert correct bytes/default link and prove subsequent ordinary typing reaches the buffer. Attachment mapping:492PASS/0FAIL/0ERROR on each nvim0.12.5 and0.11.7, clean censuses (/Volumes/TestScratch/parley-417-green-final.log and -green-0117.log). One stale PNG-extension notice assertion was corrected after the initial green attempt; no product fix was hidden by a retry. Lint0warnings/0errors3files; diff check clean. README/atlas and lesson updated. No recorded full-suite pass, close or landing claimed yet.
+
+### 2026-10-22 — review-ready checkpoint
+
+Implementation and targeted verification are complete at fdb9808f953b4fb35ef6945d39e500ccd114a9d7 (PR337). Publication remains conditional on the recorded suite, boundary review and merge gates; removed the self-referential close/land checkbox rather than ticking future work as done. The attached-UI matrix is the operator-confirmed reproduction surface; no live :0 stage performed.
