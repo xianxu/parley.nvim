@@ -46,7 +46,7 @@ Fix (a fixture mechanism, so it waits for TL approval):
 - [x] Row 1: gate the registry and raise the move timeout to 5000. Assert causally: saveas returns while the gate is closed, the move operation is still pending, and identity has not moved. Then open the gate and await the landing. A synchronous wait would either block until the 5 s timeout or see no answer at all, so the pending-operation assertion fails on any load. Drop the wall-clock bound for this row.
 - [x] Same class, same file: row 2 ("plain saveas asks Couch nothing") becomes a count of registry requests (zero), not a time. Row 4 ("legacy move refuses at once") gets the same gate treatment as row 1. The Alt+Return press bound at line 113 is #410's 500 ms input-admission requirement and stays as it is.
 - [x] Negative control in the disposable clone: force decision.wait_destination true for row 1, and make row 4's move wait on register. Each must fail deterministically on the causal assertion. Record the output in the Log.
-- [ ] Verify the modes/session_sync mapping on nvim 0.12.5 and 0.11.7, plus 20 reps of the three rows under 4-process load. Then run the suite through local-check.
+- [x] Verify the modes/session_sync mapping on nvim 0.12.5 and 0.11.7, plus 20 reps of the three rows under 4-process load. Then run the suite through local-check.
 
 ## Log
 
@@ -78,3 +78,13 @@ Fixes:
 - Row 2 asserts that every request is a lookup of the target.
 
 What row 2 still misses: a plain rename that waits on its own lookup of the target. That would need a product seam it doesn't have.
+
+2026-10-23: Verification results.
+- Load: 20/20 reps under capped load.
+- Neovim 0.11.7: the session_sync mapping passed 827/0/0.
+- Neovim 0.12.5: covered by the recorded suite on 88fedfd8, which failed only on two pre-existing flakes that #414 doesn't touch. At TL direction they are filed as #426 (owned-move refusal snapshot, 1 of 6 on pure main 20f3513b) and #427 (native undo/redo 'Remote view unavailable'), both registered with flake_tests.
+
+`local-check resume` refused attempt 7cd79e2b as "not an ordinary completed resumable suite failure". Parley declares no Lua flake_runners, so a Lua failure is unattributable and cannot be resumed. Following sdlc's guidance, the suite runs again on the advanced (close) head.
+
+Commit 54f6e4c8 has its Agent line as a body paragraph rather than a trailer: it is claude/claude-opus-5-5/medium.
+
