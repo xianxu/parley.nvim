@@ -1,13 +1,21 @@
 ---
 id: 000418
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '0e5b3344eda4694abc7300b5334d16f833951451' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '245e69b1971000902b3c17d77f2a2f5f2912506a' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-23T00:21:40-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # First Alt+Return on a file adds or merges the required front matter
@@ -41,8 +49,21 @@ missing keys, never overwriting or dropping the operator's existing keys or valu
 
 ## Plan
 
-- [ ]
+- [ ] Implement the approved shared [first-submit plan](../plans/000418-first-submit-frontmatter-plan.md), including canonical/legacy readers and additive undoable preparation before save/register/send.
+- [ ] Prove this issue's Done-when and #322's separate visible-outcome acceptance on both runtimes, record the required check, obtain the binary-owned close review and complete live acceptance/landing after ariadne#562.
 
 ## Log
 
 ### 2026-10-22
+
+### 2026-10-23 — claimed and planned with #322
+
+TL dispatch 24886cea-c7ae-4329-a81f-ec5c69c35332 assigns #418 and #322 together, one plan with separate acceptance. Claimed #418 and started this main-based issue branch; #322 was a wontfix duplicate of #332 and is reopened through the status verb under this new assignment. Current `agentic_document` already saves/registers/submits plain named Markdown without front matter; it needs neither `type: session-sync` nor guessed owner metadata. Existing `review_send` outside-Couch path still requires legacy process-instruction, and `presentation.value` still reads only presentation. No implementation has started.
+
+Coordinated with ariadne:5: #562 defines three canonical scalar defaults, optional processing-instruction, component-wise legacy fallback and whole-document multi-selector fill refusal. TL delivery da9d9e00 approves including existing-reader migration here and reserves section comments/typeahead for #419. #562 reference examples are source fixtures, not manifest exports; pinned-provenance copies are approved. Delivery 7106eb75 confirms TL's presentation policy: canonical presence wins; missing/empty/unknown means highlight, unknown warns without refusing. The [shared plan](../plans/000418-first-submit-frontmatter-plan.md) records the visible-state table, ownership, pure/IO split, alternatives, failure/retry tests and proposed interactive header envelope. Plan goes to TL before change-code; landing waits for #562's landed contract and fixtures, never an unlanded stack. ARCH-DRY and ARCH-EVOLVE require shared effective resolution and additive byte-preserving insertion rather than three literal defaults or YAML reserialization.
+
+## Revisions
+
+### 2026-10-23 — canonical fill and current registration contract
+
+Required submission metadata is the current registry contract, which does not require a type/owner header. The explicit new settings are collaboration-mode: discussion, presentation-mode: highlight and processing-mode: free-form when no current or legacy choice exists. Missing components materialize effective legacy choices instead of shadowing them; preserve existing canonical/alias lines, unknown metadata and body. Optional processing-instruction is filled only from legacy free text. Existing-reader migration is included so these keys work. Section comments, typeahead and external side-doc/session writers remain with #419/#562 as coordinated. Each issue keeps its own Done-when; one plan/branch is the TL's explicit combined-work exception.
