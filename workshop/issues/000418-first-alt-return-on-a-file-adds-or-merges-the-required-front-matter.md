@@ -5,9 +5,9 @@ deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-23
-estimate_hours:
+estimate_hours: 3.61
 collaboration-mode: collaboration
-card_mirror: '245e69b1971000902b3c17d77f2a2f5f2912506a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '78b88a0c157cc7d0b58450995de6c6218b76b600' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T00:21:40-07:00
 claimant:
     operator: Xian Xu
@@ -79,3 +79,20 @@ The gate recorded PQ-1 (owned-edit-operation-validity) and PQ-2 (function-test-s
 ### 2026-10-23 — canonical fill and current registration contract
 
 Required submission metadata is the current registry contract, which does not require a type/owner header. The explicit new settings are collaboration-mode: discussion, presentation-mode: highlight and processing-mode: free-form when no current or legacy choice exists. Missing components materialize effective legacy choices instead of shadowing them; preserve existing canonical/alias lines, unknown metadata and body. Optional processing-instruction is filled only from legacy free text. Existing-reader migration is included so these keys work. Section comments, typeahead and external side-doc/session writers remain with #419/#562 as coordinated. Each issue keeps its own Done-when; one plan/branch is the TL's explicit combined-work exception.
+
+## Estimate
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only. The calibration is marked stale by sdlc, so this is provisional. Three focused Lua primitives cover pure header/settings projection, the witnessed native preparation lifecycle, and migration of existing local-review/presentation consumers; each includes its pure/native tests and both-runtime verification. Pick the Lua table's midpoint design 2h, discounted x0.2 by the approved concrete plan to 0.4h, and upper implementation 1.5h scaled x0.40 to 0.6h. Existing LuaJIT/Neovim, selectors, provenance editor and persistent fake registry are the library substrate; no novel stack or general YAML dependency is introduced. Docs use 0.1h design x0.2 and 0.15h implementation x0.4; one atomic review uses 0.1h design x0.2 and 0.4h implementation x0.4. A 0.4h real-API discovery allocation x0.4 covers the hub-scheduled operator session-document conformance. Familiarity is 1.0 and the thorough-plan design buffer is 15%. This combined implementation is budgeted here; do not duplicate its implementation hours on #322's separate acceptance record.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.6
+item: lua-neovim design=0.4 impl=0.6
+item: lua-neovim design=0.4 impl=0.6
+item: atlas-docs design=0.02 impl=0.06
+item: milestone-review design=0.02 impl=0.16
+item: real-api-discovery design=0 impl=0.16
+design-buffer: 0.15
+total: 3.61
+```
