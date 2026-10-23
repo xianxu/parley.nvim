@@ -1,8 +1,8 @@
 ---
 id: 000416
-status: codecomplete
+status: done
 created: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-23
 estimate_hours: 2.68
 github_issue:
 started: 2026-10-22T16:14:29-07:00
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: e6fc10ea300bb089ac2cb1e9317179567cab9d13
         evidence_commit: f856cfa12d0eecb64da5ad9f78a96529524f7fa6
+        landed_commit: 00ad533920759f6bb51a94c4135d51a9435faa7b
 ---
 
 # Test census reports clean while an orphaned embedded Neovim survives
