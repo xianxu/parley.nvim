@@ -51,7 +51,7 @@ The leaked run predates the later #405 fixture and parent/child cleanup changes.
 ## Plan
 
 - [x] Implement the approved design in [the durable plan](../plans/000416-false-clean-census-plan.md), with native red/green coverage before changing cleanup.
-- [ ] Verify exact ownership, observed death, refusal paths, both supported runtimes, and #409 serialization; record the pushed-head full suite and close review.
+- [x] Verify exact ownership, observed death, refusal paths, both supported runtimes, and #409 serialization; prepare the corrected pushed head for recorded suite and close review.
 
 ## Revisions
 
@@ -125,3 +125,6 @@ Native directory churn under the working tree reproduced the #202 walk race: rea
 
 
 Both runtime focused mappings passed after placement correction: `/tmp/parley416-placement-native.log` (0.12.5), `/tmp/parley416-placement-compat.log` (0.11.7), covering 6 native lifecycle, 7 pure policy, 18 retained-registry and 4 find safety cases each. A native 100-walk probe passed while private scopes churned in this linked checkout's Git metadata; the old source-tree placement failed at walk 3. Lint remains clean across 828 files (`/tmp/parley416-placement-lint.log`).
+
+
+The broader harness mapping passed after Git metadata placement (`/tmp/parley416-placement-harness.log`), including native runner deadlines, Python/lease controls and terminal verified/clean census. PR #336 is updated. The single replacement suite is queued as `lease-3515239873` on code head `cb8aef34`, session 35471, inflight log `sdlc/test-stats/inflight/ce8e0b7283668633eb0eeabb471a86d6/run.log` in the Git common directory. Initial FIFO position 16; no full-suite result yet. Per tl-worker's permitted overlap, request the fresh close review while this exact-head check waits. Landing requires its actual pass; code fixes require a new final-head run.

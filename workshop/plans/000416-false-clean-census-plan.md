@@ -121,7 +121,9 @@ The regression owns all its created children and uses exact-handle finally clean
 - [x] Finish native RED→GREEN and refusal/concurrency coverage through the function contracts; verify pruning and explicit writer bounds.
 - [x] Run `python3 tests/unit/reap_test_orphans_pure.py`, `python3 tests/unit/test_run_lease.py`, then `make test-spec SPEC=infra/test_harness`; expected all pass. Run the mapped affected regressions under each exact `PARLEY_TEST_NVIM` runtime above.
 - [x] Update atlas/traceability, tooling and lessons; log exact evidence and the #405 integration boundary.
-- [ ] Push and run one recorded full suite via `sdlc local-check run --name suite`, close with measured verification, resolve the binary-owned fresh review, publish PR and enter `sdlc merge --yes` for authoritative integrated verification and landing.
+- [x] Push PR #336 and queue one recorded full suite via `sdlc local-check run --name suite` on the corrected code head (`lease-3515239873`).
+
+Final acceptance remains gated on that suite result, the binary-owned close review, and `sdlc merge --yes` authoritative integration and landing. The close review may overlap the queued suite under tl-worker rules; none of those future outcomes is claimed here.
 
 ## Architecture checklist
 
@@ -159,3 +161,8 @@ The native RPC architecture guard requires even adversarial census spinners to u
 A native `find .` probe failed on iteration 3 when a scope under the working-tree `.test-processes/` retired. Move the same bounded registry to `git rev-parse --absolute-git-dir` plus `parley-test-processes/`, validating checkout root and ownership. This is the per-worktree Git directory, never the shared common directory. No-Git archives retain the fallback. The census must read both new and existing legacy bases, preserving unknown evidence across migration; only a drained legacy container retires. Two bases temporarily mean two bounded verifier invocations. The command-substitution safety test searches immutable `lua/parley` instead of all Git/test metadata, preserving its argument-injection assertion in plain clones as well.
 
 Added native Git checkout/worktree placement and retained-legacy unknown tests, both first failing before the fix. Cancelled obsolete recorded suite `lease-2698737677` on the previous head before it ran; a single replacement will run on the corrected pushed head. This remains the approved lease-scoped registry and approved Git placement, without a new state mechanism.
+
+
+### 2026-10-22 — verification handoff to acceptance gates
+
+Targeted implementation verification is complete on both runtimes and the broader harness passes. Split the final implementation checkbox from the acceptance gates: PR #336 and the one recorded suite are prepared; the still-pending full-suite result, close verdict and integration/landing remain explicit gates, allowing the tl-worker-approved close-review/queued-suite overlap without falsely recording those outcomes as complete.
