@@ -65,3 +65,15 @@ Evidence:
 - Live `make test-spec SPEC=infra/config TEST_ENV_ROOT=<170-byte root>` exits 2 with the single test-placement length message and creates nothing.
 - Counterfactual TMPDIR_MAX=190: the pin case fails with "Neovim refused a TMPDIR of the guard's limit, 190 bytes". Restored with git checkout of the committed file.
 
+
+### 2026-10-23 — close review R1 REWORK, addressed (7364e799)
+
+- **BR-1 (Critical, guard-fixture-length-budget):** fixed for the whole class. The guard's fixtures are relative to base (vim.system cwd), so they stay short at any accepted harness TMPDIR. The pin probe pads a relative "t" with "./" to an exact raw length: Neovim checks the raw string at 189 bytes and separately limits the absolute path at about 234 bytes, measured identically on 0.12.5 and 0.11.7 (cwd up to 232 with a relative "x"). The lease test's nested harness roots, the other member of the class, are now `../<name>-env`; under a 185-byte outer TMPDIR they had been refused (274- and 231-byte TMPDIRs). The length check now runs after the marker/checkout walk; new case "reports a marker before the TMPDIR length".
+- **BR-2 (Important):** the length is counted in bytes (`LC_ALL=C wc -c`). New non-ASCII case: "é" at 190 bytes and 97 characters refuses.
+- **Minor:** extracted an `is_under` helper for the three prefix checks.
+
+Evidence:
+- infra/test_harness 235/0/0 with a clean census at a 185-byte TEST_ENV_ROOT (the reviewer's repro), and on each of 0.12.5 and 0.11.7 at the default root.
+- test_run_lease.py 27 OK at both the default and the 185-byte TMPDIR.
+- Counterfactual (restore `${#tmp}` and length-first): exactly the bytes case and the marker-first case fail. Restored.
+- Cancelled suite on 3f63c3b3 (not pass evidence); requeued on the fixed head.
