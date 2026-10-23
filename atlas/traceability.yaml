@@ -189,6 +189,7 @@ atlas:
       - tests/unit/parse_chat_spec.lua
       - tests/unit/build_messages_spec.lua
       - tests/integration/paste_image_spec.lua
+      - tests/integration/paste_image_native_spec.lua
       - tests/arch/log_sinks_spec.lua
       - tests/integration/query_cache_spec.lua
       - tests/arch/chat_delete_sweep_spec.lua

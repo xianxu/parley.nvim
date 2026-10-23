@@ -249,14 +249,16 @@ line opens the link, and the entity picker retains it as one reference.
 ## Paste screenshots into Markdown
 
 Press **Alt+i** in Normal or Insert mode to paste a clipboard image after the
-current line in any named Markdown file. Parley inserts an image link and saves
-it beside that file at `assets/<file-stem>/<timestamp>.<png|jpg>`. Chat files keep
+current line in any named Markdown file, without a confirmation prompt. If there
+is no image, Parley reports “No image in the clipboard” and changes nothing.
+Parley inserts an image link and saves it beside that file at `assets/<file-stem>/<timestamp>.<png|jpg>`. Chat files keep
 their existing timestamp asset folders. Spaces and punctuation in stems are
 percent-escaped in links; the on-disk folder keeps the stem.
 
 The existing image shrink step runs before saving: large PNGs become smaller
 JPEGs within the maximum edge. `assets.shrink` and `assets.shrink_cmd` retain
-their configured behavior; the paste notice reports any retained original.
+their configured behavior. Paste feedback stays short; `:ParleyInspectLog`
+shows the full path, size changes and any retained-original warning.
 Deleting a link leaves its asset on disk. The Markdown file's owner handles
 sidecar moves and sweeps unreferenced assets (the TL for session and QA files).
 

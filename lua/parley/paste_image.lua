@@ -122,8 +122,11 @@ function M.paste(buf, deps)
 
     clipboard_image.read_png(recipe, tmp, function(status, msg)
         local ok, err = pcall(function()
+            if status == "no_image" then
+                return finish("No image in the clipboard", "error")
+            end
             if status ~= "ok" then
-                return finish("Parley: nothing pasted — " .. msg, status == "no_image" and "info" or "warn")
+                return finish("Parley: nothing pasted — " .. msg, "warn")
             end
             -- Insertion prerequisites BEFORE saving: a closed or read-only
             -- buffer leaves no transcript line to reference the bytes, so
@@ -159,7 +162,10 @@ function M.paste(buf, deps)
                 return finish("Parley: nothing pasted — could not insert the link: " .. why, "error")
             end
             local suffix = require("parley.image_shrink").outcome_suffix(outcome)
-            finish("Parley: pasted " .. rel .. suffix, (outcome and outcome.note) and "warn" or "info")
+            -- Every successful completion stays short, including shrink warnings
+            -- (#417). DEBUG writes the full detail without another notification.
+            require("parley.logger").debug("Image pasted: " .. rel .. suffix)
+            finish("Image pasted; details in the Parley log", (outcome and outcome.note) and "warn" or "info")
         end)
         if not ok then
             finish("Parley: paste failed: " .. tostring(err), "error")

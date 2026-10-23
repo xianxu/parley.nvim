@@ -971,3 +971,11 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   product-deadline controls, and assert the completed outcome before protection.
   Failure diagnostics include outcome, elapsed time, mode, runtime and load.
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
+
+## 2026-10-22 (#417 — notification prompts after a completed edit)
+
+- A successful asynchronous edit can still block the next key on builtin notification hit-enter. Keep the real notification surface in attached-UI regressions; an injected recording notifier hides this failure. Inspect fast `nvim_get_mode` before ordinary Lua RPC when a prompt may be active, then prove subsequent typing reaches the buffer.
+
+- #417 BR-1: enumerate every producer of completion diagnostics before declaring feedback nonblocking. A short prefix with an unbounded suffix still blocks; native UI tests must cover conversion-limit refusal, tool resolution and converter failure, alongside the plain success case.
+
+- #417 BR-2: a mode-specific input contract needs both accepted and refused native mapping cases. A direct function call with a recording notifier does not prove that Normal/Insert input survives a builtin error notice; forward to the real UI, assert no mutation, and type the next key.
