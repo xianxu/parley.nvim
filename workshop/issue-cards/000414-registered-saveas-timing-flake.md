@@ -1,6 +1,6 @@
 ---
 id: 000414
-status: working
+status: codecomplete
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 2.08
+tracker:
+    version: 1
+    completion:
+        token: close-1dd8df0599cb
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: b11e2e9ce3838fdba088932557e6425ad68b930c
+        evidence_commit: 6a173e8c48f5f76045f270e75da09a2fcb285465
 ---
 
 # Investigate registered-saveas timing flake under load
