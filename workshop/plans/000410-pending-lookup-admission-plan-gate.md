@@ -38,6 +38,25 @@ reviewer_runs:
       finished_at: "2026-10-22T20:23:00.903683Z"
       session_id: 01a16547-83ae-7082-98fd-6589a755a44f
       outcome: returned
+    - version: 1
+      intent:
+        id: 7bc53afa-6255-4f8e-850f-27361204b9a1
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000410"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        reviewed_head: 27026ef0a27a96612a1b686f8896f2eb9c81468a
+        slot: parley.nvim:4
+        requested_at: "2026-10-23T07:22:17.753916Z"
+      phase: finished
+      pid: 98053
+      started_at: "2026-10-23T07:22:17.911738Z"
+      finished_at: "2026-10-23T07:22:54.091088Z"
+      session_id: 01a167a3-9d9e-75d3-896b-81d4f53015d0
+      outcome: returned
 gate: plan-quality
 issue: 410
 id_prefix: PQ
@@ -207,6 +226,32 @@ rounds:
       agent: codex
       reviewer: codex (openai; author openai)
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: dd0ddb15-f955-4ff4-9106-d06c518d9e18
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000410"
+            recipe: plan-quality
+            round: 6
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+            reviewed_head: 27026ef0a27a96612a1b686f8896f2eb9c81468a
+            slot: parley.nvim:4
+            requested_at: "2026-10-23T07:21:47.452729Z"
+          phase: finished
+          pid: 70751
+          started_at: "2026-10-23T07:21:47.577767Z"
+          finished_at: "2026-10-23T07:22:15.878171Z"
+          session_id: 01a167a3-2697-7a41-ab66-1eac01986f8e
+          outcome: returned
+      "n": 6
+      timestamp: "2026-10-23T00:22:16-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      blocked: false
+      protocol_error: no valid findings block
 content_hash: 06b9f2b1e665f9fe3d08b0eca61ca4b3bdabdae886fa5922b1bd18d395151102
 ---
 
@@ -246,6 +291,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - PQ-2 — addressed — Active verification names functions, adversarial strategies and mechanical guards instead of test-case inventories.
 
 ## Round 5 — 2026-10-22T13:22:22-07:00 (codex) — passed
+
+## Round 6 — 2026-10-23T00:22:16-07:00 (codex) — passed
+
+**Protocol error:** no valid findings block — this round contributed no findings.
 
 ## Open findings
 
