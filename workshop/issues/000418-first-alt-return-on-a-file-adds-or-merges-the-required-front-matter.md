@@ -66,6 +66,10 @@ Coordinated with ariadne:5: #562 defines three canonical scalar defaults, option
 
 Authenticated TL approval 7acabe36-c3b8-4c2a-b70f-33d8f62d5788 accepts the shared resolver/insertion design, current save/submit owner, canonical reader migration, preserved legacy intent, atomic multi-mode refusal, warned highlight fallback and 8192-line/1-MiB header bounds. No new cache/watchers. Exact next step: wait for ariadne#562 to land; verify its landed revision, pin the reference fill fixtures/provenance from main, then run change-code before implementation. The hub will schedule live acceptance with the operator on a session document. No runtime/test implementation has begun.
 
+### 2026-10-23 — producer landed; reference fixtures pinned
+
+Authenticated TL delivery a5452e45-2afd-4b84-a9a1-a397a1f26214 confirms ariadne#562 landed and directs fixture pin/change-code. Git resolves its merge as `4f10a45d038acb2324c5a19e74a78f4a593571e6`, proven ancestor of freshly fetched producer main. Copied all 24 source files across eight editorial-fill cases into `tests/fixtures/editorial_fill/`; `provenance.json` records repository, exact commit, source path, byte length and SHA256 for each immutable oracle. Every copied byte digest verified against that pinned Git blob. These are source reference fixtures, not export-manifest members or an executable producer resolver. Next: full-flow change-code plan-quality gate, then its estimate gate before runtime implementation. No test/runtime code has changed.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
