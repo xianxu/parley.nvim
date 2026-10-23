@@ -43,6 +43,56 @@ describe("clipboard image native input", function()
         { name = "converted JPEG", width = 1800, tool = "ok:", converted = true },
     }
     for _, insert in ipairs({ false, true }) do
+        it("Alt+i rejects a text clipboard without changing " .. (insert and "Insert" or "Normal") .. " input", function()
+            local before = child:exec([[
+                local root = ...
+                vim.env.PARLEY_FAKE_CLIPBOARD = "text"
+                local builtin_notify = vim.notify
+                vim.notify = function(message, level, ...)
+                    -- Observe completion externally while preserving real builtin UI.
+                    vim.fn.writefile({ vim.json.encode({ message = message, level = level }) }, root .. "/notice.json", "a")
+                    return builtin_notify(message, level, ...)
+                end
+                return { lines = vim.api.nvim_buf_get_lines(0, 0, -1, false), modified = vim.bo.modified }
+            ]], root)
+            if insert then
+                child:input("i")
+                assert.is_true(vim.wait(arrival.MS, function()
+                    return child:request("nvim_get_mode").mode == "i"
+                end))
+            end
+            child:input("<M-i>")
+            local notice, count
+            assert.is_true(vim.wait(arrival.MS, function()
+                if vim.fn.filereadable(root .. "/notice.json") ~= 1 then return false end
+                local lines = vim.fn.readfile(root .. "/notice.json", "b")
+                if lines[#lines] ~= "" then return false end
+                table.remove(lines)
+                local ok, decoded = pcall(vim.json.decode, lines[1] or "")
+                if ok then notice, count = decoded, #lines end
+                return ok
+            end), "the builtin error was emitted")
+            local mode = child:request("nvim_get_mode").mode
+            if mode == "r" then child:input("<CR>") end -- Record any unwanted prompt before inspection.
+            local after = child:exec([[
+                return { lines = vim.api.nvim_buf_get_lines(0, 0, -1, false),
+                    modified = vim.bo.modified, messages = vim.fn.execute("messages") }
+            ]])
+            assert.equals("No image in the clipboard", notice.message)
+            assert.equals(vim.log.levels.ERROR, notice.level)
+            assert.equals(1, count, "one error, forwarded to builtin notify")
+            assert.matches("No image in the clipboard", after.messages, 1, true)
+            assert.equals(insert and "i" or "n", mode, "no hit-enter or mode departure")
+            assert.same(before.lines, after.lines)
+            assert.equals(before.modified, after.modified)
+            assert.equals(0, vim.fn.isdirectory(root .. "/assets"))
+            child:input(insert and "typed" or "Atyped<Esc>")
+            assert.is_true(vim.wait(arrival.MS, function()
+                return child:exec([[
+                    return vim.api.nvim_buf_get_lines(0, 0, -1, false)[1]:find("typed", 1, true) ~= nil
+                ]])
+            end), "the next key after no-image refusal reaches the buffer")
+        end)
         for _, case in ipairs(cases) do
             it("Alt+i pastes " .. case.name .. " without hit-enter in " .. (insert and "Insert" or "Normal") .. " mode", function()
                 if case.width then
