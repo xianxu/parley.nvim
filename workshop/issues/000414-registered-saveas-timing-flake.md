@@ -1,13 +1,21 @@
 ---
 id: 000414
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'cbdf1e98e6563e06f6be6f6bdeb7433cb33d77d8' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '866e311dd20d099429749b06165a5b9c37cd08c6' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-23T05:49:02-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Investigate registered-saveas timing flake under load
@@ -28,7 +36,16 @@ Investigate `tests/integration/agentic_document_spec.lua`, case `agentic markdow
 
 ## Plan
 
-- [ ]
+Root cause (measured in a disposable clone at main 20f3513b, hrtime marks at every stage of BufFilePre, BufFilePost and BufWritePost):
+- Nothing on saveas's synchronous path waits on Couch. Idle: 20 reps at 46-52 ms. Under 3 CPU spinners plus an fsync dd loop: 79 reps, median 53, p95 63, max 91 ms. The cost is ss.acquire_observed (about 32 ms: turn, admission, refresh) and BufWritePost's hash plus advance (about 16 ms). The pause and the lease are under 1 ms. The bounded Couch lookup runs only when overwriting (decision.wait_destination), not in row 1.
+- So a breach of 500 ms is a stall of the whole nvim process (scheduling under a full suite on a loaded machine), not a wait in the code under test. The fixture can't tell the two apart: with_timeouts(15000, 500) sets the move timeout equal to the 500 ms assertion bound, so the real regression (a synchronous Couch wait bounded by the move timeout) and a scheduling stall produce the same signal.
+
+Fix (a fixture mechanism, so it waits for TL approval):
+- [ ] Add a gate to fake_couch_registry.py: in delay mode with FAKE_COUCH_REGISTRY_GATE=PATH, the registry answers only once PATH exists (polled, with the delay as an upper bound). The test then controls when Couch answers.
+- [ ] Row 1: gate the registry and raise the move timeout to 5000. Assert causally: saveas returns while the gate is closed, the move operation is still pending, and identity has not moved. Then open the gate and await the landing. A synchronous wait would either block until the 5 s timeout or see no answer at all, so the pending-operation assertion fails on any load. Drop the wall-clock bound for this row.
+- [ ] Same class, same file: row 2 ("plain saveas asks Couch nothing") becomes a count of registry requests (zero), not a time. Row 4 ("legacy move refuses at once") gets the same gate treatment as row 1. The Alt+Return press bound at line 113 is #410's 500 ms input-admission requirement and stays as it is.
+- [ ] Negative control in the disposable clone: force decision.wait_destination true for row 1, and make row 4's move wait on register. Each must fail deterministically on the causal assertion. Record the output in the Log.
+- [ ] Verify the modes/session_sync mapping on nvim 0.12.5 and 0.11.7, plus 20 reps of the three rows under 4-process load. Then run the suite through local-check.
 
 ## Log
 
