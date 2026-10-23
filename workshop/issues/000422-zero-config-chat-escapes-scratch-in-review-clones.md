@@ -54,6 +54,7 @@ Side observation (not in scope): when $TMPDIR is long, nvim's tempname() silentl
 Observed independently in #405 M2 R1 and R2. R2 reviewed head4508683883564bbd676e42c2ee50d15935a95454 against replayed base d4f332353feca049bb17eb68643b40a66176d25d. Its preferred focused mapping had275PASS/1FAIL/0ERROR; zero-config alone at base had8PASS/1FAIL/0ERROR, proving it predates the M2 changes. All process censuses were clean. R1 reported a chat created under workshop/parley in its disposable checkout; R2 removed disposable artifacts. This is review-clone context evidence, not yet an ordinary-checkout reproduction or an established timing flake. See #405's M2 review sidecar for the retained result. No operator file was changed.
 
 ### 2026-10-23 — guard implemented; landing waits for ariadne#571
+- 2026-10-23: closed — review-style clone (TMPDIR=<clone>/.sdlc-review/tmp) make test-spec SPEC=infra/config refuses once with test-placement message, nothing created in clone; sibling TMPDIR layout 166/0/0 clean status; guard no-op -> zero_config fails on marked-project precondition before writing; ordinary infra/test_harness 229/0/0, infra/config 166/0/0, test_run_lease.py 27 OK; review verdict: SHIP
 
 TL approved the refusal, plus the ariadne fix filed as ariadne#571 (owner ariadne:4). Sequencing: land this only after #571, so parley reviewers are not left unable to run tests in clones. The tempname() long-path fallback is filed separately as #423 (unclaimed).
 
