@@ -5,6 +5,7 @@ created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 github_issue:
+flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retained release journal respects current intent at after-new/before-restore (#404)]
 ---
 
 # Native release-journal test intermittently loses its setup lock
