@@ -283,3 +283,91 @@ findings:
    Add a `## Revisions` entry requiring canonical fixture identity and verification with both physical and symlinked scratch paths, including metadata fakes and inherited-context validation.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"6f3ed058-4759-4ec0-9b2e-cc5a5c1287df","repository":"github.com/xianxu/parley.nvim","issue_id":"000416","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/78387e119bab7542","reviewed_head":"1496bc76b22612512de5a0ec69ade29d97f862e2","slot":"parley.nvim:3","requested_at":"2026-10-23T00:20:02.050227Z"},"phase":"finished","pid":6630,"started_at":"2026-10-23T00:20:02.222364Z","finished_at":"2026-10-23T00:23:21.862488Z","session_id":"01a16621-05a4-7ce1-b558-1be0c347b56c","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T17:30:25-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 416 — Test census reports clean while an orphaned embedded Neovim survives |
+| repo | parley.nvim |
+| issue file | workshop/issues/000416-false-clean-census.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 1752271061691fd0780994a45b93d46463c8c747..8548f3b68b79592f013367172bc4340d66cfd6b7 |
+| command | sdlc close --issue 416 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T17:30:25-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation satisfies the false-clean census contract. BR-4 is addressed with a regression that demonstrably fails without the correction. No new findings remain. This review does not replace the separately required recorded full-suite acceptance.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Publication preserves raw unknown JSON member bytes; numeric-token and nested-value regressions pass at the pinned head.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Atomic mkdir reserves finite canonical scope slots; the controlled two-allocator regression passes on both runtimes.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Explicit ENOENT permits admission after retirement; controlled retirement, reuse, contention and unreadable-entry tests pass on both runtimes.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      tests/unit/test_run_lease.py:29 canonicalizes shared fixture identity. The explicit symlink regression at line 513 passes; removing only resolve() in a disposable pinned-head copy makes it fail with six underlying assertions. All 27 lease tests pass with TMPDIR=/tmp; the disposable copy was removed.
+```
+
+1. **Strengths**
+
+   - Durable pending tickets precede spawning; interrupted publication retains unknown evidence (`tests/helpers/test_processes.lua:99`).
+   - Cleanup checks native identity immediately before signaling and requires subsequent death observation (`tests/helpers/test_processes.lua:208`).
+   - The native orphan regression verifies TERM resistance, terminal failure, joined death and protection of an unrecorded same-argv child (`tests/integration/test_process_census_spec.lua`).
+   - Canonical fixture identity fixes the shared cause across context assertions, inherited inputs and ownership fakes.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - Python census tests: **15 passed**.
+   - Lease tests with `TMPDIR=/tmp`: **27 passed**, including explicitly aliased scratch.
+   - Neovim **0.12.5**: mapped harness **214 passed**, terminal census verified/clean.
+   - Neovim **0.11.7**: focused policy, registry, scope and native lifecycle tests **41 passed**, terminal census verified/clean.
+   - BR-4 counterfactual: removing fixture canonicalization makes the new regression fail.
+   - Initial harness execution encountered eight scratch-placement failures because the review environment placed `TMPDIR` inside the checkout. The external-scratch rerun passed.
+   - Pinned-range `git diff --check` passed.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — Pass:** runner and terminal census share reconciliation and native identity logic.
+   - **ARCH-PURE — Pass:** observation policy is data-only and tested without IO; integration concerns remain outside it.
+   - **ARCH-PURPOSE — Pass:** independent census detects the orphan after launcher death.
+   - **ARCH-MOCK — Pass:** stateful observation/effect fakes exercise the production seam; native tests check actual behavior.
+   - **ARCH-CONSTRAINTS — Pass:** writer caps, atomic scope capacity, bounded waits and linear-probe tests are present.
+   - **ARCH-SECURE — Pass:** malformed or uncertain evidence fails visibly; exact native identity controls signaling.
+   - **ARCH-ORDER — Pass:** pending/born/gone/unknown handling preserves uncertainty; controlled ordering tests cover allocation, retirement and reuse.
+   - **ARCH-FUNERAL — Pass:** proven-dead records and drained scopes retire automatically; unresolved evidence remains bounded.
+   - **ARCH-EVOLVE — Pass:** unknown member bytes survive publication; strict validation and legacy-ledger handling remain covered.
+
+   Core-concept paths and classifications match the implementation. Atlas and tooling document the new internal surface. No new public command or configuration requires a README update.
+
+7. **Plan revision recommendations:** None. The BR-4 revision accurately describes the delivered correction and regression.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"7e1d058c-1028-440f-a110-b97f36d1b27b","repository":"github.com/xianxu/parley.nvim","issue_id":"000416","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/2d7132c9889e5802","reviewed_head":"8548f3b68b79592f013367172bc4340d66cfd6b7","slot":"parley.nvim:3","requested_at":"2026-10-23T00:26:52.014579Z"},"phase":"finished","pid":14375,"started_at":"2026-10-23T00:26:52.124904Z","finished_at":"2026-10-23T00:30:25.376961Z","session_id":"01a16627-469e-7a42-a4fc-ea0a0c63c5e6","outcome":"returned"}] -->

@@ -62,6 +62,7 @@ Extend the existing spec-job birth ledger through the terminal census, scoped to
 ## Log
 
 ### 2026-10-22 — filed unclaimed at the TL's request
+- 2026-10-22: closed — Round 3 disposed all capacity-family findings and confirmed 6 native lifecycle, 7 policy, 19 registry and 9 scope cases on Neovim 0.12.5 and 0.11.7, including counterfactual RED. New BR-4 fixture-alias regression failed before canonical base correction; all 27 lease tests now pass with physical TMPDIR=/Volumes/TestScratch and aliased TMPDIR=/tmp, including explicit scratch-symlink subprocess coverage of context/ownership and legacy census. Python census 15 and lint 829 files previously pass; final diff clean. Single final-code recorded suite queued on this pushed head; actual pass required before landing.; review verdict: SHIP
 
 Historical survivor reported by ops:0, attributed through native process identity and its open run-specific socket by parley.nvim:1, and removed after exact revalidation. #405 records this incident at commit 36027746. This issue tracks the false clean census separately; no fix or new reproduction is claimed here.
 
