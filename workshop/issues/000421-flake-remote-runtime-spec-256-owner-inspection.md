@@ -64,3 +64,4 @@ Design (test-only; product deadlines unchanged):
 - Negative controls (one at a time in a disposable clone, restored after): C1 listen ignores the startup deadline: both shared-deadline cases fail, nothing else. C2 the startup deadline is never cleared after publication: the fresh-budget case fails, nothing else.
 - Verified: remote_runtime_spec 44/0/0 on nvim 0.12.5 and clean on 0.11.7; 20/20 under capped load (3 CPU spinners plus an fsync dd loop, 1500 s cap, trap cleanup). Before the fix the same load failed the fresh-budget case 1 in 10.
 
+- Recorded suite on a462c2c2 (attempt 44226e05): every spec ran; remote_runtime_spec passed; the one failure was the registered #430 flake (editor_endpoint_registry_spec, 'joins an admitted absolute deadline while retaining a possibly published binding'). Resume refused it as unattributable (parley declares no Lua flake runner; #415), so the head advances with this Log entry and the suite reruns.
