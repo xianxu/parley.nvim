@@ -96,6 +96,22 @@ Generated settings coverage is now 13 cases: component-wise precedence, selector
 
 Preferred mapped review now exits 0. Preferred mapped session-sync found only four stale owned-move fixture row assumptions; all four were corrected to locate body headings without weakening race/lock/journal/tree assertions, and the complete owned-move target passed 43 cases. Earlier admission/lifetime adaptation passed 48 + 10 cases. Alternate-runtime mapped review/session-sync and architecture guards remain queued/running, as do two disposable in-memory mutation-control runs (no product source edits). Exact next step: collect those results, resolve any genuine failure, commit/push final verified code and run the required recorded suite, then close review/live acceptance. This checkpoint contains implementation plus its tested focused evidence; it does not claim final acceptance.
 
+
+### 2026-10-23 — live acceptance scheduled; preflight findings classified
+
+Authenticated TL cf318a62-ca13-4e62-b37f-b2d03c2b918b schedules the operator's morning check (plain file, partial header, second press; submissions to ops:0) and says to keep the runner. PR 338 is pushed; sdlc stage --build staged code head 9a5967f4768a181522ba89fa2ddfaf5d746750a7 on parley.nvim:0, with no Go build required. Recorded suite lease-3834505791 is retained, initially FIFO position 9, on that code head. No live submission was sent by the worker. Receipt 76e808d0-3824-4f72-9dcd-d4b4156df640 for the waiting/live report is submitted.
+
+The final mapped session-sync run additionally exposed typed session fixture disk reads at fixed body indices; the earlier checkpoint's four owned-move failures were only the initial observed subset, not the final mapped result. These test-only corrections are underway with body-heading lookup and retained admission/lock/disk invariants; runtime code is unchanged. Architecture preflight requires exact exported API names in the Core-concepts tables: added the eight implemented functions to their existing plan ownership inventory. Both findings mean the eventual required record must cover the corrected test/plan head; keep the existing queued runner until the hub decides the transition.
+
+Disposable in-memory mutations used the same 13-case pure test suite without editing product source: removing the multi-mode refusal yielded 11 pass/2 fail/0 errors, and ignoring canonical presentation yielded 11 pass/2 fail/0 errors. These are expected mutation-control failures. The ordinary baseline was 13 pass/0 fail. Next: finish the typed fixture check on both runtimes, collect architecture green, checkpoint/push the concrete test-only correction and coordinate replacing the obsolete queued check with the hub, then await live acceptance and complete close/landing.
+
+
+### 2026-10-23 — final preflight correction ready
+
+Typed session fixture corrections passed the entire 72-case session_sync_spec on both supported runtimes (0 failures/errors, clean censuses). Architecture guards passed after the API inventory documentation fix: arrival budget, buffer mutation boundary and single-source sweep all green. No runtime code changed after staged/pushed 9a5967f4; these are test expectations plus plan/docs only. The earlier queued suite still targets the obsolete test/plan snapshot and will require replacement with a corrected-head record; the TL explicitly asked to retain it, so cancellation waits for coordinated instruction rather than silently losing its FIFO place.
+
+Authenticated TL c11c266d and peer 4b48ceb7 request future #419 fixture agreement. Confirmed directly to pair:9: optional Span.presentation direct/highlight/propose, missing → Round.presentation → highlight; explicit per-span values survive review-records/resume. Requested mixed/top-level-only/no-level source-document fixtures and mixed record/resume round-trip, with hash/expected-value evidence. No #419 implementation or claim starts here, and #418 scope remains whole-document.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

@@ -48,6 +48,8 @@ Presentation fallback clarification: ariadne:5 delivery 7106eb75 relays TL confi
 | Name | Lives in | Status |
 |---|---|---|
 | Effective document editorial settings and additive fill projection | `lua/parley/editorial_frontmatter.lua` | new |
+| `resolve`, `fill`, `presentation_value` — effective components, additive projection and independent repaint selection | `lua/parley/editorial_frontmatter.lua` | new |
+| `header`, `scalar` — bounded root presence and owned scalar decoding | `lua/parley/skills/review/collaboration_value.lua` | new |
 | Processing selector and free-text resolution | `lua/parley/skills/review/instruction.lua` | modified |
 | Presentation selection | `lua/parley/presentation.lua` | modified |
 | Owned preparation and submission lifecycle | `lua/parley/document_session.lua` | modified |
@@ -90,6 +92,12 @@ The thin shell captures the pure projection and expected hashes before applying 
 For outside-Couch ordinary Markdown, validate/prepare using the same pure rules and invoke the local review with effective processing settings; free-form is sufficient, so a missing legacy process-instruction no longer opens a required prompt. Show the existing local-route outcome explicitly. Preserve the local review's selection/marker semantics and direct invocation callers. Typed legacy session files retain their current routing, using shared preparation exactly once before their existing save/send. Do not fall back to local review merely because a known Couch pane's actor lookup failed.
 
 Persistent fake: reuse `tests/helpers/fake_couch.lua`, `tests/fixtures/fake_couch_registry.py` and the native registered-document fixtures. It records registration, owner, sends, receipts, delays and refusals. Assert actual saved bytes, registry identity and notification/band, not mocked function-call counts alone. A temporary read-at-send observation may extend this fake if needed to prove save→register→send ordering.
+
+### Native preparation API
+
+| Name | Lives in | Status |
+|---|---|---|
+| `project`, `apply`, `prepare` — capture compact witnessed insertion, authorize/apply once, and reuse outside registered submission | `lua/parley/editorial_prepare.lua` | new |
 
 ## Actions and visible states
 
@@ -134,18 +142,18 @@ ARCH-DRY: one canonical/legacy resolution owner, existing selectors, registry, s
 
 **Files:** new `tests/fixtures/editorial_fill/` reference copies/provenance; new `tests/unit/editorial_frontmatter_spec.lua`; existing `tests/unit/review_instruction_spec.lua`, `tests/unit/presentation_spec.lua`, `tests/unit/frontmatter_spec.lua`.
 
-- [ ] After #562 lands, fetch its main, verify landed revision and copy all editorial-fill cases with provenance/digests. Normal tests use tracked copies, with no peer-checkout dependency. Check #562's prose and mode metadata through the existing snapshot generator.
-- [ ] Implement the named pure-function strategies above in their mapped tests, using pinned producer cases and generated malformed-header/preservation oracles; prove each regression red before the corresponding implementation.
-- [ ] Run the mapped focused cases and observe RED before implementing the pure projection. Implement only shared resolution/projection, then observe GREEN and commit.
+- [x] After #562 lands, fetch its main, verify landed revision and copy all editorial-fill cases with provenance/digests. Normal tests use tracked copies, with no peer-checkout dependency. Check #562's prose and mode metadata through the existing snapshot generator.
+- [x] Implement the named pure-function strategies above in their mapped tests, using pinned producer cases and generated malformed-header/preservation oracles; prove each regression red before the corresponding implementation.
+- [x] Run the mapped focused cases and observe RED before implementing the pure projection. Implement only shared resolution/projection, then observe GREEN and commit.
 
 ### Task 2: Route real saves and readers through the shared result
 
 **Files:** new `lua/parley/editorial_frontmatter.lua`, `lua/parley/editorial_prepare.lua`; existing `lua/parley/review_send.lua`, `lua/parley/agentic_document.lua`, `lua/parley/document_session.lua`, `lua/parley/session_sync.lua` if its legacy path needs preparation, `lua/parley/presentation.lua`, `lua/parley/skills/review/instruction.lua`.
 
-- [ ] Implement the named lifecycle/native strategies above in `tests/unit/document_session_spec.lua`, `tests/integration/review_send_spec.lua` and registered-document submission specs. Use controlled production events and the real buffer observer to make interruption order reproducible; observe the expected failures before changing the model/IO seam.
-- [ ] Implement the approved owned preparation protocol before ordinary save, with the same operation witness and no observer suppression. Preserve Child/process ownership from #416 and existing registry/send/receipt logic; no unrelated lifecycle rewrite.
-- [ ] Preserve deprecated legacy completion until #419 and update only its changed tests. Update old tests that asserted completely unchanged plain headers to assert preservation plus exact additions.
-- [ ] Run focused native cases on both supported runtimes, observe GREEN, inspect diff and commit.
+- [x] Implement the named lifecycle/native strategies above in `tests/unit/document_session_spec.lua`, `tests/integration/review_send_spec.lua` and registered-document submission specs. Use controlled production events and the real buffer observer to make interruption order reproducible; observe the expected failures before changing the model/IO seam.
+- [x] Implement the approved owned preparation protocol before ordinary save, with the same operation witness and no observer suppression. Preserve Child/process ownership from #416 and existing registry/send/receipt logic; no unrelated lifecycle rewrite.
+- [x] Preserve deprecated legacy completion until #419 and update only its changed tests. Update old tests that asserted completely unchanged plain headers to assert preservation plus exact additions.
+- [x] Run focused native cases on both supported runtimes, observe GREEN, inspect diff and commit.
 
 ### Task 3: Acceptance, mapping and landing
 
@@ -176,3 +184,7 @@ PQ-1 verified that the original insertion-inside-save proposal is invalid: the r
 ### 2026-10-23 — implementation ownership and bounded scan accounting
 
 The shared root-mapping scanner lives in collaboration_value.lua, whose existing quoted/flow/nested handling is reused rather than adding a second parser to frontmatter.lua (ARCH-DRY). The actual implementation performs a constant number of bounded header scans: input shape/presence, existing collaboration resolution, and projected-header validation when inserting. It never scans once per missing key. The N/2N mechanical guard counts executed Lua VM instructions with JIT disabled, including the existing routing pass over the body, instead of a self-reported scan counter; its ratio rejects quadratic growth. Native hashes remain a constant number of whole-buffer passes. Both input and resulting metadata include opening/closing fences in the approved 8192-line / 1-MiB envelope. Existing instruction.parse/resolve already supplies the selector primitive and remains unchanged; canonical component selection belongs in the new shared resolver. Runtime operation payloads retain only the small executable patch and effective settings, not parsed header trees, full postimages or body routing tables.
+
+### 2026-10-23 — exported API inventory checkpoint
+
+The architecture sweep found that the Core-concepts table described the modules but omitted exact names for their new public functions. Added the eight existing API names and classified project/apply/prepare as native IO. This documents the implemented approved mechanism; no runtime scope changes.

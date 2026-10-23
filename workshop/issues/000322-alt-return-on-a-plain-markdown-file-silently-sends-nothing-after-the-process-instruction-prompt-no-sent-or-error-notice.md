@@ -44,6 +44,13 @@ Authenticated dispatch 24886cea-c7ae-4329-a81f-ec5c69c35332 explicitly assigns t
 
 ### 2026-10-14
 
+
+### 2026-10-23 — shared implementation staged; live acceptance pending
+
+The shared #418 implementation now owns exact witnessed preparation before ordinary save/register/send, preserving one submit owner and its visible result. Native fake-Couch tests prove saved bytes and persisted registration before delivery; model/native tests passed on Neovim 0.12.5 and 0.11.7. Outside-Couch review explicitly announces local processing and no longer requires the legacy prompt. Current-route failures and duplicate/pending behavior remain under the existing admission tests. The historical 2026-10-14 failure is not claimed reproduced.
+
+PR 338 is staged on parley.nvim:0 at code head 9a5967f4768a181522ba89fa2ddfaf5d746750a7. Authenticated TL cf318a62 schedules the morning operator check of plain/partial headers and second press, with submissions to ops:0; waiting for the relayed result. The #418 Log owns current recorded-suite lease and remaining automated preflight. This card is authoritatively working/claimed via tracker verbs despite its checkout's old mirror; do not edit mirrored card fields manually. Exact next step: collect that acceptance and the final corrected-head check, then close this card with its separate verified evidence through the binary.
+
 ## Revisions
 
 ### 2026-10-23 — reopen for combined first-submit acceptance
