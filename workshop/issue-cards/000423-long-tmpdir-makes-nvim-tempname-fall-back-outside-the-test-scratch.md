@@ -1,6 +1,6 @@
 ---
 id: 000423
-status: codecomplete
+status: done
 created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: f0e50f6edcf4b76e2fe2655ec20587f0e61c0b08
         evidence_commit: 6b728457b31ce4e7113ea47910c3fbd96fe4ad1b
+        landed_commit: 729013a7ca6af3ff3e0aa9b821b55df54f5a23ee
 ---
 
 # Long TMPDIR makes nvim tempname() fall back outside the test scratch
