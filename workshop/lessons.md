@@ -975,3 +975,6 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - Revalidate birth-record bytes before unlinking, and rescan the whole retained tree after cleanup: a terminating child can publish another scope. Keep newer/pending evidence and fail unknown; an empty read followed by failed directory retirement is not successful cleanup.
 
 - Keep churning test evidence in per-worktree Git metadata, not the source tree a native tool may traverse. Linked worktrees require their own Git directory rather than the shared common directory; migration must still census unresolved evidence at the former location. Argument-injection tests can search immutable source without traversing concurrent Git/test metadata.
+
+- #416 close BR-1: a JSON round-trip oracle using the same native decoder cannot detect numeric precision loss. Preserve unknown raw values when the host number type cannot represent every JSON number; assert exact large integer, decimal and exponent text independently.
+- #416 close BR-2: a count followed by allocation is not capacity reservation across parallel runners. Reserve one of a fixed number of directories with atomic mkdir, and drive two callers through the final-slot interleaving in a deterministic test.

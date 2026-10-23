@@ -42,7 +42,7 @@ end
 local function decode(body)
     local ok, value = pcall(vim.json.decode, body)
     if not ok or type(value) ~= "table" then return nil, "invalid registry JSON" end
-    local stack, i = {}, 1
+    local stack, i, members = {}, 1, {}
     while i <= #body do
         local ch = body:sub(i, i)
         if ch == '"' then
@@ -58,11 +58,25 @@ local function decode(body)
                 local keys = stack[#stack]
                 if type(keys) ~= "table" or keys[key] then return nil, "duplicate registry JSON key" end
                 keys[key] = true
+                if #stack == 1 then
+                    -- Keep the original member bytes: Lua numbers cannot
+                    -- represent every future JSON integer or decimal.
+                    members[#members + 1] = { key = key, first = i }
+                end
             end
             i = last
         elseif ch == "{" then stack[#stack + 1] = {}
         elseif ch == "[" then stack[#stack + 1] = false
-        elseif ch == "}" or ch == "]" then stack[#stack] = nil end
+        elseif ch == "," and #stack == 1 then
+            local member = members[#members]
+            if member and member.first then member.body, member.first = body:sub(member.first, i - 1), nil end
+        elseif ch == "}" or ch == "]" then
+            if #stack == 1 then
+                local member = members[#members]
+                if member and member.first then member.body, member.first = body:sub(member.first, i - 1), nil end
+            end
+            stack[#stack] = nil
+        end
         i = i + 1
     end
     if value.version ~= 1 or (value.state ~= "born" and value.state ~= "pending") then
@@ -72,7 +86,7 @@ local function decode(body)
         or value.pid > Identity.MAX_PID) then
         return nil, "invalid birth record"
     end
-    return value
+    return value, nil, members
 end
 
 local function write(fd, body)
@@ -102,13 +116,21 @@ end
 function M.complete(ticket, pid, observe)
     local body, err = read_file(ticket, M.MAX_BYTES)
     if not body then return nil, err end
-    local value, why = decode(body)
+    local value, why, members = decode(body)
     if not value or value.state ~= "pending" then return nil, why or "ticket is not pending" end
     local observation = (observe or Identity.observe)(pid)
     if not observation or observation.kind ~= "live" then return nil, "child birth identity unavailable" end
     value.state, value.pid, value.start = "born", pid, observation.start
     if Model.classify(value, observation) ~= "live" then return nil, "invalid child birth identity" end
-    body = vim.json.encode(value)
+    local preserved = {}
+    for _, member in ipairs(members) do
+        if member.key ~= "state" and member.key ~= "pid" and member.key ~= "start" then
+            preserved[#preserved + 1] = member.body
+        end
+    end
+    preserved[#preserved + 1] = '"state":"born","pid":' .. vim.json.encode(pid)
+        .. ',"start":' .. vim.json.encode(observation.start)
+    body = "{" .. table.concat(preserved, ",") .. "}"
     if #body > M.MAX_BYTES then return nil, "birth record exceeds limit" end
     local temporary = ticket .. ".new"
     local fd, open_err = uv.fs_open(temporary, "wx", 384)
@@ -239,9 +261,29 @@ end
 
 --- Allocate a private scope under the run context, bounded even on failures.
 function M.scope(base)
-    local scopes, err = entries(base, M.MAX_SCOPES - 1)
+    local scopes, err = entries(base, M.MAX_SCOPES)
     if not scopes then return nil, err end
-    return uv.fs_mkdtemp(base .. "/spec-XXXXXX")
+    -- Every caller competes for the same finite slot set. Atomic mkdir is the
+    -- reservation, so stale parallel snapshots cannot over-admit or strand a
+    -- separate lock when their owner dies. Census still reads legacy scopes;
+    -- allocation refuses such leftovers rather than guessing spare capacity.
+    for _, scope in ipairs(scopes) do
+        local digits = scope.name:match("^spec%-(%d+)$")
+        local slot = tonumber(digits)
+        local info = uv.fs_lstat(scope.path)
+        if not slot or tostring(slot) ~= digits or slot < 1 or slot > M.MAX_SCOPES
+            or not info or info.type ~= "directory" or info.uid ~= uv.getuid()
+            or bit.band(info.mode, 18) ~= 0 then
+            return nil, "unknown or legacy registry scope: " .. scope.path
+        end
+    end
+    for slot = 1, M.MAX_SCOPES do
+        local path = base .. "/spec-" .. slot
+        local ok, why, code = uv.fs_mkdir(path, 448)
+        if ok then return path end
+        if code ~= "EEXIST" then return nil, why end
+    end
+    return nil, "registry scope limit reached"
 end
 
 function M.prune(dir)

@@ -765,6 +765,7 @@ atlas:
       - tests/unit/spec_jobs_spec.lua
       - tests/unit/test_process_model_spec.lua
       - tests/unit/test_processes_spec.lua
+      - tests/unit/test_process_scope_spec.lua
       - tests/integration/test_process_census_spec.lua
 
   infra/vault:

@@ -128,3 +128,13 @@ Both runtime focused mappings passed after placement correction: `/tmp/parley416
 
 
 The broader harness mapping passed after Git metadata placement (`/tmp/parley416-placement-harness.log`), including native runner deadlines, Python/lease controls and terminal verified/clean census. PR #336 is updated. The single replacement suite is queued as `lease-3515239873` on code head `cb8aef34`, session 35471, inflight log `sdlc/test-stats/inflight/ce8e0b7283668633eb0eeabb471a86d6/run.log` in the Git common directory. Initial FIFO position 16; no full-suite result yet. Per tl-worker's permitted overlap, request the fresh close review while this exact-head check waits. Landing requires its actual pass; code fixes require a new final-head run.
+
+
+### 2026-10-22 — close round 1 REWORK
+
+The fresh review confirmed the main native purpose and both runtimes, but reproduced two blocking classes: BR-1 lossy unknown numeric publication, BR-2 non-atomic scope-capacity admission. Applying the authoritative plan Revision for raw unknown-member preservation and atomic bounded scope slots, with independent numeric-text and deterministic concurrent-admission regressions. Cancelled queued `lease-3515239873` through the supported control before it ran; it supplies no suite pass. A single replacement must use the fixed code head. The review's own broad harness encountered eight scratch-placement failures caused by its TMPDIR being inside its disposable checkout; the actual slot harness passed with external scratch.
+
+
+BR-1's exact numeric-text regression failed before the fix (`/tmp/parley416-number-red.log`) and passes after raw-member publication (`/tmp/parley416-number-green.log`). BR-2's controlled native-scan barrier regression admitted both callers before the fix (4 failing scope cases), and now only one caller reserves the last atomic slot (4 passing scope cases, `/Volumes/TestScratch/parley416-scope.UiVDoH/` test map). No extra lock is introduced. Combined affected mapping passes on 0.11.7 (`/tmp/parley416-reviewfix-compat.log`); focused lint is clean across 829 files. Preferred-runtime combined verification is in progress.
+
+Preferred Neovim 0.12.5 combined verification also passed (`/tmp/parley416-reviewfix-native.log`): 6 native lifecycle, 7 policy, 19 registry, 4 scope-admission and 4 source-find cases. Both runs end in a verified/clean terminal census; these results cover the complete review-fix interdiff.

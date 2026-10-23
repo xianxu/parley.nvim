@@ -90,6 +90,22 @@ describe("retained birth registry", function()
         assert.is_truthy(body:find('"array":[]', 1, true), body)
     end)
 
+    it("preserves unknown JSON numeric tokens without a lossy decoder oracle", function()
+        for _, future in ipairs({
+            '9007199254740993', '-9007199254740993', '0.123456789012345678901234567890',
+            '{"nested":[9007199254740993,1.234567890123456789e+27,-0,1E-99]}',
+        }) do
+            local ticket = assert(Processes.prepare(dir))
+            local member = '"future" : ' .. future
+            vim.fn.writefile({ '{"version":1,"state":"pending",' .. member .. '}' }, ticket)
+            assert(Processes.complete(ticket, 7, function() return { kind = "live", start = "10" } end))
+            local body = table.concat(vim.fn.readfile(ticket), "\n")
+            assert.is_truthy(body:find(member, 1, true), body)
+            assert.equals("born", Processes.read(dir)[1].record.state)
+            assert(Processes.abort(ticket))
+        end
+    end)
+
     it("refuses malformed, duplicated or unresolved storage without effects", function()
         for _, body in ipairs({ '{}', '{"version":1,"version":1,"state":"pending"}',
             '{"version":1,"state":"pending","future":{"x":1,"x":2}}',

@@ -166,3 +166,10 @@ Added native Git checkout/worktree placement and retained-legacy unknown tests, 
 ### 2026-10-22 — verification handoff to acceptance gates
 
 Targeted implementation verification is complete on both runtimes and the broader harness passes. Split the final implementation checkbox from the acceptance gates: PR #336 and the one recorded suite are prepared; the still-pending full-suite result, close verdict and integration/landing remain explicit gates, allowing the tl-worker-approved close-review/queued-suite overlap without falsely recording those outcomes as complete.
+
+
+### 2026-10-22 — close round 1: lossless values and atomic scope capacity
+
+BR-1: publication must retain raw top-level unknown member slices from the validated JSON, including nested numeric tokens, rather than round-tripping them through Lua's number representation. Rewrite only known birth fields. Regression oracles compare original numeric text directly, covering large signed integers, precise decimals, exponents and negative zero; decoding both sides would hide the defect.
+
+BR-2: reserve one of 64 canonical scope directories with native atomic mkdir, so simultaneous runners cannot both consume the final slot. New outer contexts are fresh; noncanonical leftovers are a visible refusal at allocation, while census still reads old random scopes. A controlled two-caller barrier at 63 slots must admit exactly one caller and keep the retained tree within the census bound. Scope retirement remains observed-death cleanup, with no extra lock that can strand after owner death.
