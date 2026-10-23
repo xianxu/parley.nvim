@@ -40,9 +40,10 @@ it immediately; if it doesn't, show a clear one-line error ("No image in the cli
 
 ## Plan
 
-- [ ] Reproduce the prompt with a native UI and fake clipboard. The async save path currently has no explicit confirmation; guard against builtin notification hit-enter as well as input/confirm dialogs.
-- [ ] Keep existing default attachment naming, placement, writer/shrink and rollback (ARCH-DRY). Remove the paste completion's blocking feedback; emit one-line error `No image in the clipboard` for no-image, with buffer/disk unchanged.
-- [ ] Cover Normal/Insert mappings, image bytes, no prompt and absent-image no mutation through the existing fake and native UI on both supported Neovim versions. Update README/atlas, run suite and close review.
+- [x] Reproduce the prompt with a native UI and fake clipboard. The async save path currently has no explicit confirmation; guard against builtin notification hit-enter as well as input/confirm dialogs.
+- [x] Keep existing default attachment naming, placement, writer/shrink and rollback (ARCH-DRY). Remove the paste completion's blocking feedback; emit one-line error `No image in the clipboard` for no-image, with buffer/disk unchanged.
+- [x] Cover Normal/Insert mappings, image bytes, no prompt and absent-image no mutation through the existing fake and native UI on both supported Neovim versions. Update README/atlas.
+- [ ] Run the recorded suite, close review and land on SHIP.
 
 
 ## Log
@@ -52,3 +53,13 @@ it immediately; if it doesn't, show a clear one-line error ("No image in the cli
 ### 2026-10-22 — quick-flow design
 
 The existing clipboard-to-assets path does not call a confirmation dialog; its full-path success notice can trigger builtin hit-enter UI. First reproduce this through a real attached native UI instead of deleting an imaginary naming prompt. No new state, dependency or save protocol; existing terminal cleanup and shrink/error diagnostics remain authoritative (ARCH-PURPOSE/DRY). Posted the bounded plan to the hub, proceeding unless it objects.
+
+## Revisions
+
+### 2026-10-22 — observed prompt is builtin hit-enter
+
+Native attached-UI reproduction and TL/operator confirmation identify the long success message as Neovim's hit-enter, not a naming/confirmation dialog. Keep the async save and default naming; shorten completion to `Image pasted` plus existing shrink diagnostics. No-image becomes the exact one-line error. No new state, save protocol or UI interception.
+
+### 2026-10-22 — targeted verification
+
+RED native UI tests on0.12.5 independently observed Normal/Insert become mode `r` after `Parley: pasted assets/...`; the no-image contract also failed as expected (3 intended failures total, /tmp/parley-417-native-mode-red.log). Fast nvim_get_mode observes the prompt; Enter is sent only after recording failure for inspection/teardown. GREEN native tests keep builtin notify, assert correct bytes/default link and prove subsequent ordinary typing reaches the buffer. Attachment mapping:492PASS/0FAIL/0ERROR on each nvim0.12.5 and0.11.7, clean censuses (/Volumes/TestScratch/parley-417-green-final.log and -green-0117.log). One stale PNG-extension notice assertion was corrected after the initial green attempt; no product fix was hidden by a retry. Lint0warnings/0errors3files; diff check clean. README/atlas and lesson updated. No recorded full-suite pass, close or landing claimed yet.

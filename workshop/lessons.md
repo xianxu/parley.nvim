@@ -966,3 +966,7 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
 
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
+
+## 2026-10-22 (#417 — notification prompts after a completed edit)
+
+- A successful asynchronous edit can still block the next key on builtin notification hit-enter. Keep the real notification surface in attached-UI regressions; an injected recording notifier hides this failure. Inspect fast `nvim_get_mode` before ordinary Lua RPC when a prompt may be active, then prove subsequent typing reaches the buffer.
