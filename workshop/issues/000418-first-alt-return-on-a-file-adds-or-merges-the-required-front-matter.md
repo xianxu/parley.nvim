@@ -176,6 +176,12 @@ BR-1 now tests whether a conservative plain spelling round-trips through the aut
 
 Observed RED before implementation: pure suite 13 pass/3 assertion failures/0 errors (implicit true, literal NUL, root indentation), native suite 9 pass/7 failures/0 errors. After codec only, pure output was 15 pass with only indentation failing; after layout correction, pure suite is 16/16 and native 16/16 on Neovim 0.12.5 and 0.11.7, with clean censuses. Extended implicit spellings include signed special floats and legacy single-letter boolean spellings. Updated Lua files pass luacheck, and diff whitespace is clean. Next: commit/push, restage the corrected writer, run one new recorded suite and rerun close's owned review; do not reuse the earlier runtime-head suite for these code fixes.
 
+### 2026-10-23 — close round 2 REWORK; root scalar context
+
+Round 2 confirms BR-1/BR-2/BR-3 addressed and adds Critical BR-4, the second persisted-scalar-roundtrip family finding: the scalar reader applies flow delimiters to ordinary root instruction text, including complete no-op headers. Bounded enumeration reproduces punctuation, valid numeric/indicator-prefixed strings and YAML named escapes, across canonical/legacy and partial/complete headers. Pure RED: 17 pass, 3 grouped failures, 0 errors; native RED: 18 pass, 6 failures, 0 errors, clean census. Production remains unchanged at this checkpoint. Fix the root scalar context and exact non-string recognition, preserving collection/type refusal and existing bytes; then run both runtimes before the next close. A third family finding requires stopping for a TL re-plan.
+
+The retained recorded suite lease-2325139789 on 46d9d0d1 remains queued (terminal 23477, FIFO 6 at last observation), so no continuation/restart is taken. After the correction is verified and pushed, cancel this obsolete queued lease via supported local-check control and enqueue the corrected head once, as TL authorized. The previous recovery screen is unavailable; Git, current gate sidecars, issue Log and retained runner output supply recovery evidence.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
