@@ -42,9 +42,9 @@ reports clearly.
 
 ## Plan
 
-- [ ] Catch only native gf no-target E446/E447 at its owning fallback, with an Alt+o callback; keep direct gf and explicit target errors intact.
-- [ ] Reuse the shared document_band pulse/layer owner for a quiet same-window cue, temporary bar restoration and Insert-mode restoration (ARCH-DRY, ARCH-ORDER).
-- [ ] Add red-first native Normal/Insert no-target cases with/without bars, valid path and missing-link controls; verify shared pulse cleanup and override behavior, then recorded suite and close.
+- [x] Catch only native gf no-target E446/E447 at its owning fallback, with an Alt+o callback; keep direct gf and explicit target errors intact.
+- [x] Reuse the shared document_band pulse/layer owner for a quiet same-window cue, temporary bar restoration and Insert-mode restoration (ARCH-DRY, ARCH-ORDER).
+- [x] Add red-first native Normal/Insert no-target cases with/without bars, valid path and missing-link controls; verify shared pulse cleanup and override behavior. Recorded suite and close are the remaining workflow gates.
 
 ## Log
 
@@ -71,3 +71,11 @@ The native fallback now handles only E446/E447 when Alt+o supplies its callback.
 A first shared run passed32 renderer and18 lock-leave tests, then the new fixture failed to complete: it replaced a live breadcrumb-owned bar and waited for that artificial override to restore. Set breadcrumb.enable=false explicitly for genuine no-bar/custom-bar cases, matching the documented option. The next focused run passed13/0/0; no product timeout change or flake claim. Added a separate state-owned lock-cell control.
 
 Queued-navigation control red: /Volumes/TestScratch/parley425.YDVqCr/navigation-race-red.log,13/1/0 with the buffer identity guard removed, specifically catching a notice painting after enew. Restored the guard; final context and shared targeted runs are in progress. Logs under /Volumes/TestScratch/parley425.YDVqCr. Initial lint found a shadowed pulse name; renamed the shared function start_pulse, final lint pending. Required recorded suite and boundary review remain pending. #428 remains queued; no styling change included here.
+
+### Final targeted verification
+
+The complete context/file_references run found one genuine compatibility failure:669 passed/1 failed in navigation-green.log. Existing open_reference_spec asserts that a selected explicit non-Markdown link's failed native gf still reports the error and restores the source cursor. Limited the no-target callback to fallback without a selected reference; this preserves the existing explicit-link contract rather than weakening that regression.
+
+Final verification after that fix: final-green.log exits0,77/0/0 (open_reference_spec, native no-target14 cases, arrival architecture guards). Other context tests had passed in navigation-green.log; shared-green.log exits0,64/0/0 (renderer32, lock-leave18, native no-target14). Clean process censuses. Final lint-final2.log exits0,854 files/0warnings/errors; git diff-check clean. All logs in /Volumes/TestScratch/parley425.YDVqCr. Native controls retain builtin notifications for no-target gestures and verify subsequent typing, source text/cursor, Normal/Insert mode, temporary/custom bar restoration, retained operator cell, real E37 open failure and direct smart-gf E447 behavior. The queued-navigation control fails without its identity guard and passes with it.
+
+Required recorded suite and close review remain pending. Operator smoke should press Alt+o on a plain word and blank line (Normal and Insert), with a normal state-owned bar and in an untracked/breadcrumb-disabled buffer: brief cue, no prompt, bar returns; then open a real path. Ask the hub to sequence the live check before touching :0.

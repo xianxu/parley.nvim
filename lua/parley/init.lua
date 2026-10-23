@@ -5147,10 +5147,10 @@ M.cmd.OpenFileUnderCursor = function()
 		if item then vim.api.nvim_win_set_cursor(win, {item.fallback_row or item.row, item.fallback_col}) end
 		local ok, err = pcall(M.cmd.ResolveRefOrGotoFile, {is_current = is_current, open = followed_open,
             follow = function(open) return history.follow(follow_origin, open) end,
-            on_no_file = function()
+            on_no_file = not item and function()
                 require("parley.document_band").flash_notice(win, "No file to open")
                 restore_insert()
-            end})
+            end or nil})
 		if item then restore_cursor() end
 		if not ok then error(err) end
 	end

@@ -1029,3 +1029,6 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #417 BR-1: enumerate every producer of completion diagnostics before declaring feedback nonblocking. A short prefix with an unbounded suffix still blocks; native UI tests must cover conversion-limit refusal, tool resolution and converter failure, alongside the plain success case.
 
 - #417 BR-2: a mode-specific input contract needs both accepted and refused native mapping cases. A direct function call with a recording notifier does not prove that Normal/Insert input survives a builtin error notice; forward to the real UI, assert no mutation, and type the next key.
+
+
+- #425: no-target handling belongs at the native fallback and must retain its caller context. Catch only the native absence codes for a gesture without an explicit selected reference; keep selected-target errors and source-cursor restoration under independent regression coverage. Test temporary bars with breadcrumbs explicitly disabled rather than overwriting a live renderer-owned bar and assuming it still owns those options.
