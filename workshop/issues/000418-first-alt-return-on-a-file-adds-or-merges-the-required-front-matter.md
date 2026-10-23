@@ -231,6 +231,14 @@ Read-only LuaJIT probe established a quadratic native-pattern path in the added 
 
 The superseded queued suite lease-3976235975 was cancelled via supported local-check control before admission; no record was produced. A fresh suite is required on the deletion's pushed head. Authenticated TL 64c7d8c4 then places merge and #419 on HOLD while the operator considers a smaller mode-key contract; finish only this correction, regression and suite, and retain the reviewed result. Do not run sdlc merge or start #419 until the hub gives fresh direction. No mode-key requirement has yet changed. Exact next step: collect compat tests, commit/push, run the post-close fix review and fresh recorded suite; report their outcome and wait for the operator's contract decision.
 
+### 2026-10-23 — correction SHIP; stage cleared; finish suite under merge hold
+
+Post-close fix review returned SHIP with no findings, bound to evidence commit 87fdc7db447dedb0feb8564775e0e7c3edc9551f. Reviewer passed 27 editorial + 22 parser cases and restored the removed classifier in memory to prove the new colon-string regression fails. Parent passed those same cases on both installed runtimes. Latest code is d2c41539377d246d50cda527312d979ab77789bf; later evidence/mirror commits are bookkeeping only.
+
+Final-code recorded suite is retained in terminal 50973, lease-2098775020, last observed FIFO 7; detached checkout /Volumes/TestScratch/local-checks/sdlc-local-2025288039, log .git/sdlc/test-stats/inflight/24593764dfed74b62ae2f9f21175c09a/run.log. Keep it; do not restart or requeue for docs-only descendants. Exact next step: read this run to its result, classify any failure without a blind retry, record/report the result, then wait for the operator's policy direction. Do not run sdlc merge or start #419 under the explicit hold. #322 remains working and will need its main-based acceptance-only branch only after an authorized #418 landing.
+
+Authenticated TL ab1fdf09 directs clearing the live stage, completed successfully: parley.nvim:0 is back on main, no Go binaries. Hub receipt bd56153b is submitted, including the explicit limitation that checkout restoration alone does not unload the running editor's cached Lua; the hub coordinates any needed live reload. No replacement three-key build is staged. Fix SHIP/retained-run report b91e5a9f has been sent; verify its submitted receipt.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
