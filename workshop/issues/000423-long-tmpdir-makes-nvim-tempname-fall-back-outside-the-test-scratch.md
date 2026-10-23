@@ -43,12 +43,25 @@ Two checks, the same split as #422:
 2. **In-process (tests/arch/scratch_placement_spec.lua):** assert that vim.fn.tempname() lies under $TMPDIR. This asserts the produced path rather than a constant, so it also catches any other fallback cause and any change in Neovim's limit.
 
 Tests:
-- [ ] Guard: a root whose `/tmp` is exactly 189 bytes passes; 190 refuses with the length message and creates nothing.
-- [ ] Spec pins the constant against the running nvim: TMPDIR of 189 bytes is used, and 190 falls back. If Neovim changes its limit, the guard's constant fails visibly here rather than drifting. The suite's compat pass runs it on the second version.
-- [ ] The scratch_placement tempname()-under-$TMPDIR assertion.
-- [ ] Live: a long-root `make test-spec SPEC=infra/config TEST_ENV_ROOT=<long>` refuses up front; the normal checkout passes infra/test_harness and infra/config.
-- [ ] atlas/infra/test_harness.md: one line next to the #422 guard.
+- [x] Guard: a root whose `/tmp` is exactly 189 bytes passes; 190 refuses with the length message and creates nothing.
+- [x] Spec pins the constant against the running nvim: TMPDIR of 189 bytes is used, and 190 falls back. If Neovim changes its limit, the guard's constant fails visibly here rather than drifting. The suite's compat pass runs it on the second version.
+- [x] The scratch_placement tempname()-under-$TMPDIR assertion.
+- [x] Live: a long-root `make test-spec SPEC=infra/config TEST_ENV_ROOT=<long>` refuses up front; the normal checkout passes infra/test_harness and infra/config.
+- [x] atlas/infra/test_harness.md: one line next to the #422 guard.
 
 ## Log
 
 Filed from #422, at the TL's request (ops:0).
+
+### 2026-10-23 — implemented (47a12d69)
+
+The TL approved the plan. The guard holds `TMPDIR_MAX=189` and refuses `ROOT/tmp` over it before any write. In scratch_placement_spec:
+- in-process: tempname() lies under $TMPDIR;
+- guard: 189 passes, 190 refuses and creates nothing;
+- pin: the running nvim uses a 189-byte TMPDIR and falls back at 190.
+
+Evidence:
+- infra/test_harness 233/0/0 with a clean census on each of 0.12.5 and 0.11.7, selected via PARLEY_TEST_NVIM (the dry run confirms the PATH).
+- Live `make test-spec SPEC=infra/config TEST_ENV_ROOT=<170-byte root>` exits 2 with the single test-placement length message and creates nothing.
+- Counterfactual TMPDIR_MAX=190: the pin case fails with "Neovim refused a TMPDIR of the guard's limit, 190 bytes". Restored with git checkout of the committed file.
+

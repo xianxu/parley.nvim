@@ -64,7 +64,11 @@ ancestor carries the `.parley` marker (#422). An inside-checkout `sdlc` review
 put `TMPDIR` in the review clone. The zero-config spec then found the clone's
 marker and wrote a chat into the clone's `workshop/parley`. In-process, the
 spec-level guard would have reported the problem only after other specs had
-already written into the tree.
+already written into the tree. The guard also refuses a `TEST_ENV_ROOT/tmp`
+longer than 189 bytes (#423). Neovim ignores a `$TMPDIR` that long, and
+`tempname()` silently falls back to `/tmp/nvim.<user>`. The in-process spec pins
+that limit against the running Neovim. It also asserts that `tempname()` lies
+under `$TMPDIR`, which catches a fallback for any other reason.
 
 `tests/arch/scratch_placement_spec.lua` is the in-process guard: it asserts
 `vim.fn.tempname()`, `'directory'`, `$HOME`, and the `$XDG_*` dirs all resolve
