@@ -12,6 +12,19 @@
 - When a model rejects external evidence, callbacks, cached results and notices must consume its accepted outcome rather than the transport's raw reply. Test their agreement with a transport-valid acknowledgment that fails the model's fuller identity check.
 - Validate all known model inputs before allocating resources, using the same pure field rules as the final constructor. Rejected allocated values or construction must finish exact cleanup and release the shared queue; test a rejected request followed by successful ordinary work and close, rather than rejection alone.
 
+## 2026-10-22 (#409 — a census is not run ownership)
+
+- Persistence and a recognizable command prove that a process exists, not that
+  its owner has finished. Hold one checkout lease across scratch mutation,
+  execution and both cleanup phases; reuse its descriptor through recursive make.
+  Reentry alone does not order sibling goals: serialize them within the owner too.
+- #409 close BR-1: MAKECMDGOALS describes requested roots, not Make's transitive
+  recipe graph. Put admission at the protected target's execution boundary and
+  reject unowned internal bodies. Test direct, alias-chain and default entry;
+  source enumeration alone did not catch the bypass.
+- Test dry-run behavior through recursive make with long options too. Apple's
+  make can put `-n` after `--no-print-directory` in MAKEFLAGS, so its first word
+  alone cannot establish whether a nested command is print-only.
 
 ## 2026-10-16 (#353 — displayed ancestry and native history)
 
@@ -965,6 +978,11 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #405: A child RPC wait can inherit the correct arrival budget while hiding it behind a generic local or vararg. Keep its arrival-derived name inside the child and run the architecture guards with the targeted mapping; behavioral passes alone miss those contracts. Parser-wide protection likewise needs each external decode locally explicit to the JSON guard.
 - #411: preservation can save a buffer and clear modified without retiring operator work. A dirty buffer discovered after its edit needs an unknown-preimage observed fact in the existing admission owner before that save; test a second foreign generation, not just the first successful copy. Native suppressed FileChangedShell handling emits no reload Post event, so observe actual event order rather than assuming Post always fires.
 
+- #412: A refusal/retry behavioral fixture must not assume its external producer
+  always beats the product UI deadline. A completed timeout legitimately admits
+  editing. Scope a test arrival budget to the behavioral fixture, retain separate
+  product-deadline controls, and assert the completed outcome before protection.
+  Failure diagnostics include outcome, elapsed time, mode, runtime and load.
 - #413: A clear action must use the picker's actual filtered-row snapshot, including visible ancestor context. Under the store lease, skip incidental expiry for this action so hidden seen entries remain even past their grace. Test that expired-hidden counterexample, and update adjacent comments when a formerly unconditional sweep gains an exception (close review's advisory).
 
 - #405 final-suite corrections: clean embedded Lua chunks import the shared arrival budget explicitly; a positive wait hidden inside a chunk is still a suite wait. A new blocking executable fixture installs the existing parent-death watchdog before its first IO, and the architecture corpus count grows with the fixture. Verify parent death with stdin independently held open so EOF cannot mask a missing watchdog.
@@ -973,3 +991,27 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 
 - #405 BR-8: discovery owns negative outcomes too. Distinguish positive absence from unavailable lookup, cover pre-allocation identity rejection and allocated rejection, and share notice dedup with the dispatcher for the same buffer lifetime. Stale callbacks must not report into a replacement lifetime.
 - #405 BR-9: whenever an executable gains a required argument, sweep all changed runnable entrypoints and their README commands in the same round. A prerequisite sentence or an atlas-only invocation does not make the README runnable.
+
+## 2026-10-22 (#416 — birth evidence through terminal census)
+
+- Generic embedded argv cannot prove checkout ownership. Retain native PID/start at the spawn seam; persist a pending ticket before the effect so launcher death before publication stays unknown rather than becoming an empty clean ledger. A signal or leader exit cannot establish joined descendant death.
+- Preserve unknown persisted JSON members as values, including null and empty-container kinds. Converting null to Lua nil before a rewrite silently loses future fields. Validate known fields, escaped duplicate keys and native integer widths before any native effect.
+- Revalidate birth-record bytes before unlinking, and rescan the whole retained tree after cleanup: a terminating child can publish another scope. Keep newer/pending evidence and fail unknown; an empty read followed by failed directory retirement is not successful cleanup.
+
+- Keep churning test evidence in per-worktree Git metadata, not the source tree a native tool may traverse. Linked worktrees require their own Git directory rather than the shared common directory; migration must still census unresolved evidence at the former location. Argument-injection tests can search immutable source without traversing concurrent Git/test metadata.
+
+- #416 close BR-1: a JSON round-trip oracle using the same native decoder cannot detect numeric precision loss. Preserve unknown raw values when the host number type cannot represent every JSON number; assert exact large integer, decimal and exponent text independently.
+- #416 close BR-2: a count followed by allocation is not capacity reservation across parallel runners. Reserve one of a fixed number of directories with atomic mkdir, and drive two callers through the final-slot interleaving in a deterministic test.
+
+- #416 close BR-3: an atomic capacity reservation still needs retirement semantics. Enumerate allocation/allocation, allocation/retirement and retirement/reuse together. Only explicit ENOENT permits proceeding after a stale directory snapshot; unreadable entries remain unknown. Drive each ordering with a controlled barrier.
+
+- #416 close BR-4: canonicalize a shared fixture base before deriving path expectations or metadata-fake keys. Otherwise symlinked scratch makes the fake identify a different path from production. Run sensitive tests under an explicit scratch alias as part of the normal suite, rather than relying on machine-specific `/tmp` layout.
+
+- #416 first full suite: generated child Lua must receive the same arrival budget by value as parent predicates. Include the existing arrival architecture guard in the affected harness mapping; a narrow native map alone can miss static guard violations in generated source strings.
+## 2026-10-22 (#417 — notification prompts after a completed edit)
+
+- A successful asynchronous edit can still block the next key on builtin notification hit-enter. Keep the real notification surface in attached-UI regressions; an injected recording notifier hides this failure. Inspect fast `nvim_get_mode` before ordinary Lua RPC when a prompt may be active, then prove subsequent typing reaches the buffer.
+
+- #417 BR-1: enumerate every producer of completion diagnostics before declaring feedback nonblocking. A short prefix with an unbounded suffix still blocks; native UI tests must cover conversion-limit refusal, tool resolution and converter failure, alongside the plain success case.
+
+- #417 BR-2: a mode-specific input contract needs both accepted and refused native mapping cases. A direct function call with a recording notifier does not prove that Normal/Insert input survives a builtin error notice; forward to the real UI, assert no mutation, and type the next key.

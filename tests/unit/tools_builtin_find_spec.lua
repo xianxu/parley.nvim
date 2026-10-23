@@ -26,7 +26,9 @@ describe("find tool", function()
     end)
 
     it("treats command substitution text in name as data", function()
-        local r = handler({ path = ".", name = "$(echo PARLEY_SENTINEL_144)" })
+        -- Exercise argument handling against immutable sources, independently
+        -- of concurrent Git/test metadata activity in a contributor checkout.
+        local r = handler({ path = "lua/parley", name = "$(echo PARLEY_SENTINEL_144)" })
         assert.is_false(r.is_error)
         assert.not_matches("PARLEY_SENTINEL_144", r.content)
     end)

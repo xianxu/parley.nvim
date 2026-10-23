@@ -72,6 +72,12 @@ function Child:input(keys)
     return self:request("nvim_input", keys)
 end
 
+--- Send an RPC notification: there is no reply to wait for. Retained ownership
+--- still requires the caller/runner to join the child, including detached probes.
+function Child:notify(method, ...)
+    return vim.rpcnotify(self.channel, method, ...)
+end
+
 --- End the child and reap it.
 function Child:stop()
     pcall(vim.fn.jobstop, self.channel)
@@ -85,7 +91,7 @@ function M.start(options)
     options = options or {}
     local state={exited=false}
     local channel = vim.fn.jobstart({ vim.v.progpath, "--clean", "--embed", "--headless", "-i", "NONE" },
-        { rpc = true,on_exit=function() state.exited=true end })
+        { rpc = true, detach = options.detach, on_exit=function() state.exited=true end })
     assert(channel > 0, "could not start an embedded nvim")
     local child = setmetatable({ channel = channel, pid = vim.fn.jobpid(channel) }, Child)
     owned[child]=state
@@ -95,7 +101,8 @@ function M.start(options)
             child:request("nvim_ui_attach", options.ui[1], options.ui[2], { rgb = true })
         end
         child:exec(options.rtp == "prepend" and "vim.opt.rtp:prepend(...)" or "vim.opt.rtp:append(...)", vim.fn.getcwd())
-        child:exec([[local root=...;package.path=root..'/?.lua;'..package.path]],vim.fn.getcwd())
+        child:exec([[local root = ...; package.path = root .. '/?.lua;' .. package.path
+            require('tests.helpers.spec_jobs').install()]], vim.fn.getcwd())
         local snapshot=child:exec([[local fixture=require('tests.helpers.remote_runtime_fixture').install()
             require('tests.helpers.discovery_registry_fixture').install(fixture.parent..'/discovery')
             require('tests.helpers.exit_with_parent').install(nil,function() assert(fixture.cleanup()) end)

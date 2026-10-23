@@ -119,10 +119,12 @@ describe("#220 census conformance, against the real ps", function()
         if vim.fn.executable("ps") == 0 then
             return pending("ps is not executable here")
         end
-        -- --root points at a tempname so nothing can match; --grace 0 because
-        -- nothing is expected to be found.
-        local out = vim.system({ "python3", SCRIPT, "--root", vim.fn.tempname(),
+        -- An isolated checkout has its own lease and no matching processes.
+        local root = vim.fn.tempname()
+        vim.fn.mkdir(root, "p")
+        local out = vim.system({ "python3", SCRIPT, "--root", root,
             "--phase", "after", "--grace", "0" }, { text = true }):wait(30000)
+        vim.fn.delete(root, "rf")
         assert.equals(0, out.code, out.stdout)
         if out.stdout:find("skipped", 1, true) then
             return pending("ps is refused here (an agent sandbox); census not exercised")

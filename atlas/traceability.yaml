@@ -189,6 +189,7 @@ atlas:
       - tests/unit/parse_chat_spec.lua
       - tests/unit/build_messages_spec.lua
       - tests/integration/paste_image_spec.lua
+      - tests/integration/paste_image_native_spec.lua
       - tests/arch/log_sinks_spec.lua
       - tests/integration/query_cache_spec.lua
       - tests/arch/chat_delete_sweep_spec.lua
@@ -712,6 +713,9 @@ atlas:
       - tests/helpers/jit_oracle.lua
       - tests/helpers/spec_jobs.lua
       - tests/helpers/process_identity.lua
+      - tests/helpers/test_process_model.lua
+      - tests/helpers/test_processes.lua
+      - scripts/test-process-census.lua
       - tests/helpers/embedded_nvim.lua
       - tests/helpers/spec_runner.lua
       - tests/helpers/spec_deadline.lua
@@ -726,6 +730,8 @@ atlas:
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua
       - scripts/reap-test-orphans.py
+      - scripts/test-run-lease.py
+      - tests/unit/test_run_lease.py
       - tests/fixtures/ps_test_orphans.txt
       - tests/fixtures/fake_sse_server
       - tests/fixtures/fake_sips
@@ -741,6 +747,7 @@ atlas:
       - tests/unit/golden_fixture_spec.lua
       - tests/integration/fresh_clone_spec.lua
       - tests/integration/portable_make_spec.lua
+      - tests/arch/arrival_budget_spec.lua
       - tests/arch/scratch_placement_spec.lua
       - tests/arch/destructive_recipe_spec.lua
       - tests/arch/superseded_comment_spec.lua
@@ -760,6 +767,10 @@ atlas:
       - tests/integration/embedded_nvim_spec.lua
       - tests/arch/embedded_rpc_spec.lua
       - tests/unit/spec_jobs_spec.lua
+      - tests/unit/test_process_model_spec.lua
+      - tests/unit/test_processes_spec.lua
+      - tests/unit/test_process_scope_spec.lua
+      - tests/integration/test_process_census_spec.lua
 
   infra/vault:
     code:
