@@ -172,6 +172,97 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: b6c2418d-3b14-4382-a1a6-106fb69c1654
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000417"
+            recipe: small-diff-review
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Volumes/TestScratch/review-checkouts/b5c4c9ae196247fc
+            reviewed_head: f405d52460d1cf18c8699a9a98c951f2d0208e47
+            slot: parley.nvim:1
+            requested_at: "2026-10-23T01:35:18.594725Z"
+          phase: finished
+          pid: 68567
+          started_at: "2026-10-23T01:35:18.696849Z"
+          finished_at: "2026-10-23T01:37:41.701141Z"
+          session_id: 01a16665-efcd-7771-be0b-d2dab2e20f6b
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: f405d52460d1cf18c8699a9a98c951f2d0208e47
+        tracker_head: c092c40a52ff5bc7f1bf6e0d7dc871b0514a7da0
+        branch_point: 6fd47fd82f6aeab218ff8cd0c6c989c6ffb7b412
+        since: "2026-10-22T18:01:39-07:00"
+        until: "2026-10-22T18:34:42-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-22T18:01:39-07:00"
+              end: "2026-10-22T18:34:42-07:00"
+              began: "2026-10-22T18:01:39-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 3d6f5a18ee8acf342742b61d0d8f3bc9c4588fedbdfec91a31212ed529fc38c8
+              started: "2026-10-14T05:35:58.09Z"
+              spawned: false
+              bytes: 112450861
+              windows:
+                - start: "2026-10-22T18:01:39-07:00"
+                  end: "2026-10-22T18:34:42-07:00"
+            - harness: codex
+              id: 01a16649-595c-70b2-bd6d-e97dbdcbb200
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 6d87a9d185ef47706aeb28b5d35edac147272b9e913ad46c31c0e9ce2dcae996
+              started: "2026-10-23T01:04:05.56Z"
+              spawned: true
+              bytes: 1319040
+              windows:
+                - start: "2026-10-23T01:04:05.56Z"
+                  end: "2026-10-22T18:34:42-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 3.6366833333333335
+        cuts:
+            - dispatched: "2026-10-22T18:11:02-07:00"
+              finalized: "2026-10-22T18:13:23-07:00"
+              finalizing: false
+            - dispatched: "2026-10-22T18:26:07-07:00"
+              finalized: "2026-10-22T18:28:15-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-22T18:37:43-07:00"
+      dispatched: "2026-10-22T18:35:18-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: lua/parley/paste_image.lua:164-168 retains one fixed success notice and logs diagnostic details separately. All twelve image-present native scenarios pass on both supported versions.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: tests/integration/paste_image_native_spec.lua:45-95 exercises no-image Alt+i in Normal and Insert modes, checking builtin error text/severity, unchanged buffer/modified state, absent assets, retained mode and subsequent typing. Both pass on Neovim 0.12.5 and 0.11.7. Restoring the old no-image behavior in a disposable archive produces exactly two native failures on each version; the archive was removed.
+          round: 3
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: f405d52460d1cf18c8699a9a98c951f2d0208e47
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#417 (boundary-review)
@@ -197,6 +288,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-2** [Important] `mode-specific-contract-coverage` (kind: defect) No-image refusal lacks Normal and Insert mapping coverage
   tests/integration/paste_image_native_spec.lua:37-46 exercises only image-present cases. The sole no-image assertion at tests/integration/paste_image_spec.lua:154-165 calls parley.paste_image directly with a recording notifier. The complete missing family is no-image Alt+i in Normal mode and Insert mode: neither verifies the builtin one-line error, unchanged buffer/assets, and retained input mode. Add both native cases on the supported versions to fulfill the checked Plan item at the issue's line 45.
 
+## Round 3 — 2026-10-22T18:37:43-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — lua/parley/paste_image.lua:164-168 retains one fixed success notice and logs diagnostic details separately. All twelve image-present native scenarios pass on both supported versions.
+- BR-2 — addressed — tests/integration/paste_image_native_spec.lua:45-95 exercises no-image Alt+i in Normal and Insert modes, checking builtin error text/severity, unchanged buffer/modified state, absent assets, retained mode and subsequent typing. Both pass on Neovim 0.12.5 and 0.11.7. Restoring the old no-image behavior in a disposable archive produces exactly two native failures on each version; the archive was removed.
+
 ## Open findings
 
-- **BR-2** [Important] `mode-specific-contract-coverage` (kind: defect) No-image refusal lacks Normal and Insert mapping coverage
+(none — every finding has been disposed)

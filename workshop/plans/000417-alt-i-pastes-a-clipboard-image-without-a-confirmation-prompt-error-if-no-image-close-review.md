@@ -154,3 +154,69 @@ findings:
    No design revision is needed. Reopen the coverage checkbox until both no-image native cases pass, then record their verification under `## Revisions`.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"1adb542a-91a2-4ade-befa-5a1efa04622c","repository":"github.com/xianxu/parley.nvim","issue_id":"000417","recipe":"small-diff-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/511a606f6340ce3b","reviewed_head":"0761a9dcdd134c023fcdedb09e0d763e2c95c36f","slot":"parley.nvim:1","requested_at":"2026-10-23T01:26:07.54984Z"},"phase":"finished","pid":42433,"started_at":"2026-10-23T01:26:07.645826Z","finished_at":"2026-10-23T01:28:14.404591Z","session_id":"01a1665d-8734-7b70-8aaf-99240af719e9","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T18:37:42-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 417 — Alt+i pastes a clipboard image without a confirmation prompt; error if no image |
+| repo | parley.nvim |
+| issue file | workshop/issues/000417-alt-i-pastes-a-clipboard-image-without-a-confirmation-prompt-error-if-no-image.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 6fd47fd82f6aeab218ff8cd0c6c989c6ffb7b412..f405d52460d1cf18c8699a9a98c951f2d0208e47 |
+| command | sdlc close --issue 417 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T18:37:42-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation satisfies the revised contract. Native tests now cover image-present and no-image Alt+i behavior in both modes on both supported Neovim versions. BR-2 is addressed; no blocking findings remain.
+
+Done-when: current — the image/no-image clauses cover the revised feedback policy and unchanged-buffer requirement.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      lua/parley/paste_image.lua:164-168 retains one fixed success notice and logs diagnostic details separately. All twelve image-present native scenarios pass on both supported versions.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      tests/integration/paste_image_native_spec.lua:45-95 exercises no-image Alt+i in Normal and Insert modes, checking builtin error text/severity, unchanged buffer/modified state, absent assets, retained mode and subsequent typing. Both pass on Neovim 0.12.5 and 0.11.7. Restoring the old no-image behavior in a disposable archive produces exactly two native failures on each version; the archive was removed.
+```
+
+1. **Strengths**
+
+   - Reuses existing naming, saving, shrinking, insertion and rollback logic.
+   - Native tests preserve builtin notifications and verify subsequent typing.
+   - README, atlas and traceability updates match the implemented behavior.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes:** Attachment mapping passed on Neovim 0.12.5 and 0.11.7, including all 14 native cases per version, with clean process censuses. Changed-file lint and diff whitespace checks passed. Mutation testing confirmed both new regressions detect the old behavior. No full-suite run performed.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY: pass** — shared helpers and logger remain authoritative.
+   - **ARCH-PURE: pass** — changes remain within the existing thin integration boundary.
+   - **ARCH-PURPOSE: pass** — both modes and every completion-diagnostic producer are covered.
+   - **ARCH-EVOLVE: pass** — no persisted format changes.
+
+7. **Plan revision recommendations:** None; the checked Plan and latest revisions match the delivered implementation and coverage.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b6c2418d-3b14-4382-a1a6-106fb69c1654","repository":"github.com/xianxu/parley.nvim","issue_id":"000417","recipe":"small-diff-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/b5c4c9ae196247fc","reviewed_head":"f405d52460d1cf18c8699a9a98c951f2d0208e47","slot":"parley.nvim:1","requested_at":"2026-10-23T01:35:18.594725Z"},"phase":"finished","pid":68567,"started_at":"2026-10-23T01:35:18.696849Z","finished_at":"2026-10-23T01:37:41.701141Z","session_id":"01a16665-efcd-7771-be0b-d2dab2e20f6b","outcome":"returned"}] -->

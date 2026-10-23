@@ -49,6 +49,7 @@ Publication follows the recorded suite and the SDLC close/merge gates; it is not
 ## Log
 
 ### 2026-10-22
+- 2026-10-22: closed — BR-1 fixed by one fixed success notice with complete diagnostics in the Parley log. BR-2 adds real Alt+i text/no-image cases in Normal and Insert: exact builtin ERROR notice, unchanged buffer and assets, no hit-enter and ordinary next typing. Attachment mapping 504PASS/0FAIL/0ERROR on each nvim0.12.5 and0.11.7 with clean censuses; luacheck3files and diff check clean. Corrected-head recorded suite queued separately; no suite pass or landing claimed. Shutdown hold forbids a new merge. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 ### 2026-10-22 — quick-flow design
 
