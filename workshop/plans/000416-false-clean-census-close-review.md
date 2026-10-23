@@ -191,3 +191,95 @@ findings:
    Add a `## Revisions` entry defining concurrent admission and retirement semantics, including explicit `ENOENT`, reservation contention, scope reuse, and unreadable existing entries. Require deterministic tests for those interleavings before closing the issue.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b0ae51fe-05cf-4bd9-b6d6-c97d4f499528","repository":"github.com/xianxu/parley.nvim","issue_id":"000416","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/a5a3b318e5c94607","reviewed_head":"fee0af023b597fded78c36facb08c559085aaf5b","slot":"parley.nvim:3","requested_at":"2026-10-23T00:12:30.056533Z"},"phase":"finished","pid":59533,"started_at":"2026-10-23T00:12:30.216475Z","finished_at":"2026-10-23T00:16:08.418423Z","session_id":"01a1661a-2022-7700-b88e-50d198b40adb","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-22T17:23:22-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 416 — Test census reports clean while an orphaned embedded Neovim survives |
+| repo | parley.nvim |
+| issue file | workshop/issues/000416-false-clean-census.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 1752271061691fd0780994a45b93d46463c8c747..1496bc76b22612512de5a0ec69ade29d97f862e2 |
+| command | sdlc close --issue 416 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-22T17:23:22-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-3 is addressed: controlled retirement regressions pass on both supported runtimes and fail when its fix is reverted. The retained-process lifecycle also passes native verification. One Important test portability defect remains: four new lease tests fail with macOS’s `/tmp` alias, causing the mapped harness run to fail.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Raw unknown-member preservation remains intact; numeric-token and nested-value regressions pass on both runtimes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Atomic mkdir reserves canonical bounded slots; simultaneous final-slot admission tests pass on both runtimes.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Explicit ENOENT permits reservation while unreadable metadata refuses. All nine scope tests pass on both runtimes; restoring the pre-fix helper makes both retirement regressions fail on each runtime.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: fixture-path-identity
+    title: |
+      New lease regressions fail when scratch uses a symlinked path
+    detail: |
+      tests/unit/test_run_lease.py:172,186,230,304 compare or inject unresolved fixture paths, while registry_base resolves paths. On macOS, TMPDIR=/tmp makes all four newly added context/ownership tests fail: returned paths use /private/tmp, the valid inherited context is rejected, and the ownership fake misses its target. ARCH-MOCK: the fake and production code must identify the same fixture. Reproduced with TMPDIR=/tmp python3 -B tests/unit/test_run_lease.py; the mapped infra/test_harness run also fails. Canonicalize the shared fixture base at line 29 and cover aliased scratch paths. In a disposable pinned-head copy, adding resolve() there makes all 26 lease tests pass under TMPDIR=/tmp.
+```
+
+1. **Strengths**
+
+   - Pending evidence precedes spawning, and unknown ownership remains visible.
+   - Runner and independent census share reconciliation; native tests verify TERM-resistant orphan detection, joined death, and protection of an unrecorded same-argv process.
+   - BR-3 tests control allocation, retirement, reuse, and unreadable metadata through explicit barriers.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** The fixture-path defect above. Normalize fixture identity consistently across expectations, inherited contexts, and metadata fakes.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - Both Neovim 0.12.5 and 0.11.7 pass 7 policy, 19 registry, 9 scope, and 6 native census tests.
+   - BR-3 sensitivity check: reverting only its helper change produces two failures on each runtime; disposable copies were removed.
+   - Python census tests: 15 pass. Lease tests pass with canonical scratch; four new cases fail with `/tmp`.
+   - Preferred-runtime mapped harness exits nonzero at the lease-test wrapper; terminal census verifies clean.
+   - Pinned-range `git diff --check` passes. Tracked files remain unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared identity and reconciliation logic.
+   - **ARCH-PURE — pass:** observation policy is data-only and tested directly.
+   - **ARCH-PURPOSE — pass:** independent census detects survivors after caller death.
+   - **ARCH-MOCK — flag:** ownership fake uses inconsistent path identity; see finding.
+   - **ARCH-CONSTRAINTS — pass:** bounded writers, polling, and counted linear probes.
+   - **ARCH-SECURE — pass:** malformed or uncertain evidence refuses cleanup; signals require fresh identity.
+   - **ARCH-ORDER — pass:** controlled interruption and interleaving coverage establishes the relevant transitions.
+   - **ARCH-FUNERAL — pass:** proven-dead records retire; empty scopes prune; unresolved residue has explicit bounds.
+   - **ARCH-EVOLVE — pass:** unknown JSON member bytes survive publication.
+
+   Core-concept classifications match the code. Atlas and tooling cover the new internal surface; no new public command or configuration requires a README change.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry requiring canonical fixture identity and verification with both physical and symlinked scratch paths, including metadata fakes and inherited-context validation.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"6f3ed058-4759-4ec0-9b2e-cc5a5c1287df","repository":"github.com/xianxu/parley.nvim","issue_id":"000416","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/78387e119bab7542","reviewed_head":"1496bc76b22612512de5a0ec69ade29d97f862e2","slot":"parley.nvim:3","requested_at":"2026-10-23T00:20:02.050227Z"},"phase":"finished","pid":6630,"started_at":"2026-10-23T00:20:02.222364Z","finished_at":"2026-10-23T00:23:21.862488Z","session_id":"01a16621-05a4-7ce1-b558-1be0c347b56c","outcome":"returned"}] -->

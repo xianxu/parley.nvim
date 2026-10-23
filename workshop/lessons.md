@@ -980,3 +980,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #416 close BR-2: a count followed by allocation is not capacity reservation across parallel runners. Reserve one of a fixed number of directories with atomic mkdir, and drive two callers through the final-slot interleaving in a deterministic test.
 
 - #416 close BR-3: an atomic capacity reservation still needs retirement semantics. Enumerate allocation/allocation, allocation/retirement and retirement/reuse together. Only explicit ENOENT permits proceeding after a stale directory snapshot; unreadable entries remain unknown. Drive each ordering with a controlled barrier.
+
+- #416 close BR-4: canonicalize a shared fixture base before deriving path expectations or metadata-fake keys. Otherwise symlinked scratch makes the fake identify a different path from production. Run sensitive tests under an explicit scratch alias as part of the normal suite, rather than relying on machine-specific `/tmp` layout.

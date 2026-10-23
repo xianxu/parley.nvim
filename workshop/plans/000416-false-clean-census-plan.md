@@ -189,3 +189,8 @@ The second review disposes BR-1 and BR-2 but demonstrates a normal sibling retir
 | All canonical slots are occupied | Bounded visible full refusal | Retry after a runner reconciles and retires its scope |
 
 Enumerate every scope creator/collector: `M.scope` alone acquires current-run slots; each spec runner calls `M.prune` only after shared reconciliation establishes death; terminal census collects drained scopes after runners complete; lease admission prunes prior empty runs before allocating a fresh context. Recursive lease reuse allocates no run and prunes nothing. Add controlled retirement-after-snapshot, retirement/reuse/contention and unreadable-existing-entry tests alongside the two-allocator regression. Preserve census and exact process-identity semantics.
+
+
+### 2026-10-22 — BR-4: shared canonical fixture identity
+
+The third review disposes the complete capacity family, with sensitivity checks on both runtimes, but reproduces a separate portability defect under macOS's `/tmp` alias. Canonicalize the lease test's shared fixture base once so context expectations, inherited-context inputs, and metadata fakes use the same physical identity as the lease implementation. Add a normal-suite regression which reruns the sensitive context/ownership and legacy-census cases in a fresh Python process with TMPDIR pointing at an explicitly created symlink; do not depend on the machine having `/tmp` as a symlink. Verify the full lease suite with both physical and aliased scratch. Runtime identity/lease semantics remain unchanged.

@@ -26,7 +26,7 @@ class RunLeaseTests(unittest.TestCase):
     def setUp(self):
         self.scratch = tempfile.TemporaryDirectory(prefix='parley-run-lease-')
         self.addCleanup(self.scratch.cleanup)
-        self.base = pathlib.Path(self.scratch.name)
+        self.base = pathlib.Path(self.scratch.name).resolve()
         self.processes = []
         self.addCleanup(self.stop_processes)
 
@@ -509,6 +509,24 @@ qa!
         self.assertEqual(first.wait(timeout=15), 0, err.read_text())
         self.assertIn('same checkout serialize', out.read_text())
 
+
+    def test_context_and_ownership_cases_share_identity_under_aliased_scratch(self):
+        physical = self.base / 'physical scratch'
+        physical.mkdir()
+        alias = self.base / 'scratch alias'
+        alias.symlink_to(physical, target_is_directory=True)
+        cases = [
+            'test_context_is_checkout_local_and_reused_by_recursive_make',
+            'test_nested_independent_roots_allocate_independent_contexts',
+            'test_reentry_and_require_refuse_missing_or_foreign_context',
+            'test_pruning_preserves_foreign_owners_and_oversized_scope_sets',
+            'test_live_census_still_reaps_leftovers_and_fails_own_leaks',
+        ]
+        env = dict(os.environ, TMPDIR=str(alias))
+        process, out, err = self.start(
+            [sys.executable, '-B', str(pathlib.Path(__file__).resolve()),
+             *['RunLeaseTests.' + case for case in cases]], 'aliased-scratch', env=env)
+        self.assertEqual(process.wait(timeout=60), 0, out.read_text() + err.read_text())
 
     def test_git_checkouts_keep_mutable_records_in_independent_git_metadata(self):
         root = self.checkout('git checkout')
