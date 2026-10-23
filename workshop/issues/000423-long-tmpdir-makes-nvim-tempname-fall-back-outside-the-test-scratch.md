@@ -1,13 +1,13 @@
 ---
 id: 000423
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'd2852a024afb8289749a48d4bfb866d4af9942bc' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '128c18eb484f833254e3673fa21489a77db6c84d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T04:29:39-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "57bc0431", done: "48afe56c"}
+actual_hours: 0.56
 ---
 
 # Long TMPDIR makes nvim tempname() fall back outside the test scratch
