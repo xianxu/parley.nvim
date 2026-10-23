@@ -257,7 +257,8 @@ percent-escaped in links; the on-disk folder keeps the stem.
 
 The existing image shrink step runs before saving: large PNGs become smaller
 JPEGs within the maximum edge. `assets.shrink` and `assets.shrink_cmd` retain
-their configured behavior; the paste notice reports any retained original.
+their configured behavior. Paste feedback stays short; `:ParleyInspectLog`
+shows the full path, size changes and any retained-original warning.
 Deleting a link leaves its asset on disk. The Markdown file's owner handles
 sidecar moves and sweeps unreferenced assets (the TL for session and QA files).
 

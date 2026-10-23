@@ -18,6 +18,7 @@ local parley = require("parley")
 local function setup_parley(assets_config)
     parley.setup({
         chat_dir = root,
+        log_file = root .. "/parley.log",
         state_dir = vim.fn.tempname() .. "-parley-paste-state",
         providers = {},
         api_keys = {},
@@ -50,6 +51,10 @@ end
 
 local function reads()
     return vim.fn.filereadable(log) == 1 and #vim.fn.readfile(log) or 0
+end
+
+local function paste_log()
+    return table.concat(vim.fn.readfile(root .. "/parley.log"), "\n")
 end
 
 local function bytes_of(path)
@@ -90,7 +95,7 @@ describe("paste image (#231)", function()
         local abs = root .. "/" .. att.path
         assert.equals(1, vim.fn.filereadable(abs))
         assert.equals(bytes_of(png), bytes_of(abs), "bytes are the clipboard bytes")
-        assert.equals("Image pasted", notices[#notices].msg)
+        assert.equals("Image pasted; details in the Parley log", notices[#notices].msg)
         assert.equals(1, reads(), "one clipboard read")
         -- Harness $TMPDIR is a symlink (/tmp → /private/tmp): resolve both sides.
         assert.equals(vim.fn.resolve(path), vim.fn.resolve(vim.api.nvim_buf_get_name(buf)))
@@ -378,7 +383,7 @@ describe("paste image (#231)", function()
 
         parley.paste_image(buf, { notify = notify })
         assert.is_true(wait_for(function() return line_count(buf) == 10 end), "the next paste is accepted")
-        assert.equals("Image pasted", notices[#notices].msg)
+        assert.equals("Image pasted; details in the Parley log", notices[#notices].msg)
     end)
 
     it("an insertion failure never removes a folder that existed before the paste", function()
@@ -430,7 +435,7 @@ describe("paste image: shrink on save (#244)", function()
     end
     local function setup_with(assets_cfg)
         parley.setup({
-            chat_dir = root, state_dir = vim.fn.tempname() .. "-parley-paste-state",
+            chat_dir = root, log_file = root .. "/parley.log", state_dir = vim.fn.tempname() .. "-parley-paste-state",
             providers = {}, api_keys = {},
             assets = vim.tbl_extend("force", { clipboard_cmd = { fake_clipboard, "{out}" } }, assets_cfg),
         })
@@ -443,6 +448,8 @@ describe("paste image: shrink on save (#244)", function()
 
     before_each(function()
         notices = {}
+        vim.fn.mkdir(root, "p")
+        vim.fn.writefile({}, root .. "/parley.log")
         os.remove(slog)
         vim.env.PARLEY_FAKE_SIPS_LOG = slog
         vim.fn.mkdir(root, "p")
@@ -459,14 +466,16 @@ describe("paste image: shrink on save (#244)", function()
         setup_with({})
     end)
 
-    it("a PNG over the edge lands as .jpg with both sizes in the notice; the tool got the capped edge", function()
+    it("a PNG over the edge lands as .jpg with both sizes in the Parley log; the tool got the capped edge", function()
         setup_with({ shrink_cmd = { fake_sips, "--resampleHeightWidthMax", "{max}", "{in}", "--out", "{out}" } })
         vim.env.PARLEY_FAKE_SIPS = "ok:" .. jpg
         local buf = open_chat(TS .. "_big.md", chat_lines())
         vim.api.nvim_win_set_cursor(0, { 8, 0 })
         local n = paste_and_wait(buf)
-        assert.matches("^Image pasted %(", n.msg)
-        assert.matches("→", n.msg)
+        assert.equals("Image pasted; details in the Parley log", n.msg)
+        local details = paste_log()
+        assert.matches("Image pasted: assets/.* %(", details)
+        assert.matches("→", details)
         assert.equals("info", n.level)
         local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 8, 9, false)[1])
         assert.equals(bytes_of(jpg), bytes_of(root .. "/" .. att.path))
@@ -505,7 +514,7 @@ describe("paste image: shrink on save (#244)", function()
         local buf = open_chat(TS .. "_small.md", chat_lines())
         vim.api.nvim_win_set_cursor(0, { 8, 0 })
         local n = paste_and_wait(buf)
-        assert.equals("Image pasted", n.msg)
+        assert.equals("Image pasted; details in the Parley log", n.msg)
         local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 8, 9, false)[1])
         assert.equals(bytes_of(small), bytes_of(root .. "/" .. att.path))
         assert.same({}, shrink_runs())
@@ -517,7 +526,8 @@ describe("paste image: shrink on save (#244)", function()
         local buf = open_chat(TS .. "_garbage.md", chat_lines())
         vim.api.nvim_win_set_cursor(0, { 8, 0 })
         local n = paste_and_wait(buf)
-        assert.matches("Image pasted — original kept: .*fake_sips wrote something that is not a JPEG", n.msg)
+        assert.equals("Image pasted; details in the Parley log", n.msg)
+        assert.matches("original kept: .*fake_sips wrote something that is not a JPEG", paste_log())
         assert.equals("warn", n.level)
         local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 8, 9, false)[1])
         assert.equals(bytes_of(big_png), bytes_of(root .. "/" .. att.path))
@@ -532,13 +542,17 @@ describe("paste image: shrink on save (#244)", function()
         local buf = open_chat(TS .. "_notool.md", chat_lines())
         vim.api.nvim_win_set_cursor(0, { 8, 0 })
         local n1 = paste_and_wait(buf)
-        assert.matches("original kept: no image shrink tool found: sips ships with macOS or brew install imagemagick", n1.msg)
+        assert.equals("Image pasted; details in the Parley log", n1.msg)
+        local details = paste_log()
+        assert.matches("original kept: no image shrink tool found: sips ships with macOS or brew install imagemagick", details)
         assert.equals("warn", n1.level)
         notices = {}
         vim.api.nvim_win_set_cursor(0, { 8, 0 })
         local n2 = paste_and_wait(buf)
-        assert.equals("Image pasted", n2.msg)
+        assert.equals("Image pasted; details in the Parley log", n2.msg)
         assert.equals("info", n2.level)
+        local _, repeated = paste_log():gsub("no image shrink tool found", "")
+        assert.equals(1, repeated, "cached missing-tool note is not repeated")
     end)
 
     it("disabling shrinking preserves a large PNG and never runs the configured tool", function()
@@ -549,7 +563,7 @@ describe("paste image: shrink on save (#244)", function()
         local notice = paste_and_wait(buf)
         local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 8, 9, false)[1])
         assert.equals(bytes_of(big_png), bytes_of(root .. "/" .. att.path))
-        assert.equals("Image pasted", notice.msg)
+        assert.equals("Image pasted; details in the Parley log", notice.msg)
         assert.same({}, shrink_runs())
     end)
 end)

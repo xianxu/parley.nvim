@@ -41,8 +41,8 @@ it immediately; if it doesn't, show a clear one-line error ("No image in the cli
 ## Plan
 
 - [x] Reproduce the prompt with a native UI and fake clipboard. The async save path currently has no explicit confirmation; guard against builtin notification hit-enter as well as input/confirm dialogs.
-- [ ] Keep existing default attachment naming, placement, writer/shrink and rollback (ARCH-DRY). Remove the paste completion's blocking feedback; emit one-line error `No image in the clipboard` for no-image, with buffer/disk unchanged.
-- [ ] Cover Normal/Insert mappings, image bytes, no prompt and absent-image no mutation through the existing fake and native UI on both supported Neovim versions. Update README/atlas.
+- [x] Keep existing default attachment naming, placement, writer/shrink and rollback (ARCH-DRY). Remove the paste completion's blocking feedback; emit one-line error `No image in the clipboard` for no-image, with buffer/disk unchanged.
+- [x] Cover Normal/Insert mappings, image bytes, no prompt and absent-image no mutation through the existing fake and native UI on both supported Neovim versions. Update README/atlas.
 Publication follows the recorded suite and the SDLC close/merge gates; it is not an implementation checkbox.
 
 
@@ -75,3 +75,13 @@ R1 is REWORK with Critical BR-1, family paste-completion-must-not-block-input: t
 TL5a199558 approves one short one-line summary for every successful paste, with full shrink diagnostics and sizes silently retained in :messages and a short notice pointing there. Keep one policy at the existing success emission, no new UI, queue or state. Qualify native message-history capture semantics and quote/newline safety on both supported versions; :silent echomsg is not assumed to preserve history. Add native note-source/mode coverage red first, then implement. Update the atlas guarantee to match actual presentation.
 
 Cancelled only superseded recorded suite lease-3257249525 on ff795ebb through sdlc (attempt1fed1f57ba59ba07475c9bffce1e6593); it is not passing evidence. The fixed code gets a new pushed-head recorded suite and another close review.
+
+### 2026-10-22 — history-only API limitation; log policy approved
+
+Native experiments found no tested supported core history-only path: verbose echo displays, capture suppresses history, unsilent restores history and hit-enter on both versions. No global option, UI interception or fake input was added. TLd1e1c466 chooses the existing Parley log instead of :messages: every success has one fixed short summary naming that log; full path/diagnostics/sizes use logger.debug, which writes without scheduling a notification. `:ParleyInspectLog` already opens the log. The native matrix and recording tests are updated to read explicit private per-spec log files. This supersedes the earlier :messages presentation only; all note producers remain in this round's coverage.
+
+### 2026-10-22 — BR-1 correction verified
+
+Claim BR-1 addressed: the one success emission now always uses fixed `Image pasted; details in the Parley log`. Existing logger.debug records the full relative asset path plus the unchanged outcome suffix without scheduling a notification; `:ParleyInspectLog` opens it. No history API, global option, UI interception or synthetic input in production. No-image remains the exact error with unchanged buffer and assets.
+
+The12 real attached-UI scenarios (small, conversion-limit, missing converter, malformed recipe, bad converter output and successful JPEG conversion, each n/i) preserve builtin notifications, assert full path/reasons/exact before→after sizes from private per-test log files and verify subsequent ordinary typing. All note cases were RED mode r on both versions before the fix. GREEN attachment mapping502PASS/0FAIL/0ERROR on each nvim0.12.5 and0.11.7, clean censuses (parley-417-br1-green.log and -green-0117.log). Lint3files and diff check clean. Initial API probe sources were removed; only the permanent regressions ship. New recorded suite and R2 close remain pending; cancelled R1 suite is not passing evidence.

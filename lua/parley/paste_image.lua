@@ -162,9 +162,10 @@ function M.paste(buf, deps)
                 return finish("Parley: nothing pasted — could not insert the link: " .. why, "error")
             end
             local suffix = require("parley.image_shrink").outcome_suffix(outcome)
-            -- A full asset path makes builtin notify wait for Enter (#417).
-            -- The link already shows the path; keep completion feedback short.
-            finish("Image pasted" .. suffix, (outcome and outcome.note) and "warn" or "info")
+            -- Every successful completion stays short, including shrink warnings
+            -- (#417). DEBUG writes the full detail without another notification.
+            require("parley.logger").debug("Image pasted: " .. rel .. suffix)
+            finish("Image pasted; details in the Parley log", (outcome and outcome.note) and "warn" or "info")
         end)
         if not ok then
             finish("Parley: paste failed: " .. tostring(err), "error")
