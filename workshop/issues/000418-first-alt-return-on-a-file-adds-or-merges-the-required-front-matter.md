@@ -224,6 +224,12 @@ Retained final-code suite: terminal 14902, lease-3976235975; last observed FIFO 
 
 #322's close first refused measurement (no post-cutover owned interval), then its canonical-branch guard. Authenticated TL 1727f54a authorizes precise --no-actual because implementation is delivered/measured under #418, with no typed hours. Authenticated a0ad9f4d accepts the supported ordering: land #418/PR338 on its suite first; then create a main-based #322 acceptance-only branch, cite #418's actual landing commit and close with that same no-actual reason. No stacked branch or gate bypass. After #322 lands, take #419 and pin pair#823's already-landed fixture. Exact next step here: retain/read suite result, then sdlc merge --yes; follow the binary's integration/CI/status requirements, report landing, and only then start #322's acceptance branch.
 
+### 2026-10-23 — approved sexagesimal deletion; merge explicitly held
+
+Read-only LuaJIT probe established a quadratic native-pattern path in the added sexagesimal classifier: 1000/2000/4000 digits plus a trailing letter cost 0.003007/0.012116/0.048478 CPU seconds. Authenticated TL dd022f2d authorizes removing this unrequested YAML 1.1 inference entirely: 12:30 is ordinary string text, not an implicit number. The new regression was RED on both short colon strings before deletion; after deletion the preferred pure/parser harness is green with clean census. Long digit runs with/without a trailing letter, exact values, no-op fill and counted N/2N growth are included. The full scalar reader now handles 4000/8000/16000-digit trailing-letter probes in 0.000362/0.000257/0.000770 CPU seconds (diagnostic timing only; counted regression is the growth defense). Compatibility verification is running.
+
+The superseded queued suite lease-3976235975 was cancelled via supported local-check control before admission; no record was produced. A fresh suite is required on the deletion's pushed head. Authenticated TL 64c7d8c4 then places merge and #419 on HOLD while the operator considers a smaller mode-key contract; finish only this correction, regression and suite, and retain the reviewed result. Do not run sdlc merge or start #419 until the hub gives fresh direction. No mode-key requirement has yet changed. Exact next step: collect compat tests, commit/push, run the post-close fix review and fresh recorded suite; report their outcome and wait for the operator's contract decision.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract

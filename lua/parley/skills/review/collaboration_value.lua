@@ -77,8 +77,8 @@ local function non_string(value)
         or number:match("^0o[0-7]+$") or number:match("^0b[01]+$") then return true end
     local mantissa = number:match("^(.-)e[+-]?%d+$") or number
     if mantissa:match("^%d+$") or mantissa:match("^%d+%.%d*$") or mantissa:match("^%.%d+$") then return true end
-    -- Legacy YAML sexagesimal numbers and timestamps are not instructions.
-    if number:match("^%d+:%d[%d:]*%.?%d*$") then return true end
+    -- Retain the existing date/timestamp policy. Colon-separated digit text
+    -- such as 12:30 is an ordinary string, not a YAML 1.1 sexagesimal number.
     if value:match("^%d%d%d%d%-%d%d%-%d%d$")
         or value:match("^%d%d%d%d%-%d%d?%-%d%d?[Tt ]%s*%d%d?:%d%d:%d%d[%d%.Zz+:%s%-]*$") then return true end
     return false

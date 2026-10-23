@@ -532,7 +532,7 @@ describe('editorial front matter', function()
         for _, key in ipairs({ 'processing-instruction', 'processing-mode', 'presentation-mode' }) do
             for _, value in ipairs({ '[free-form]', '{default: free-form}', 'true', 'false', 'null', '~',
                 '42', '-17', '+17', '1.5', '.5', '1.', '1e3', '-2.5e-3', '0xFE', '0o17', '0b101',
-                '1_000', '.inf', '-.Inf', '.NaN', '12:30', '2026-10-23', '2001-12-15T02:59:43Z',
+                '1_000', '.inf', '-.Inf', '.NaN', '2026-10-23', '2001-12-15T02:59:43Z',
                 ']', '}', ',start', '&anchor text', '*alias', '!tag text', '|', '>', '%directive', '@text',
                 '`text', '? text', '- text', ': text', '"text" trailing', 'word: nested' }) do
                 local document = { '---', key .. ': ' .. value, '---', '# Body' }
@@ -577,6 +577,34 @@ describe('editorial front matter', function()
         needs_keys[#needs_keys + 1] = '---'
         assert.is_nil(settings.fill(needs_keys, catalog), 'projection may not create an unreadable header')
         assert.is_not_nil(settings.fill({ '# Body', string.rep('x', 1024 * 1024 + 1) }, catalog))
+    end)
+
+    it('reads colon-separated digit text as strings with linear work as the value doubles', function()
+        local settings = module()
+        instruction_roundtrips({ { '12:30', '12:30' }, { '12:30:45.5', '12:30:45.5' } })
+        local function work(n)
+            local ticks = 0
+            for _, suffix in ipairs({ '', 'x' }) do
+                local text = '12:' .. string.rep('3', n) .. suffix
+                local document = { '---', 'collaboration-mode: discussion', 'presentation-mode: highlight',
+                    'processing-mode: free-form', 'processing-instruction: ' .. text, '---', '# Body' }
+                jit.off()
+                jit.flush()
+                debug.sethook(function() ticks = ticks + 1 end, '', 1)
+                local ok, result = pcall(settings.resolve, document, catalog)
+                debug.sethook()
+                jit.on()
+                assert.is_true(ok, tostring(result))
+                assert.is_not_nil(result)
+                assert.equals(text, result.instruction)
+                local filled = assert(settings.fill(document, catalog))
+                assert.is_false(filled.changed)
+                assert.same(document, filled.lines)
+            end
+            return ticks
+        end
+        local n, doubled = work(2048), work(4096)
+        assert.is_true(doubled <= n * 2.3, ('counted scalar work %d -> %d'):format(n, doubled))
     end)
 
     it('keeps counted VM work linear at N and 2N for header plus body growth', function()

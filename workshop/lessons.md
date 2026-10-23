@@ -1009,3 +1009,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 
 - #418 close round 3: quote context must be correct before semantic decoding, including comment scanning. Keep optional header fill narrower than delivery: unsupported representations skip insertion, while actual semantic consumers name the unreadable line instead of guessing settings. Preserve expressly supported legacy forms.
 - #418 counted-growth tests: cached JIT traces can bypass debug instruction sampling. Flush traces and count interpreter instructions before comparing N/2N; do not relax a growth ratio to compensate for missing measurement.
+
+- #418: counted Lua instructions cannot reveal backtracking inside native string patterns. Remove unrequested inference rather than widening the YAML surface; adversarial colon/digit instructions must retain string semantics. Avoid adjacent greedy repetitions over overlapping character sets in an interactive bounded parser.
