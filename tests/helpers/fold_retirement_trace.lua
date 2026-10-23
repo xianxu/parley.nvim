@@ -4,7 +4,8 @@ local M = {}
 local uv = vim.uv or vim.loop
 local LIMIT = 16384
 local FIELDS = {'repair_steps', 'native_fold_ops', 'fold_groups_visited',
-    'nodes_visited', 'entries_visited', 'bytes_read', 'returned_lines'}
+    'index_nodes_visited', 'index_entries_visited', 'structure_rows_processed',
+    'structure_entries_copied', 'bytes_read', 'returned_lines'}
 
 local function read(path, tail)
     local file = io.open(path, 'rb')
@@ -23,7 +24,9 @@ function M.new()
     local parent = {root=root, path=root .. '/stage.json'}
     function parent:read()
         local ok, result = pcall(vim.json.decode, read(self.path) or '')
-        if not ok then result = {stage='not captured'} end
+        if not ok or type(result) ~= 'table' or type(result.stage) ~= 'string' then
+            result = {stage='not captured'}
+        end
         local profile = read(self.path .. '.jit', true)
         result.profile = profile and profile:match('([^\n]+)\n?$') or 'no sample yet'
         return result

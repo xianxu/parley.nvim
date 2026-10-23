@@ -462,6 +462,20 @@ and `couch_spec` retain the production 500 ms policy: a completed timeout remain
 editable, whereas an explicit refusal blocks editing. Waiting for mode alone or
 longer for `modifiable=false` cannot distinguish those outcomes.
 
+### Fold retirement investigation (#420)
+
+The two native suspended-retirement fixtures retain a single synchronous RPC
+and their original preference/view assertions. Their test-only
+`fold_retirement_trace` reporter atomically replaces one stage/work snapshot in
+a private temporary folder, and reuses `jit_watch` for VM profile evidence.
+A timeout error includes that snapshot before teardown removes the folder;
+successful runs print `FOLD_RETIREMENT` with runtime, load, elapsed wall/CPU time
+and counted work. Repair progress snapshots occur at powers of two, at most
+18 under the fixture's 200,000-step cap. This is diagnostic instrumentation;
+no request deadline or compiler policy changes. `fold_retirement_trace_spec`
+checks that evidence survives a killed child and is then cleaned, and counts
+writes for 4/8 repair events. The historical timeout's cause remains unproven.
+
 ### Waiting on work that converges (#293)
 
 `tests/helpers/await.lua` `until_progress(predicate, progress, stall_ms, ceiling_ms)`

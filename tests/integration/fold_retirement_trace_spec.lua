@@ -31,6 +31,16 @@ describe('fold retirement diagnostic evidence', function()
         assert.is_true(evidence.cpu_ms >= 0)
     end)
 
+    it('keeps the original failure when the child captured no usable snapshot', function()
+        for _, invalid in ipairs({'', '{', 'null', '[]', '123'}) do
+            vim.fn.writefile({invalid}, trace.path)
+            local ok, err = pcall(trace.run, trace, {exec=function() error('original RPC failure') end}, '')
+            assert.is_false(ok)
+            assert.is_truthy(tostring(err):find('original RPC failure', 1, true), err)
+            assert.equals('not captured', trace:read().stage)
+        end
+    end)
+
     it('reports the last stage after the bounded helper kills a stuck child', function()
         Embedded.REQUEST_MS = 500
         local ok, err = pcall(trace.run, trace, child, [[
@@ -63,11 +73,16 @@ describe('fold retirement diagnostic evidence', function()
                 local stage, writes = trace.stage, 0
                 trace.stage = function(self, name) writes=writes+1; return stage(self, name) end
                 for _ = 1, repairs do callback({kind='repair'}) end
+                require('parley.line_reader').record_work(vim.api.nvim_get_current_buf(),
+                    {index_nodes_visited=3, index_entries_visited=2})
                 trace:finish()
-                return {writes=writes, repairs=trace.work.repair_steps}
+                return {writes=writes, repairs=trace.work.repair_steps,
+                    nodes=trace.work.index_nodes_visited, entries=trace.work.index_entries_visited}
             ]], repairs)
             assert.equals(repairs, result.repairs)
             assert.equals(repairs == 4 and 4 or 5, result.writes)
+            assert.equals(3, result.nodes)
+            assert.equals(2, result.entries)
         end)
     end
 end)

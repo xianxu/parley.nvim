@@ -43,7 +43,7 @@ One bounded isolated reproduction on unchanged product code and installed0.11.7:
 
 ## Plan
 
-- [ ] Preserve the exact single-request fixture order and instrument module/setup, repair, manual folds, suspension and OptionSet detach boundaries; capture runtime, machine load, counts and JIT profile. Separate a stalled native retirement from expensive fixture setup before selecting a fix.
+- [x] Preserve the exact single-request fixture order and instrument module/setup, repair, manual folds, suspension and OptionSet detach boundaries; capture runtime, machine load, counts and JIT profile. Separate a stalled native retirement from expensive fixture setup before selecting a fix.
 - [ ] Test the resulting hypothesis with a controlled reproducer and an unchanged-timeout comparison. Prefer the existing operation owner and jit_tuning policy over a new timeout or parallel lifecycle (ARCH-DRY, ARCH-ORDER).
 - [ ] Send the evidence-backed fix plan to the hub before code. Preserve the original foldenable/view assertions; the correction needs a deterministic regression and both supported runtime checks.
 
@@ -59,6 +59,20 @@ Filed unclaimed at hub direction be6c21ea-6e38-4fe8-9e3d-3a2481a5da1a after #410
 Hub approved the evidence-gathering plan (delivery ab3693ad-04a0-4e9a-abe8-ac0af78e3bc4). Entered quick change-code. Added a shared test-only reporter and stage/work witnesses in the two original native fixtures; the fixture still uses one RPC and keeps the original fold/view assertions and operation order. The reporter owns a private temporary folder, atomically replaces one bounded stage snapshot, reads evidence before teardown, and reuses jit_watch for bounded VM profile output. It does not change compiler policy or any deadline. Repair progress writes happen at powers of two (at most18 under the existing200000-step cap).
 
 The initial TDD run failed at module load before the reporter existed; this hit the runner's200s watchdog, so it is not evidence of the historical fold defect. The next run waited on the checkout's test lease, then passed2/0/0: unchanged RPC result and actual500ms child-kill evidence survival/cleanup, /Volumes/TestScratch/parley420-check.c9bqtj0q/trace-green.log. Added4/8-repair counted controls for logarithmic progress writes; their verification is next in the bounded fan-out. No root cause or correction selected. Next: one eight-worker, nine-file native cohort per runtime, retaining each spec's full log under the diagnostic root; stop/classify any failure, otherwise report non-reproduction and leave #420 open.
+
+### 2026-10-23 — Bounded replay did not reproduce; issue stays open
+
+Executed exactly one nine-file/eight-worker cohort on each runtime through the existing test environment, checkout lease, embedded request bounds, spec supervisor and process census. Aggregate logs: /Volumes/TestScratch/parley420-check.c9bqtj0q/operator-fanout.log and preferred-fanout.log; each file's full output is retained in the corresponding operator-fanout/ and preferred-fanout/ directories. Both commands exit0, nine files each,63 success/0fail/0error on each runtime; clean censuses.
+
+- Installed0.11.7 target uncertainty retirement:814.62ms request wall,735.40ms CPU,2459 repair steps,126 native fold operations/63 groups. Companion apply retirement:961.83ms wall,774.45ms CPU,2459 repair steps/150 groups. Both reach complete with the original preference/view assertions. Sampled load48.51/54.56/53.67.
+- Preferred0.12.5 target:1672.94ms wall,1471.82ms CPU,2459 repair steps,126 native operations/63 groups. Companion:2934.74ms wall,1966.69ms CPU,2459 repair steps/150 groups. Profile samples show compilation activity (target76 flushes at1s, companion290 at2s), but both complete; those samples do not establish an unsafe-allocator stall. Load41.45/52.22/52.86. Installed cases finish before the profiler's first1s sample; the earlier six-child trace-count probe observed0 flushes.
+- Classification remains unknown for the historical timeout. This replay shows neither growing repair counts, a native OptionSet stall nor old-runtime compiler thrash. Current scheduling differences do not prove the original request was starved. No mechanism-specific correction or deterministic regression for that original mechanism is claimed.
+
+After replay, corrected diagnostic work-key labels to the existing line_reader aliases (index_nodes_visited/index_entries_visited), rather than treating the replay's unused nodes_visited/entries_visited zero fields as measured index work. Added malformed/missing snapshot handling so evidence formatting cannot replace the original RPC failure. Final serial verification on both runtimes: operator-guards.log and preferred-guards.log in the same root, each17/0/0 (RPC guard2, fixture lifecycle4, original native retirement1+1, docs4, diagnostic controls5). Controls prove actual500ms child-kill evidence survives until parent cleanup, original errors survive unusable snapshots,4/8 repair events produce4/5 total stage writes including completion, and the real Reader work aliases are recorded. Final lint853 files,0warnings/errors; diff-check clean.
+
+Shared reporter/fixture instrumentation and harness documentation are checkpointed, not landed. No production file, compiler policy, request budget, RPC count or original fold/view assertion changed. No recorded full suite, close, PR or merge was started for an unproven fix.
+
+**Exact next step:** report non-reproduction to the hub and leave #420 working/open under this claim. Wait for the hub's decision on further failure capture; do not repeat fan-out, add a guessed guard, raise a deadline or declare the root-cause contract complete. This branch carries usable bounded diagnostics if the next actual failure is captured here.
 
 ## Revisions
 
