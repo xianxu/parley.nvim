@@ -216,6 +216,14 @@ Implemented the admitted narrow root-value rule, explicit flat-fill eligibility,
 
 Counted N/2N guard uses JIT cache flush and one-instruction hooks rather than an unreliable 100-instruction sample: punctuation-rich flat metadata 565016 to 1126680; skipped nested metadata 159121 to 319889. Both are below the unchanged 2.3x limit. README and atlas document the optional-fill boundary and named semantic refusal. Exact next step: commit/push, stage the corrected head, enqueue one recorded suite, run close round 4; after final record/SHIP close #322 and merge. Existing operator plain/partial live acceptance remains recorded; no new live send was made.
 
+### 2026-10-23 — SHIP; retain final suite and separate #322 acceptance branch
+
+Close round 4 returned SHIP with BR-1 through BR-4 addressed and no new findings. Codecomplete evidence commit is 1308035ea4839f29eefb904a5456c6022ef09075; the binary published the card and pushed its evidence/mirror. Reviewer independently passed both review/session-sync maps on preferred Neovim, compatibility core/native tests, mutation controls, 25 Python cases, lint and source snapshot verification. Runtime code remains 197c3fb608f39e83cfbe73db6a4c2c37fbe0aee5 and is staged on :0.
+
+Retained final-code suite: terminal 14902, lease-3976235975; last observed FIFO 8. Log: .git/sdlc/test-stats/inflight/a2e2ca76499f646a8828f135aac07ebc/run.log; checkout /Volumes/TestScratch/local-checks/sdlc-local-4022972854. No duplicate run or restart while it is live. Suite pass remains mandatory before merge.
+
+#322's close first refused measurement (no post-cutover owned interval), then its canonical-branch guard. Authenticated TL 1727f54a authorizes precise --no-actual because implementation is delivered/measured under #418, with no typed hours. Authenticated a0ad9f4d accepts the supported ordering: land #418/PR338 on its suite first; then create a main-based #322 acceptance-only branch, cite #418's actual landing commit and close with that same no-actual reason. No stacked branch or gate bypass. After #322 lands, take #419 and pin pair#823's already-landed fixture. Exact next step here: retain/read suite result, then sdlc merge --yes; follow the binary's integration/CI/status requirements, report landing, and only then start #322's acceptance branch.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
