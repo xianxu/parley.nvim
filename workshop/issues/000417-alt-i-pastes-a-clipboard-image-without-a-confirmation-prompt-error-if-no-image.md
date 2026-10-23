@@ -1,13 +1,13 @@
 ---
 id: 000417
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-22
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '2191b7c1be53cd4179409df50c365fdc90a7e5ab' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f9ebc23c7752cdf9eb755ecb8bb378ef7d59aa26' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-22T18:01:39-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "6c748c2d", done: "8119f216"}
+actual_hours: 0.86
 ---
 
 # Alt+i pastes a clipboard image without a confirmation prompt; error if no image
