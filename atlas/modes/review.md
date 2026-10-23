@@ -241,6 +241,10 @@ Root frontmatter must be a closed block mapping; uniformly indented and
 quoted/escaped keys are decoded. Root flow maps, sequences, complex keys,
 tags/anchors/aliases and merge keys refuse instead of becoming absent routing.
 Unrelated nested metadata and literal blocks do not define root routing. The pure
+parser splits a root key from its value before scanning comments: a quote opens
+a quoted root scalar only at the value's first character. Literal quotes after
+punctuation in unrelated plain text cannot hide a legacy chat declaration (#418).
+The existing flow-map/list grammar keeps its own quote context. The pure
 `review/collaboration.lua` resolver handles normalized heading names, repeated
 headings, ATX levels 1–6, fenced code, nearest named ancestors and dangling-name
 warnings. Unknown modes and cross-mode heading conflicts refuse before local
