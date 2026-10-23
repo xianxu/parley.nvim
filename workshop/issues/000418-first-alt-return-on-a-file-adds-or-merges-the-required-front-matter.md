@@ -112,6 +112,15 @@ Typed session fixture corrections passed the entire 72-case session_sync_spec on
 
 Authenticated TL c11c266d and peer 4b48ceb7 request future #419 fixture agreement. Confirmed directly to pair:9: optional Span.presentation direct/highlight/propose, missing → Round.presentation → highlight; explicit per-span values survive review-records/resume. Requested mixed/top-level-only/no-level source-document fixtures and mixed record/resume round-trip, with hash/expected-value evidence. No #419 implementation or claim starts here, and #418 scope remains whole-document.
 
+
+### 2026-10-23 — corrected-head recorded suite retained
+
+Authenticated TL 41f07631-c60d-4d03-bc58-134d69f74711 approved cancelling the obsolete queued lease and one replacement on dbb3cd1e. Supported cancel completed for lease-3834505791 without running a suite or recording a result. New recorded suite lease-2976986650 targets pushed dbb3cd1ecd768872f18f1644a91c40ee171d534e; terminal session 28887 is retained. It initialized in /Volumes/TestScratch/local-checks/sdlc-local-1286120678 with raw log /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/inflight/781b67e502e28036977da46605addba4/run.log, initially FIFO position 7. Do not cancel/requeue for a wait or restart while it is live. Later Log-only commits do not change the tested code/tests.
+
+Current targeted evidence: modes/review completes 19 files with no failures on each runtime; architecture preflight completes all three files; typed session_sync_spec completes 72 cases on each runtime after the final correction. Ordinary settings baseline is 13/0, each of two deliberate mutants is 11/2/0. Native/model exact-observer preparation is 9 + 57 passing on each runtime. Admission/lifetime 48 + 10 and owned-move 43 passed preferred; alternate mapped session-sync passed those files, with only the now-corrected typed fixture assertions failing. Full recorded-suite proof remains pending, not green.
+
+Exact next step: collect session 28887's completed result on dbb3cd1e (or confirm that exact live lease after recovery), classify every failure before any retry, and receive the hub's morning live acceptance for plain/partial/second press. Then finish plan/issue acceptance ticks and run the binary-owned closes for #418 and #322, PR/merge gates and final report. Do not claim SHIP or land before those remaining requirements. Stage remains held on parley.nvim:0 at unchanged runtime code 9a5967f4 for the scheduled operator check; clear through sdlc after acceptance unless landing handles it.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
