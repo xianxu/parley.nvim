@@ -200,6 +200,12 @@ Retained runner: terminal 75738, lease-208842730 on pushed 2617a3b471acf68263b91
 
 Authenticated TL 3424bf0f approves only the existing flat-root lexical correction plus skipped convenience fill for unsupported headers and named semantic refusals; 05736e05 explicitly keeps legacy collaboration-mode maps readable through their existing parser, because a live Brain chat document still uses one. The durable plan now records the final subset, exact skip/read outcomes, line diagnostics, state table, full test enumeration, unchanged owner and alternatives. No new general scanner is authorized or implemented. Next: commit this plan, run change-code's plan-quality gate, then implement only after it admits the revised design.
 
+### 2026-10-23 — final re-plan admitted
+
+Change-code plan-quality round 4 passed at f4536fe8; PQ-1/PQ-2 remain addressed, no open plan findings. Estimate-quality is nonblocking INFO: the 3.61h entry remains the original forecast, not a claim about remaining work. The approved correction replaces the prior scalar/fill work inside this issue; do not charge completed implementation again. Its extra regression/review activity is measured by actuals. The first close review covers the combined implementation and #322 still gets its own binary-owned acceptance close; no separately invented review charge is recorded.
+
+The obsolete queued suite lease-208842730 was cancelled through local-check before admission; terminal 75738 returned context-cancelled with no record. No recorded check remains active. Hub receipt 49471483 is submitted. Three bounded helpers now own only pure scalar tests, native submission tests and local-review/presentation tests; parent retains all runtime code. Production has not changed since the round-3 stop. Next: observe the final-shape RED, implement the narrow root scanner correction plus explicit skip/semantic boundary, verify both runtimes, checkpoint and enqueue one final-head check.
+
 ## Revisions
 
 ### 2026-10-23 — canonical fill and current registration contract
