@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "d464156b", done: "0b48457d"}
 ---
 
 # Alt+o with no link under the cursor flashes the winbar instead of a raw gf error
