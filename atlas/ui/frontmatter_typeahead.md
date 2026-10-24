@@ -14,12 +14,10 @@ It works in Insert mode, in any markdown or chat buffer. There is one menu, neve
   offers nothing in the body, on undeclared keys, or once the value is typed out in full.
 - **Declared keys** live in `lua/parley/frontmatter_enum.lua`. Each one's values come from the module that enforces
   them, never from a second list:
-  - `collaboration-mode` reads `skills/review/collaboration.lua`'s `M.modes`, the list its resolver checks;
   - `status` reads the issue vocabulary, in issue files only (`applies(path)`).
-- **Adding a key** is one `M.declare(key, { values = fn, applies = fn? })` call (for example `presentation:`, with
-  #383).
-- **Scope:** the scalar form `key: value` only. The mapping form of `collaboration-mode` (`default:` and per-mode
-  heading lists) gets no typeahead.
+  - Retired editorial keys (`collaboration-mode`, presentation and instruction keys) offer nothing (#419). They remain readable compatibility metadata, with notices in [document review](../modes/review.md), and are never rewritten by completion.
+- **Adding a key** is one `M.declare(key, { values = fn, applies = fn? })` call for an actively owned enum.
+- **Scope:** the scalar form `key: value` only. Historical editorial mapping forms get no typeahead.
 - **Live check:** `nvim --headless -c "luafile scripts/check-frontmatter-cmp.lua" </dev/null` runs the working tree's
   code against your real nvim-cmp. It exits 0 when only cmp's menu opens, holding only the value; 1 on a mismatch;
   2 without cmp. The integration spec covers the same path with a stub cmp.

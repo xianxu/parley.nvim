@@ -1,6 +1,8 @@
 -- The structural unit under the cursor, as a value.
 --
--- Pure: takes a parsed chat and a line array, never a buffer, so every rule
+-- Takes a parsed chat and a line array, never a buffer. Review tag facts may
+-- be supplied through opts; otherwise the native Markdown snapshot resolves
+-- their association once for this call. Every range rule
 -- below is unit-testable without nvim state (ARCH-PURE). Two surfaces consume
 -- it — the ae/ie/aE text objects and the :ParleyDelete* commands — and a
 -- parity test pins them to identical results, which is only possible because
@@ -80,17 +82,17 @@ end
 --- Blank/heading/marker-delimited paragraph containing `row`.
 --- `bounds` clamps the walk to an enclosing exchange; `floor` keeps it out of
 --- the transcript header when there is no exchange to clamp against.
-local function paragraph_range(lines, row, bounds, prefixes, floor)
+local function paragraph_range(lines, row, bounds, prefixes, floor, tags)
 	local lo = (bounds and bounds.first) or floor or 1
 	local hi = (bounds and bounds.last) or #lines
-	if row < lo or row > hi or is_wall(lines[row], prefixes) then
+	if row < lo or row > hi or (tags[row] or is_wall(lines[row], prefixes)) then
 		return nil
 	end
 	local first, last = row, row
-	while first > lo and not is_wall(lines[first - 1], prefixes) do
+	while first > lo and not tags[first - 1] and not is_wall(lines[first - 1], prefixes) do
 		first = first - 1
 	end
-	while last < hi and not is_wall(lines[last + 1], prefixes) do
+	while last < hi and not tags[last + 1] and not is_wall(lines[last + 1], prefixes) do
 		last = last + 1
 	end
 	return { kind = "paragraph", first = first, last = last }
@@ -112,7 +114,8 @@ local function heading_level_at(lines, row, in_code)
 	return heading.level(lines[row])
 end
 
-local function section_range(lines, row, bounds, in_code)
+local function section_range(lines, row, bounds, in_code, tags)
+	if tags[row] then row = row + 1 end
 	local level = heading_level_at(lines, row, in_code)
 	if not level then
 		return nil
@@ -124,11 +127,14 @@ local function section_range(lines, row, bounds, in_code)
 	for i = row + 1, hi do
 		local other = heading_level_at(lines, i, in_code)
 		if other and other <= level then
+			if tags[i - 1] then last = i - 2 end
 			break
 		end
 		last = i
 	end
-	return { kind = "section", first = row, last = last }
+	-- Keep the semantic heading separate from its attached source extent.
+	-- Inner ranges and to_end still belong to this heading, not the tag.
+	return { kind = "section", first = tags[row - 1] and row - 1 or row, last = last }, row
 end
 
 --- Extend over the blank run that follows, bounded (dap semantics).
@@ -299,6 +305,8 @@ local function range_context(parsed, lines, row, opts, navigation)
 		return nil
 	end
 
+    if parsed and parsed.review_tag_error then return nil, parsed.review_tag_error end
+
 	-- A heading INSIDE a fenced block is content, not structure -- the same
 	-- ruling outline.lua:32 already makes. Without this, `dae` on a `# x` in a
 	-- code sample builds a section that runs past the closing fence, which is
@@ -310,8 +318,12 @@ local function range_context(parsed, lines, row, opts, navigation)
 		or require("parley.highlight_structure").code_block_memo(
 			lines, patterns, true, not navigation or transcript)
 
+	local tags, tag_err = opts.review_tags or (parsed and parsed.review_tags), nil
+	if not tags then tags, tag_err = require("parley.question_tags").review_tags(lines, opts.review_facts) end
+	if tag_err then return nil, tag_err end
 	local idx, bounds = exchange_at(parsed, lines, row)
 	return {
+		tags = tags,
 		floor = floor, patterns = patterns, in_code = in_code, idx = idx, bounds = bounds,
 		transcript = transcript,
 	}
@@ -320,7 +332,8 @@ end
 local function range_from_context(parsed, lines, row, opts, context)
 	local floor, patterns, in_code = context.floor, context.patterns, context.in_code
 	local idx, bounds = context.idx, context.bounds
-	local found
+	local tags = context.tags
+	local found, heading_row
 
 	if idx and on_question_line(parsed, idx, row) then
 		found = { kind = "question", first = bounds.first, last = bounds.last }
@@ -338,9 +351,9 @@ local function range_from_context(parsed, lines, row, opts, context)
 		return (found.first <= found.last) and found or nil
 	end
 
-	found = section_range(lines, row, bounds, in_code)
+	found, heading_row = section_range(lines, row, bounds, in_code, tags)
 	if found and opts.inner then
-		found.first = found.first + 1
+		found.first = heading_row + 1
 		if found.first > found.last then
 			return nil
 		end
@@ -348,7 +361,7 @@ local function range_from_context(parsed, lines, row, opts, context)
 	end
 
 	if not found then
-		found = paragraph_range(lines, row, bounds, structural_prefixes(opts.config), floor)
+		found = paragraph_range(lines, row, bounds, structural_prefixes(opts.config), floor, tags)
 		if not found then
 			return nil
 		end
@@ -366,9 +379,9 @@ local function range_from_context(parsed, lines, row, opts, context)
 		if not bounds then
 			-- Outside any exchange: the enclosing section's end, else EOF.
 			local section = nil
-			for i = found.first, floor, -1 do
+			for i = heading_row or found.first, floor, -1 do
 				if heading_level_at(lines, i, in_code) then
-					section = section_range(lines, i, nil, in_code)
+					section = section_range(lines, i, nil, in_code, tags)
 					break
 				end
 			end
@@ -394,8 +407,8 @@ end
 --- @return table|nil {kind, first, last}, or nil for "no entity here"
 function M.range(parsed, lines, row, opts)
 	opts = opts or {}
-	local context = range_context(parsed, lines, row, opts)
-	if not context then return nil end
+	local context, err = range_context(parsed, lines, row, opts)
+	if not context then return nil, err end
 	return range_from_context(parsed, lines, row, opts, context)
 end
 
@@ -403,11 +416,12 @@ end
 --- inside an item belong to it; its trailing blanks do not. Editing consumers
 --- retain M.range's existing paragraph/question dispatch (ARCH-PURPOSE).
 --- Accepts the same arguments and optional shared fence memo as M.range.
---- Returns the navigation fence memo as a second result for reference collection.
+--- Returns the navigation fence memo and review tag rows as second/third results
+--- for reference collection, which can reuse both without another snapshot.
 function M.navigation_range(parsed, lines, row, opts)
 	opts = opts or {}
-	local context = range_context(parsed, lines, row, opts, true)
-	if not context then return nil end
+	local context, err = range_context(parsed, lines, row, opts, true)
+	if not context then return nil, nil, nil, err end
 	local lo = context.bounds and context.bounds.first or context.floor
 	local hi = context.bounds and context.bounds.last or #lines
 	local lexical = require("parley.document.lexical")
@@ -430,7 +444,7 @@ function M.navigation_range(parsed, lines, row, opts)
             table.remove(bullets)
             top.last, top.content_indent = i - 1, nil
             trim_trailing_blanks(top, lines)
-            if row >= top.first and row <= top.last then return top, context.in_code end
+            if row >= top.first and row <= top.last then return top, context.in_code, context.tags end
         end
         if block and block.opener == "bullet" then
             bullets[#bullets + 1] = { kind = "bullet", first = i, content_indent = block.content_indent }
@@ -453,13 +467,13 @@ function M.navigation_range(parsed, lines, row, opts)
 				item.last = i - 1
 				trim_trailing_blanks(item, lines)
 				if row >= item.first and row <= item.last then
-					return item, context.in_code
+					return item, context.in_code, context.tags
 				end
 			end
 			item = anchor and { kind = "numbered", first = i, last = hi } or nil
 		end
 	end
-	return range_from_context(parsed, lines, row, opts, context), context.in_code
+	return range_from_context(parsed, lines, row, opts, context), context.in_code, context.tags
 end
 
 return M

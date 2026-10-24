@@ -25,12 +25,12 @@ local function sse(events)
 end
 
 -- A raw_response decoding to one propose_edits tool call with the given edits.
-local function propose_edits_sse(edits)
+local function propose_edits_sse(edits, review_asks)
     return sse({
         { type = "content_block_start", index = 0,
           content_block = { type = "tool_use", id = "t1", name = "propose_edits", input = {} } },
         { type = "content_block_delta", index = 0,
-          delta = { type = "input_json_delta", partial_json = vim.json.encode({ edits = edits }) } },
+          delta = { type = "input_json_delta", partial_json = vim.json.encode({ edits = edits, review_asks = review_asks }) } },
         { type = "content_block_stop", index = 0 },
         { type = "message_stop" },
     })
@@ -99,15 +99,15 @@ describe("skill_invoke.invoke", function()
         remove_fixture_dir(tmpdir)
     end)
 
-    for _, target in ipairs({ 'alpha', 'secret', 'alpha\n# Chat', 'alpha\n' }) do
+    for _, target in ipairs({ 'alpha 🤖[tighten]', 'secret', 'alpha 🤖[tighten]\n# Chat', 'alpha 🤖[tighten]\n' }) do
         it('enforces the invocation-owned local edit permission for ' .. target, function()
-            local original = { '---', 'collaboration-mode: {chat: [Chat]}', '---', '# Notes', 'alpha', '# Chat', 'secret' }
+            local original = { '---', 'collaboration-mode: {chat: [Chat]}', '---', '# Notes', 'alpha 🤖[tighten]', '# Chat', '- secret' }
             vim.fn.writefile(original, path)
             vim.cmd('edit!')
             parley.dispatcher.query = function(_, _, _, _, on_exit)
                 tasker.set_query('qid_test', { raw_response = propose_edits_sse({
                     { old_string = target, new_string = 'CHANGED', explain = 'test' },
-                }) })
+                }, {{line=4,col=6,raw='🤖[tighten]',kind='command'}}) })
                 vim.schedule(function() on_exit('qid_test') end)
             end
             skill_invoke.invoke(buf, manifest(), {}, {
@@ -116,9 +116,9 @@ describe("skill_invoke.invoke", function()
             })
             assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
             local expected = vim.deepcopy(original)
-            if target == 'alpha' then expected[5] = 'CHANGED' end
+            if target == 'alpha 🤖[tighten]' then expected[5] = 'CHANGED' end
             assert.same(expected, vim.fn.readfile(path))
-            assert.equals(target == 'alpha', done_result.ok)
+            assert.equals(target == 'alpha 🤖[tighten]', done_result.ok)
         end)
     end
 
@@ -148,18 +148,117 @@ describe("skill_invoke.invoke", function()
         assert.same({ 'alpha beta' }, vim.fn.readfile(path))
     end)
 
+    it('guarded refusal does not reload or alter the native changedtick', function()
+        local tick = vim.api.nvim_buf_get_changedtick(buf)
+        skill_invoke.invoke(buf, manifest(), {}, {
+            validate_edits = function() return 'refused by current snapshot' end,
+            on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
+        assert.is_false(done_result.ok)
+        assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+        assert.same({'alpha beta'}, vim.fn.readfile(path))
+        assert.same({}, vim.fn.glob(path .. '.parley-backup.*', false, true))
+    end)
+
+    it('refuses a guarded proposal when disk bytes changed without a buffer edit',function()
+        local exit
+        local original={'free text','🤖[tighten]'}
+        vim.fn.writefile(original,path);vim.cmd('edit!')
+        parley.dispatcher.query=function(_,_,_,_,on_exit)
+            tasker.set_query('qid_test',{raw_response=propose_edits_sse({
+                {old_string='free text',new_string='Changed',explain='edit'},
+            },{{line=1,col=0,raw='🤖[tighten]',kind='command'}})})
+            exit=on_exit
+        end
+        skill_invoke.invoke(buf,manifest(),{}, {
+            validate_edits=require('parley.skills.review.collaboration').validate_edits,
+            on_done=function(value)done_result=value end,
+        })
+        local foreign={'@@chat@@','# Inbox','1. free text','🤖[tighten]'}
+        vim.fn.writefile(foreign,path)
+        assert.same(original,vim.api.nvim_buf_get_lines(buf,0,-1,false))
+        local tick=vim.api.nvim_buf_get_changedtick(buf)
+        exit('qid_test')
+        assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end))
+        assert.is_false(done_result.ok)
+        assert.same(foreign,vim.fn.readfile(path))
+        assert.same({},vim.fn.glob(path..'.parley-backup.*',false,true))
+        assert.equals(tick,vim.api.nvim_buf_get_changedtick(buf))
+    end)
+
+    it('validated question-only no-op completes without invoking a write tool', function()
+        local tick = vim.api.nvim_buf_get_changedtick(buf)
+        parley.dispatcher.query = function(_, _, _, _, on_exit)
+            tasker.set_query('qid_test', {raw_response=propose_edits_sse({})})
+            vim.schedule(function() on_exit('qid_test') end)
+        end
+        skill_invoke.invoke(buf, manifest(), {}, {
+            validate_edits = function(_, edits, input)
+                assert.same({}, edits)
+                assert.is_table(input)
+                return nil, {deferred=1,noop=true,content='alpha beta'}
+            end,
+            on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
+        assert.is_true(done_result.ok)
+        assert.equals(0, done_result.applied)
+        assert.equals(1, done_result.review.deferred)
+        assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+        assert.same({'alpha beta'}, vim.fn.readfile(path))
+        assert.same({}, vim.fn.glob(path .. '.parley-backup.*', false, true))
+    end)
+
+    it('guarded missing proposal fails before a read-only tool can run', function()
+        local tick = vim.api.nvim_buf_get_changedtick(buf)
+        parley.dispatcher.query = function(_, _, _, _, on_exit)
+            tasker.set_query('qid_test', {raw_response=read_file_sse(path)})
+            vim.schedule(function() on_exit('qid_test') end)
+        end
+        skill_invoke.invoke(buf, manifest({tools={'read_file'}}), {}, {
+            validate_edits = function() error('no proposal to validate') end,
+            on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
+        assert.is_false(done_result.ok)
+        assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+    end)
+
+    for _, change in ipairs({'edit', 'aba'}) do
+        it('guarded question-only completion rejects source ' .. change, function()
+            local exit
+            parley.dispatcher.query = function(_, _, _, _, on_exit)
+                tasker.set_query('qid_test', {raw_response=propose_edits_sse({})})
+                exit=on_exit
+            end
+            skill_invoke.invoke(buf, manifest(), {}, {
+                validate_edits=function() return nil,{deferred=1,noop=true,content='alpha beta'} end,
+                on_done=function(result) done_result=result end,
+            })
+            vim.api.nvim_buf_set_lines(buf,0,-1,false,{'new user text'})
+            if change=='aba' then vim.api.nvim_buf_set_lines(buf,0,-1,false,{'alpha beta'}) end
+            local tick=vim.api.nvim_buf_get_changedtick(buf)
+            exit('qid_test')
+            assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end))
+            assert.is_false(done_result.ok)
+            assert.equals(tick,vim.api.nvim_buf_get_changedtick(buf))
+            assert.same({},vim.fn.glob(path..'.parley-backup.*',false,true))
+        end)
+    end
+
     for _, case in ipairs(require('tests.helpers.collaboration_declarations')) do
-        it('does not write through unrecognized chat declaration: ' .. case.name, function()
+        it('keeps ready commands eligible beside legacy metadata: ' .. case.name, function()
             local document = { '---' }
             for _, line in ipairs(case.header) do document[#document + 1] = line end
             if case.closed ~= false then document[#document + 1] = '---' end
-            document[#document + 1] = 'secret'
+            document[#document + 1] = 'secret 🤖[tighten]'
             vim.fn.writefile(document, path)
             vim.cmd('edit!')
             parley.dispatcher.query = function(_, _, _, _, on_exit)
                 tasker.set_query('qid_test', { raw_response = propose_edits_sse({
-                    { old_string = 'secret', new_string = 'CHANGED', explain = 'test' },
-                }) })
+                    { old_string = 'secret 🤖[tighten]', new_string = 'CHANGED', explain = 'test' },
+                }, {{line=#document-1,col=7,raw='🤖[tighten]',kind='command'}}) })
                 vim.schedule(function() on_exit('qid_test') end)
             end
             skill_invoke.invoke(buf, manifest(), {}, {
@@ -167,7 +266,8 @@ describe("skill_invoke.invoke", function()
                 on_done = function(result) done_result = result end,
             })
             assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
-            assert.is_false(done_result.ok)
+            assert.is_true(done_result.ok)
+            document[#document]='CHANGED'
             assert.same(document, vim.fn.readfile(path))
         end)
     end

@@ -65,6 +65,7 @@ describe("review_send", function()
         p.config.state_dir = root .. "/state"
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
         invoked = nil
+        vim.cmd("messages clear")
         review.run_via_invoke = function(b, args) invoked = { buf = b, args = args } end
     end)
 
@@ -260,17 +261,23 @@ describe("review_send", function()
         alt_return()
         assert.equals(buf, invoked.buf)
         assert.equals("review", invoked.manifest.name)
-        assert.same({}, invoked.args)
+        assert.is_nil(invoked.args.mode)
+        assert.is_nil(invoked.args.instruction)
+        assert.same({ { line = 1, col = 0, raw = "🤖[fix this]" } }, invoked.args.review_asks)
         assert.same(document, lines())
         assert.same(document, vim.fn.readfile(file))
         assert.same({}, sent())
     end)
 
     for _, case in ipairs({
-        { name = "no markers", document = { "# notes" }, notice = "no markers found" },
+        { name = "no asks", document = { "# notes" }, notice = "read your edits; no asks" },
         { name = "pending reply", document = { "🤖{please clarify}" }, notice = "pending agent turns await your reply" },
-        { name = "chat document", document = { "---", "collaboration-mode: chat", "---", "🤖[why?]" }, notice = "hub agent answers chat" },
-        { name = "malformed routing", document = { "---", "collaboration-mode: bad", "---", "🤖[why?]" }, notice = "unknown collaboration mode bad" },
+        { name = "pure chat items", document = { "@@chat@@", "# Inbox", "1. Why?" },
+            notice = "chat items are answered in a side doc by Couch review; left unchanged" },
+        { name = "robot ask inside legacy chat", document = { "---", "collaboration-mode: chat", "---", "🤖[why?]" },
+            notice = "legacy key", ready = true },
+        { name = "malformed retired routing", document = { "---", "collaboration-mode: bad", "---", "🤖[why?]" },
+            notice = "retired and ignored", ready = true },
     }) do
         it("real local admission visibly handles " .. case.name, function()
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
@@ -281,9 +288,16 @@ describe("review_send", function()
             open(case.document)
             alt_return()
             assert.is_true(vim.wait(arrival.MS, function()
-                return table.concat(notices, "\n"):find(case.notice, 1, true) ~= nil
+                return (table.concat(notices, "\n") .. "\n" .. vim.fn.execute("messages")):find(case.notice, 1, true) ~= nil
             end))
-            assert.is_nil(invoked)
+            if case.ready then
+                assert.is_truthy(invoked)
+                assert.is_nil(invoked.args.mode)
+                assert.equals(1, #invoked.args.review_asks)
+                assert.equals("🤖[why?]", invoked.args.review_asks[1].raw)
+            else
+                assert.is_nil(invoked)
+            end
             assert.same(case.document, lines())
             assert.same(case.document, vim.fn.readfile(file))
             assert.same({}, sent())
@@ -301,7 +315,7 @@ describe("review_send", function()
         p.setup_markdown_keymaps(buf)
         alt_return()
         assert.is_nil(invoked)
-        assert.truthy(table.concat(notices, "\n"):find("save the file first", 1, true))
+        assert.truthy(vim.fn.execute("messages"):find("save the file first", 1, true))
         assert.same({}, sent())
     end)
 
@@ -322,52 +336,23 @@ describe("review_send", function()
         assert.same({ "---", "title: t", "---", "body" }, lines())
     end)
 
-    it("[ in the value completes the stock prompt names; the value ends up quoted", function()
+    it("retired instruction metadata offers no prompt completion and remains unquoted", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         open({ "---", "process-instruction: ", "---", "body" })
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
-        -- Typed keys fire TextChangedI from the main loop once typeahead is
-        -- empty, which a feedkeys run never reaches mid-sequence: <F3> runs
-        -- the installed handler in real insert mode instead.
-        assert.equals(1, #vim.api.nvim_get_autocmds({ event = "TextChangedI", buffer = buf, group = "ParleyReviewSend" .. buf }))
         local offered
-        vim.keymap.set("i", "<F3>", function() rs.on_text_changed(buf) end, { buffer = buf })
         vim.keymap.set("i", "<F2>", function()
             offered = vim.fn.complete_info({ "items" }).items
             return ""
         end, { buffer = buf, expr = true })
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("A[<F3><F2><C-y> keep<Esc>", true, false, true), "tx", false)
-        assert.is_not_nil(offered)
-        local words = vim.tbl_map(function(i) return i.word end, offered)
-        assert.truthy(vim.tbl_contains(words, "copy-editing]"))
-        assert.truthy(vim.tbl_contains(words, "free-form]"))
-        assert.is_true(vim.wait(arrival.MS, function() return lines()[2]:sub(1, 23) == 'process-instruction: "[' end))
-        assert.equals('process-instruction: "[' .. words[1] .. ' keep"', lines()[2])
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("A[<F2> keep<Esc>", true, false, true), "tx", false)
+        assert.same({}, offered)
+        assert.equals("process-instruction: [ keep", lines()[2])
+        for _, autocmd in ipairs(vim.api.nvim_get_autocmds({ event = "TextChangedI", buffer = buf })) do
+            assert.is_not.equals("ParleyReviewSend" .. buf, autocmd.group_name)
+        end
+        assert.is_nil(rs.attach)
+        assert.is_nil(rs.completion_start)
+        assert.is_nil(rs.requote)
     end)
-end)
-
-describe("review_send pure helpers", function()
-    it("completion starts only inside the value's [name] run", function()
-        assert.equals(23, rs.completion_start("process-instruction: ["))
-        assert.equals(24, rs.completion_start('process-instruction: "['))
-        assert.equals(29, rs.completion_start("process-instruction: [a][b]["))
-        assert.is_nil(rs.completion_start("process-instruction: x ["))
-        assert.is_nil(rs.completion_start("title: ["))
-    end)
-
-    it("requote closes a quote the operator opened", function()
-        local line, col = rs.requote('process-instruction: "[copy-editing] k', 37)
-        assert.equals('process-instruction: "[copy-editing] k"', line)
-        assert.equals(37, col)
-    end)
-
-    it("requote keeps the cursor on the same text", function()
-        local line, col = rs.requote("process-instruction: [copy-editing] k", 36)
-        assert.equals('process-instruction: "[copy-editing] k"', line)
-        assert.equals(37, col)
-        assert.is_nil(rs.requote('process-instruction: "[a] b"', 5))
-        assert.is_nil(rs.requote("process-instruction: plain", 5))
-    end)
-
-
 end)

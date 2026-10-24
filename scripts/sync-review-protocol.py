@@ -28,10 +28,11 @@ def validate_manifest(manifest):
     """Validate the complete versioned contract without IO or mutations."""
     require(type(manifest) is dict, 'manifest must be an object')
     require(manifest.get('schema') == SCHEMA, 'unsupported export schema')
-    require(type(manifest.get('version')) is int and manifest['version'] in (1, 2, 3), 'unsupported export version')
+    require(type(manifest.get('version')) is int and manifest['version'] in (1, 2, 3, 4), 'unsupported export version')
     members = manifest.get('members')
     require(type(members) is list and bool(members), 'export members must be a nonempty list')
-    allowed_roles = {'round', 'grammar', 'collaboration-modes', 'adapter', 'mode'}
+    allowed_roles = {'round', 'grammar', 'collaboration-modes', 'adapter'}
+    allowed_roles.add('brief' if manifest['version'] == 4 else 'mode')
     if manifest['version'] >= 2:
         allowed_roles.add('fixture')
     paths, roles, names, adapters = set(), [], set(), set()
@@ -71,6 +72,14 @@ def validate_manifest(manifest):
                     'invalid or duplicate adapter name')
             require(path == 'adapters/' + name + '.md', 'adapter path must match its name')
             adapters.add(name)
+        elif role == 'brief':
+            name = member.get('name')
+            require(type(name) is str and SAFE_NAME.fullmatch(name) and name not in names,
+                    'invalid or duplicate brief name')
+            require(path == 'briefs/' + name + '.md', 'brief path must match its name')
+            require(not {'scope', 'frontier', 'deletions', 'order'} & member.keys(),
+                    'a version 4 brief carries no retired flags or order')
+            names.add(name)
         else:
             name, order = member.get('name'), member.get('order')
             require(type(name) is str and SAFE_NAME.fullmatch(name) and name not in names, 'invalid or duplicate mode name')
@@ -88,7 +97,9 @@ def validate_manifest(manifest):
                 require(type(member.get(key)) is str and member[key] in allowed, 'invalid mode ' + key)
             names.add(name)
     require(roles.count('round') == 1 and roles.count('grammar') == 1 and roles.count('adapter') >= 1
-            and roles.count('mode') >= 1, 'incomplete export roles')
+            and roles.count('brief' if manifest['version'] == 4 else 'mode') >= 1, 'incomplete export roles')
+    if manifest['version'] == 4:
+        require(roles.count('collaboration-modes') == 1, 'version 4 requires collaboration-modes')
     require(roles.count('collaboration-modes') <= 1, 'duplicate collaboration-modes role')
 
 
@@ -102,9 +113,14 @@ def render_snapshot(manifest, member_bytes):
         require(len(data) == member['bytes'], 'byte count mismatch: ' + path)
         require(hashlib.sha256(data).hexdigest() == member['sha256'], 'sha256 mismatch: ' + path)
         try:
-            data.decode('utf-8')
+            text = data.decode('utf-8')
         except UnicodeDecodeError as error:
             raise ValueError('member must be UTF-8: ' + path) from error
+        if member['role'] == 'brief':
+            require(text.startswith('---\n'), 'brief frontmatter must contain only name: ' + path)
+            header, separator, _ = text[4:].partition('\n---\n')
+            require(separator and header == 'name: ' + member['name'],
+                    'brief frontmatter must contain only matching name: ' + path)
     snapshot = {m['path']: member_bytes[m['path']] for m in manifest['members'] if m['role'] != 'adapter'}
     exported = (json.dumps(manifest, indent=2, ensure_ascii=False) + '\n').encode('utf-8')
     snapshot['export.json'] = exported
@@ -190,7 +206,7 @@ def read_output(output, expected):
 
     for name in FIXED_OUTPUTS:
         inspect(output / name)
-    for name in ('modes', 'examples'):
+    for name in ('modes', 'briefs', 'examples'):
         path = output / name
         require(not path.exists() or path.is_dir(), name + ' output must be a directory')
         inspect(path, directory_allowed=True)

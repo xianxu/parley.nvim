@@ -731,6 +731,26 @@ describe('enclosing entity navigation', function()
         assert.equals(1,#opened)
         assert.equals(0,fallback)
     end)
+    it('reuses the tag projection when opening a selected ordinary chat reference',function()
+        write_markdown('chat.md',{'# Target'})
+        source({'## Choices','@@chat@@','[other](chat.md)'})
+        local structure=require('parley.skills.review.chat_structure')
+        local original=structure.snapshot
+        local calls=0
+        structure.snapshot=function(lines)calls=calls+1;return original(lines)end
+        local ok,err=pcall(function()
+            invoke()
+            assert.equals(2,#picker.items)
+            local index
+            for n,item in ipairs(picker.items)do if item.row==2 then index=n end end
+            assert.is_number(index)
+            picker.cb(picker.items[index],index)
+        end)
+        structure.snapshot=original
+        assert.is_true(ok,err)
+        assert.equals(1,calls)
+    end)
+
     it('keeps repeated target occurrences as distinct choices', function()
         write_markdown('same.md', {'# same'})
         source({'## Choices','[one](same.md) and [two](same.md)'})

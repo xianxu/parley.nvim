@@ -1,28 +1,39 @@
--- Presentation (#383): how a document shows the agent's last round, read from
--- its `presentation:` key, and where that round's spans land in the buffer.
--- PURE: plain line tables in, plain tables out; edit_round draws them.
---
--- A round is Couch's sidecar (pair#661): spans with 0-based [line, byte column]
--- positions in the file the agent wrote. Couch's positions are untrusted input:
--- a span that doesn't check out against the lines is re-found by its text or
--- dropped, never clamped into a wrong place.
-local frontmatter = require("parley.frontmatter")
-
+-- Historical round presentation: span metadata overrides round metadata;
+-- missing history defaults to highlight. Current document keys are retired.
+-- Pure projection; no sidecar/record write or JSON round-trip is performed.
 local M = {}
 
--- The most spans one round places; edit_round says so when a round has more.
 M.MAX_SPANS = 200
-
 local KNOWN = { direct = true, highlight = true, propose = true }
 
---- The document's presentation: direct, highlight or propose. A missing or
---- unknown value is highlight, as Couch reads it.
---- @param lines string[]
---- @return string
-function M.value(lines)
-    local fm = frontmatter.parse(lines)
-    local value = fm and fm.fields.presentation
-    return KNOWN[value] and value or "highlight"
+local function mode(value, field)
+    if value == nil then return nil end
+    if type(value) ~= "string" or not KNOWN[value] then
+        return nil, field .. " must be direct, highlight or propose"
+    end
+    return value
+end
+
+--- Stored history only. A present malformed value never becomes a default,
+--- including when a valid span value would otherwise override it.
+function M.effective(round, span)
+    if type(round) ~= "table" or type(span) ~= "table" then return nil, "invalid round/span" end
+    local round_mode, err = mode(round.presentation, "round.presentation")
+    if err then return nil, err end
+    local span_mode, span_err = mode(span.presentation, "span.presentation")
+    if span_err then return nil, span_err end
+    return span_mode or round_mode or "highlight"
+end
+
+-- Coordinates are untrusted known fields. Stale valid coordinates may be
+-- re-anchored; malformed coordinates must not fabricate historical placement.
+local function valid_position(value)
+    if type(value) ~= "table" or rawget(value, 3) ~= nil then return false end
+    for i = 1, 2 do
+        local n = rawget(value, i)
+        if type(n) ~= "number" or n < 0 or n > 9007199254740991 or n % 1 ~= 0 then return false end
+    end
+    return true
 end
 
 -- Byte offset of each line's first byte in the lines joined by "\n".
@@ -86,21 +97,31 @@ end
 --- a deletion (empty new) leaves no trace, so it yields nothing (#387).
 --- When `current_hash` is the round's result_hash, a span is placed where Couch
 --- says if its text is there. Otherwise it is re-found by its new text,
---- nearest its old position. A span that can't be placed is dropped.
+--- nearest its old position. A span that can't be placed is dropped. Only
+--- effective highlight spans are tinted. Malformed consumed metadata refuses
+--- the projection as nil,error; opaque fields remain untouched.
 --- @param round table Couch's round
 --- @param lines string[]
 --- @param current_hash string the hash of `lines` as a file
---- @return table[]
+--- @return table[]|nil, string|nil
 function M.decorations(round, lines, current_hash)
     local out = {}
-    if type(round) ~= "table" or type(round.spans) ~= "table" or #lines == 0 then return out end
+    if type(round) ~= "table" or type(round.spans) ~= "table" then return nil, "invalid round.spans" end
+    local _, mode_err = mode(round.presentation, "round.presentation")
+    if mode_err then return nil, mode_err end
+    if #lines == 0 then return out end
     local text, starts = table.concat(lines, "\n"), line_starts(lines)
     local matched = current_hash == round.result_hash
     for i = 1, math.min(#round.spans, M.MAX_SPANS) do
         local span = round.spans[i]
-        local kind = type(span) == "table" and type(span.old) == "string" and type(span.new) == "string"
-            and M.kind(span.old, span.new)
-        if kind and kind ~= "delete" then
+        if type(span) ~= "table" then return nil, "invalid span " .. i end
+        local effective, err = M.effective(round, span)
+        if err then return nil, err end
+        if type(span.old) ~= "string" or type(span.new) ~= "string" then return nil, "invalid span old/new" end
+        if span.explain ~= nil and type(span.explain) ~= "string" then return nil, "invalid span explain" end
+        if not valid_position(span.start) or not valid_position(span["end"]) then return nil, "invalid span coordinates" end
+        local kind = M.kind(span.old, span.new)
+        if effective == "highlight" and kind ~= "delete" then
             local from = offset_of(span.start, lines, starts)
             local to = offset_of(span["end"], lines, starts)
             local placed

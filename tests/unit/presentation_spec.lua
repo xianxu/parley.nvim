@@ -10,16 +10,6 @@ local function round(spans)
     return { result_hash = "match", spans = spans }
 end
 
-describe("presentation.value", function()
-    it("reads the key, and highlights when it is missing, unknown or unclosed", function()
-        assert.equals("highlight", presentation.value({ "# no frontmatter" }))
-        assert.equals("propose", presentation.value({ "---", "presentation: propose", "---" }))
-        assert.equals("direct", presentation.value({ "---", 'presentation: "direct"', "---" }))
-        assert.equals("highlight", presentation.value({ "---", "presentation: shout", "---" }))
-        assert.equals("highlight", presentation.value({ "---", "presentation: propose" }))
-    end)
-end)
-
 describe("presentation.kind (#387)", function()
     it("is delete with no new text, add with no old text, change otherwise", function()
         assert.equals("delete", presentation.kind("gone", ""))
@@ -32,6 +22,59 @@ end)
 
 describe("presentation.decorations", function()
     local lines = { "# Title", "the new text here", "tail" }
+
+    it("uses span presentation over stored round presentation and defaults only missing history (#419)", function()
+        local first, second = span({ 1, 4 }, { 1, 12 }, "old", "new text"), span({ 2, 0 }, { 2, 4 }, "old", "tail")
+        local r = round({ first, second }); r.presentation = "direct"
+        assert.same({}, presentation.decorations(r, lines, "match"))
+        first.presentation = "highlight"
+        assert.equals(1, #presentation.decorations(r, lines, "match"))
+        first.presentation = "propose"
+        assert.same({}, presentation.decorations(r, lines, "match"))
+        r.presentation, first.presentation = nil, nil
+        assert.equals(2, #presentation.decorations(r, lines, "match"))
+    end)
+
+    it("rejects malformed consumed metadata rather than fabricating historical highlights (#419)", function()
+        for _, invalid in ipairs({ "unknown", false, 7, {}, vim.NIL }) do
+            for _, where in ipairs({ "round", "span" }) do
+                local r = round({ span({ 1, 4 }, { 1, 12 }, "old", "new text") })
+                if where == "round" then r.presentation = invalid else r.spans[1].presentation = invalid end
+                local result, err = presentation.decorations(r, lines, "match")
+                assert.is_nil(result, where .. " " .. vim.inspect(invalid))
+                assert.is_string(err)
+                assert.truthy(err:find("presentation", 1, true))
+            end
+        end
+        for _, field in ipairs({ "old", "new", "explain", "start", "end" }) do
+            local r = round({ span({ 1, 4 }, { 1, 12 }, "old", "new text") })
+            r.spans[1][field] = false
+            local result, err = presentation.decorations(r, lines, "match")
+            assert.is_nil(result, field)
+            assert.is_string(err)
+        end
+    end)
+
+    it("reads the landed Pair fixture as historical codec compatibility without mutating opaque fields (#419)", function()
+        local path = "tests/fixtures/review_rounds/presentation.json"
+        local bytes = table.concat(vim.fn.readfile(path, "b"), "\n")
+        local fixtures = vim.json.decode(bytes) -- json-guard: trusted pinned test fixture
+        for _, fixture in ipairs(fixtures) do
+            local r, before = fixture.round, vim.deepcopy(fixture.round)
+            local effective = {}
+            for i, item in ipairs(r.spans) do
+                assert.is_function(presentation.effective)
+                effective[i] = presentation.effective(r, item)
+            end
+            assert.same(fixture.expected_effective, effective)
+            local doc = vim.split(fixture.result:gsub("\n$", ""), "\n", { plain = true })
+            local decorations, err = presentation.decorations(r, doc, r.result_hash)
+            assert.is_nil(err)
+            assert.equals(fixture.name == "legacy-round" and 0 or 1, #decorations)
+            assert.same(before, r)
+        end
+        assert.equals(bytes, table.concat(vim.fn.readfile(path, "b"), "\n"))
+    end)
 
     it("takes the positions as given when the hash matches", function()
         local d = presentation.decorations(round({ span({ 1, 4 }, { 1, 12 }, "old", "new text", "why") }), lines, "match")
@@ -116,7 +159,7 @@ describe("presentation.decorations", function()
             end
             local ok, out = pcall(presentation.decorations, round(spans), doc, rand(2) == 0 and "match" or "other")
             assert.is_true(ok, tostring(out))
-            for _, d in ipairs(out) do
+            for _, d in ipairs(out or {}) do
                 for _, p in ipairs({ { d.lnum, d.col }, { d.end_lnum, d.end_col } }) do
                     assert.is_true(p[1] >= 0 and p[1] < #doc and p[2] >= 0 and p[2] <= #doc[p[1] + 1],
                         vim.inspect({ d = d, doc = doc }))

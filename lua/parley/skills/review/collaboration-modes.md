@@ -1,97 +1,58 @@
-# Collaboration modes
+# Collaborative editing
 
-A **collaboration mode** says *where the answer to an ask goes*. Each section of a document has one. The **review
-mode** (`process-instruction:`, [round.md](round.md) §2 and §3) says *how an edit is made*. They are separate axes,
-with separate frontmatter keys. Call them "collaboration mode" and "review mode", never just "mode", when the
-difference matters.
-
-| Mode | An ask is answered by |
-|---|---|
-| **discussion** (the default) | an edit for an imperative, honoring an instruction that only acts, a one-line record for a decision, or a linked **side doc** for a question |
-| **collaboration** | an edit or an answer **in place**, folded into clean prose |
-| **chat** | a linked, dated **answer doc** for each list item |
+The operator and the agent edit one document together, and the goal is a document that stands on its own. There is
+**one mode**: the operator's direct edits are content, and a `🤖` marker is a question or a command that the agent
+classifies. One carve-out, a `@@chat@@` tag above a heading, makes a section a chat whose items always get an answer
+doc. No document key selects a mode; the old mode keys are read as §7 says and never written.
 
 This file is harness-neutral, like round.md: it says what a round decides. How files are read and written is the
 adapter's job. The marker grammar is [review-convention.md](review-convention.md); this file uses its terms and
 restates none of it.
 
-## 1. The frontmatter
+## 1. The model
 
-```yaml
-collaboration-mode:
-  default: discussion                        # optional; discussion when absent
-  chat: ["Operator instructions"]            # headings answered in chat mode
-  collaboration: ["Notes"]                   # headings answered in place
-```
+- **Direct edits by the operator are content**, never instructions. Read them in the changes since your last read;
+  they are the document now. A submit with only direct edits gets the reply "read your edits; no asks".
+- **A ready 🤖 marker is a question or a command; you decide which.** It is never content: answering it removes it.
 
-- The flow form is the same value: `collaboration-mode: {default: discussion, chat: ["Operator instructions"]}`.
-- A bare scalar sets the default for the whole document: `collaboration-mode: collaboration`.
-- With no `collaboration-mode:` key, the whole document is discussion.
-- Read it from the round's snapshot every round, as the review mode is: the operator may change it between rounds.
+| The ask | Is a | What you do |
+|---|---|---|
+| "why…?", "what if…?", "is this number right?", "let's think about…", anything ending in `?` that asks for knowledge | **question** | open a **side doc** (§4) and replace the marker with `→ [discussion](<name>.side/YYYY-MM/YYYY-MM-DD-NN-slug.md)` |
+| an imperative change to the text: "tighten this", "give an example", "copy edit this section", "can you shorten this?" | **command** | make the edit (round.md §5) within its scope (§2), and remove the marker |
+| a command you cannot carry out without a choice: two readings, a missing fact | **command, unclear** | open a side doc asking what you need, replace the marker with its link, and index it |
+| an approval or a decision: "ok", "go with 2", "first in the section", "yes, Friday" | **command** | record it in one line and carry it out (below) |
+| an action elsewhere: "file this as a parley issue", "tell parley.nvim:4" | **command** | do it, remove the marker, and record what was done (below) |
+| "fold this discussion in" (any fold-in wording) beside a `→ [discussion](…)` link | **command** | fold the side doc into the document (below) |
+| anything you are unsure about: "the retry story feels off" | **question** | open a side doc that proposes what is off |
 
-## 2. Sections
+- **When unsure, it is a question.** A side doc costs the operator one link; a wrong edit rewrites their content. A
+  trailing `?` is a strong question signal, and an imperative is a command, even when phrased politely with a `?`
+  ("can you shorten this?").
+- **Every question branches**, even a small factual one. Never answer a question in the document's prose: the
+  operator phrases a command ("check this number and fix it") to get an edit, and folds a discussion in when it is
+  settled.
+- **Processing comes from the instruction.** "Copy edit", "proofread", "make it satire": infer the kind of edit from
+  what the operator wrote. When an instruction names one of the [briefs](briefs/) (copy-editing, line-editing,
+  proofreading, developmental, fact-check), load it and follow it. No document key selects one, and there is no
+  standing instruction: the operator repeats an instruction where it applies.
+- **Presentation is highlight.** Your own edits are shown as the adapter highlights the last machine edit; the
+  operator's are never marked. There is no direct or propose setting.
 
-1. **Find the headings:** every ATX heading (`#` to `######`) outside fenced code. A heading inside a code fence is
-   text, not a heading.
-2. **Match a name to a heading** by its text, at any level. Compare after lowercasing, collapsing each run of
-   whitespace to one space, trimming, and dropping one trailing parenthesised annotation: `### Operator instructions
-   (open)` matches `"Operator instructions"`. When two headings share a name, both take the mode.
-3. **A named section** runs from its heading to the next heading of the same or a higher level. Its subsections
-   take its mode unless they are named themselves, and then the nearer name wins.
-4. **Everything else** takes the default, including text above the first heading.
+**Fold-in is asked from the parent:** a 🤖[fold this discussion in] at or beside a `→ [discussion](…)` link is the
+one trigger. Edit the parent at the link's spot from what the side doc settled (its `Decided (operator): …` line, or
+its single proposal), through the parent's own write; mark the link `(folded <date>)`; and add a closing note at the
+end of the side doc, `Folded into the parent on <date>: <what was applied>.` The fold adds no index entry (§4, "The
+index"): the parent's changed text is its record.
+- **A fold-in beside an already-folded link** is honored again, so a fold whose result the operator undid can be
+  redone.
+- **One level per fold:** a 🤖[fold in] by 06's link in side doc 02 folds 06 into 02 only; folding 02 into its own
+  parent takes a 🤖[fold in] by 02's link there.
+- **Ask instead of guessing**, in a linked side doc that replaces the operator's ready marker: when the side doc
+  settled nothing (no Decided line and no single proposal), when the text around the link has changed so much that
+  the outcome no longer fits, or when the link is an `→ [answer](…)`: a chat item is the operator's text and an
+  answer doc never folds into it.
 
-Errors. A failed round writes nothing to an untracked document; a tracked one gets its snapshot written back as
-read, which folds the submit, since the reply answered it. When the review mode is bad too, report both.
-
-| Case | The round |
-|---|---|
-| a name listed under two modes, compared as in step 2 (`"Notes"` and `"notes"` are one name) | **fails**: change nothing, and name the heading and both modes in the reply |
-| a mode other than `discussion`, `collaboration`, `chat` (as a key, or as `default` or the bare scalar) | **fails**: change nothing, name the bad mode, and list the three |
-| a name that matches no heading | proceeds with the default there, and the reply names it: "`collaboration-mode.chat` names 'Operator instrucions', which matches no heading" |
-
-## 3. The three modes
-
-What every mode keeps from round.md §5:
-- Proposals (`🤖~D~`, `🤖~D~{N}`, `🤖<X>{N}`, `🤖{N}`) are never ready by themselves.
-- A pending marker (its last turn is an agent turn) is left for the operator.
-- Every marker written is a single line.
-- A review mode with `scope: whole-doc` still makes its own pass, as its brief directs: that brief is the operator's
-  ask too. A collaboration mode changes only where a marker's or an item's answer goes, never whether the review
-  mode's pass runs.
-
-### discussion
-
-Each ready 🤖 marker is an ask. Classify it, then act:
-
-| The ask | What you do |
-|---|---|
-| an **imperative**: a change to the text ("tighten this", "add an example", "can you shorten this?", "fold in" beside a `→ [discussion]` link) | edit the text the marker refers to (round.md §5), under the review mode's directives, and remove the marker. Under `deletions: propose-strike` the edit becomes a proposal marker, as round.md §5 says |
-| an imperative that is **unclear in a small way**, whose readings fit in one line | append a `{clarifying question}` turn to the marker ("{the latency numbers or the cost numbers?}") and leave it |
-| an **instruction that only acts** | honor it (below) |
-| a **decision** or an approval: an answer to a question the text put to the operator ("first in the section", "yes, Friday", "ok") | record it in one line and carry it out (below) |
-| anything else: a **question**, "why…?", "let's think about…", a request whose outcome is not yet an edit | open a **side doc** (§4) and replace the marker with `→ [discussion](<name>.side/NN-slug.md)` |
-
-- **The rule is strict.** Every question branches, even a small factual one ("is this number right?"). Never answer a
-  question in the document's prose. The operator phrases an imperative ("check this number and fix it") to get an
-  edit, or names the section collaboration.
-- **When unsure, open a side doc.** It never changes the document unasked, and folding it in later costs one
-  marker. "The retry story feels off" opens a side doc that proposes what is off.
-- **Fold-in is asked from the parent:** a 🤖[fold in] at or beside a `→ [discussion](…)` link is the one trigger.
-  It is an imperative: edit the parent at the link's spot from what the side doc settled (its `Decided (operator): …`
-  line, or its single proposal), through the parent's own write; mark the link `(folded <date>)`; and add a closing
-  note at the end of the side doc, `Folded into the parent on <date>: <what was applied>.` The fold adds no index entry (§4, "The index"): the
-  parent's changed text is its record, as a `Decided (operator): …` line when the side doc settled a decision.
-  - **A fold-in beside an already-folded link** is honored again, so a fold whose proposals the operator rejected
-    can be redone.
-  - **One level per fold:** a 🤖[fold in] by 06's link in side doc 02 folds 06 into 02 only; folding 02 into its
-    own parent takes a 🤖[fold in] by 02's link there.
-  - **Ask instead of guessing**, with a one-line `{…}` turn on the operator's marker: when the side doc settled
-    nothing (no Decided line and no single proposal: `{which: …?}`), when the text around the link has changed so
-    much that the outcome no longer fits, or when the link is an `→ [answer](…)`: a chat item is the operator's text
-    and an answer doc never folds into it.
-
-**Instructions that only act are honored, never branched.** The carve-out is for an instruction whose only effect is
-an action, never for a question that needs continued discussion. These usually appear in a side doc:
+**Commands that only act are honored, never branched.** These usually appear in a side doc:
 
 | The operator writes (in a side doc) | You do |
 |---|---|
@@ -99,11 +60,9 @@ an action, never for a question that needs continued discussion. These usually a
 | **an approval** ("ok", "accept", "go with 2", "agreed") | replace the marker with its Decided line (below). The parent is not touched: the reply says to fold in from the parent, with a 🤖[fold in] by its link to this side doc |
 | **an action elsewhere** ("file this", "tell parley.nvim:4") | do it, remove the marker, and add a closing record at the end of the side doc: what was done and where (the issue filed, the message sent) |
 
-- **Unclear what an approval approves** (the side doc proposed two things): append a one-line `{which: …?}` turn
-  to the marker rather than guessing.
-- **A fold-in is an edit**, made under the parent's review mode. Under `deletions: propose-strike` its replacements
-  and deletions are proposals in the parent; the link is still marked `(folded <date>)` in that same write, and the
-  side doc's closing note reads `Proposed in the parent on <date>: …`, to accept or reject there.
+- **Unclear what an approval approves** (the side doc proposed two things): open a further side doc under the same
+  side root in the round's month folder, linked and indexed from this one, to ask which proposal; do not guess or
+  append a marker turn.
 
 **A decision is recorded in one line.** Wherever the operator writes a decision or an approval, replace the marker
 with one line at its spot, `Decided (operator): <the decision, restated>.`, and carry it out when it asks for an edit
@@ -115,24 +74,57 @@ in this document. The line is the record, and it keeps the text clean:
   no side doc, and no reply prose about it.
 - **A decision in a side doc stays in the side doc.** It is what a later fold-in from the parent applies.
 
-### collaboration
+What every ask keeps from round.md §5:
+- Proposals already in an older document (`🤖~D~`, `🤖~D~{N}`, `🤖<X>{N}`, `🤖{N}`) are never ready by themselves.
+- A pending marker (its last turn is an agent turn) is left for the operator.
+- Every marker written is a single line with at most one commentary turn. Old chains remain readable; resolve a ready
+  one by its final human turn.
 
-Each ready 🤖 marker is an ask, answered in place: round.md §5 as written. Carry out the asked edit, or fold the
-answer into clean prose. Never open a side doc unasked.
+## 2. Scope of an edit
 
-### chat
+A command edits only what it is about:
 
-Each **item** of the section is an ask, not each marker.
+| Rule | The marker | Edits |
+|---|---|---|
+| **s1** (the default) | an anchored `🤖<X>[…]` or `🤖~D~[…]`, or a bare `🤖[…]` | the anchor's text; for a bare marker, the current or preceding paragraph (round.md §5) |
+| **s2** | an instruction that names a wider scope: "edit this section", "copy edit the document" | that section (to the next heading of the same or a higher level) or the document |
+| **s3** | a marker before the first heading | the whole document, unless it names a narrower scope |
 
-- **An item** starts at a `-`, `*` or `N.` line at the section's shallowest list indent. It runs over its
-  sub-items and continuation lines until the next such line, or until a blank line followed by prose indented no
-  deeper than that indent: prose in the section belongs to no item and is ignored. Fenced code starts no item, and a
-  tab indents to the next multiple of four. An item is **linked** by a ` → [answer](…)` ending any of its lines
+A brief never widens the scope by itself: "copy edit this paragraph" loads the copy-editing brief and edits one
+paragraph. A question has no scope: it only opens a side doc.
+
+## 3. The chat carve-out
+
+A **`@@chat@@`** line directly above a heading makes that section chat:
+
+```markdown
+@@chat@@
+## Operator instructions
+1. Why use retries?
+2. Move #353 to :2.
+```
+
+- **The tag** is a line holding only `@@chat@@` (surrounding spaces allowed), on the line directly above an ATX
+  (`#`) heading, outside fenced or indented code. A line above a setext heading is part of that heading's text in
+  CommonMark, so a tag there is misplaced. Its section runs from the heading to the next heading of the same or a higher
+  level, subsections included. A tag or heading inside a closed leading `---` header declares nothing, even when the
+  header cannot be read as frontmatter (§7's notice says so); the body after it is read as usual (#581).
+- **A misplaced tag** (a blank line or text between it and the heading, or no heading after it) is ordinary text.
+  Name it in the reply: "`@@chat@@` at line 12 is not directly above a heading". Other `@@tag@@` lines are parley's
+  (outline labels, file references) and not review's.
+- **Each item of the section is an ask**, not each marker. An item is a numbered `N.` line at the section's
+  shallowest list indent. It runs over its sub-items and continuation lines until the next such line, or until a
+  blank line followed by prose indented no deeper than that indent: prose in the section belongs to no item and is
+  ignored. Fenced code starts no item, and a tab indents to the next multiple of four. A section a legacy form covers
+  (§7) also takes `-` and `*` items, as it always did, even when a `@@chat@@` tag names it too. Chat sections nest
+  but never partially overlap; a line belongs to the innermost one, whose grammar governs it. An item is **linked** by a ` → [answer](…)` ending any of its lines
   outside fenced code: the link is appended to the item's last line, and a follow-up added after it later leaves the
-  item linked. Its **extent** is all of the item except that link.
+  item linked. The link's destination must be one a round could write: nonempty, with no whitespace and no
+  parentheses (`pkg/sidedoc` `ValidAnswerTarget`, #581). `→ [answer](broken path)` or `→ [answer]()` links nothing,
+  so the item is still a new ask. Its **extent** is all of the item except that link.
 - **A new ask:** an item with no `→ [answer](…)` link. Write an answer doc (§4) and append ` → [answer](<path>)`
   to the item's last line. For a question the doc answers it. For an instruction you carry it out, and the doc
-  records what was done and where.
+  records what was done and where. An item always gets an answer doc, whether it is a question or a command.
 - **A follow-up:** an item with its link, where the changes since your last read overlap its extent (an added,
   changed or deleted line inside it, a sub-item included). Append the follow-up and its answer to the end of that
   item's existing answer doc, under a `## Follow-up <date>` heading, and leave the link as it is. A change that only
@@ -146,43 +138,50 @@ Each **item** of the section is an ask, not each marker.
   by `parent:`, `marker:` and section, and is unlinked, so it is relinked (§4). A new item on the topic is a new ask.
 - **Never** edit, reorder or delete the operator's items, or add 🤖 markers to them. Your only write to the section
   is the appended link.
-- **Items are always answered**, whatever the review mode's `scope` or `frontier`: they are the operator's asks,
-  not markers, so a frontier drawn from markers doesn't reach them.
-- A 🤖 marker inside a chat section is answered as in discussion.
+- **A 🤖 marker inside a chat section** is an ordinary ask (§1). The answer docs themselves are ordinary
+  collaborative documents, not chat.
 
 ## 4. Side docs and answer docs
 
-A discussion's side doc and a chat item's answer doc are both **side docs**; only their names and link text differ.
+A question's side doc and a chat item's answer doc are both **side docs**; only their names and link text differ.
+Side docs are ordinary collaborative documents: every rule of this file applies inside them, and a question asked in
+one opens a further side doc.
 
 **Lifetime:** a side doc is one small file per ask, and it has no closed state. No round deletes, marks or locks
 one: only its references in the parent come and go (below, "The index"). The folder grows by one file per question
 or chat item, and moves with its document (§5).
 
-**Where:** every side doc of `<name>.md` lives in `<name>.side/`, beside it: one flat folder per document. A side
-doc opened from another side doc goes in the **same folder**, with `parent:` naming the side doc it came from. Never
-create a `.side/` inside a `.side/`.
+**Where:** create every new side doc or answer doc of `<name>.md` under
+`<name>.side/YYYY-MM/YYYY-MM-DD-NN-slug.md`, beside the owning document. The year-month directory and full filename
+date use the round's date; retaining the full date keeps a file meaningful when linked, grepped or moved.
+A side doc opened from another side doc uses the **same owning .side root**, in the current round's month folder,
+with `parent:` naming the actual side doc it came from. Never create a `.side/` inside a `.side/`.
+For example, a question in `design.side/2026-09/2026-09-30-01-cache.md` on 2026-10-23 creates
+`design.side/2026-10/2026-10-23-01-retry.md`, whose parent is `../2026-09/2026-09-30-01-cache.md`.
+
+**No migration:** readers accept both the new month layout and existing flat `NN-slug.md` or
+`YYYY-MM-DD-NN-slug.md` names. Leave existing files, links and frontmatter where they are. Search both layouts for
+reuse before creating anything; a follow-up extends its linked file, even in an older flat or qa/ location.
 
 **Names:**
 
 | Kind | Name | Number |
 |---|---|---|
-| side doc (discussion) | `NN-slug.md` | the next free number in the folder: two digits, widening as needed (`99`, then `100`); nothing is renamed |
-| answer doc (chat) | `YYYY-MM-DD-NN-slug.md` | the round's date, then the next free number among that day's answer docs |
+| side doc (discussion) | `YYYY-MM/YYYY-MM-DD-NN-slug.md` | the next free number among that date's side and answer docs under this side root |
+| answer doc (chat) | `YYYY-MM/YYYY-MM-DD-NN-slug.md` | the same daily sequence; count taken dated names in the flat and month layouts |
 
 - The **slug** names the question in a few words (`lock-granularity`, `s4-cost`): lowercase ASCII letters, digits
   and single hyphens, at most 40 characters; `question` if nothing is left.
-- The two kinds share a folder without colliding: a dated name starts with its date, and each kind counts its
-  numbers apart (a dated name's year is never a side doc's number).
+- Numbers start at `01`, widening as needed (`99`, then `100`); never rename an existing file to make room.
+  Undated legacy names remain valid and do not consume the new daily sequence. Never read a date's year as its number.
 
 **Frontmatter**, in this order:
 
 ```yaml
 ---
 type: side-doc
-parent: ../design.md                         # plain relative path, from this file; no #anchor
+parent: ../../design.md                      # from the month folder; plain relative path, no #anchor
 marker: "why do we lock per file, not per section?"
-collaboration-mode: discussion
-process-instruction: "[free-form]"           # only when the parent has one: copied verbatim
 ---
 ```
 
@@ -190,8 +189,8 @@ process-instruction: "[free-form]"           # only when the parent has one: cop
   line without its list number or bullet and without a link. Write it as a YAML double-quoted string:
   escape `\` as `\\` and `"` as `\"`. A `<br>` stays as written. It is untrusted text, and quoting it is what keeps it
   from becoming other frontmatter.
-- `collaboration-mode: discussion` is always written out: every side doc is discussion, answer docs included, so a
-  question asked inside one opens a further side doc rather than an inline back-and-forth.
+- Those three keys are all a new side doc carries. Never copy a parent's legacy mode keys into it (§7); an
+  existing side doc's frontmatter is left as it is.
 
 **Body:** a `# ` title that is the question (or the item, shortened); a first line that links back to the parent and
 names the section, as `_From [<parent title>](<parent path>), section "<heading>"._` (the parent's `# ` title, or
@@ -199,16 +198,22 @@ its file name when it has none); then the answer. The backlink is
 a plain relative path with no `#anchor`, like `parent:`: an editor that opens links as files reads `#` as part of
 the name.
 
-**In the parent:** discussion replaces the marker with `→ [discussion](<path>)` at the marker's own spot, and a
+**In the parent:** a question replaces the marker with `→ [discussion](<path>)` at the marker's own spot, and a
 decision's notes are linked as `→ [notes](<path>)` at the end of its Decided line. Chat appends ` → [answer](<path>)`
 to the item's last line. The path is relative to the parent. Swapping a marker for its
-link is applied directly, even under `deletions: propose-strike`: it removes only the marker, like any answered
-marker, so it is never shown as a strike-through proposal.
+link is an edit through `apply`. For a side doc opened by that ask, include its
+matching `discussions:` index entry in the same `apply` batch as the link, so both
+land atomically; check that the entry's path matches the link, since Pair does not
+verify that pairing for you. An older document may hold a pending `🤖{…}` link
+proposal from the retired propose presentation: it still counts as linked, so
+neither relink nor answer its ask again; if the operator rejects it, remove its
+`discussions:` entry in the next round and keep the side doc as an orphan.
 
 **Writes and retries.** Each document a round changes gets one write, through the adapter. A fold-in changes two:
 the parent it folds into, and the side doc that gets the closing note. A new side doc's index entry rides the
 parent's write, in the same round as its link. Write in this order:
-1. Before allocating a name, look for a side doc to reuse: one in the folder whose `parent:` and `marker:` equal
+1. Before allocating a name, look for a side doc to reuse: one under the owning side root, across flat and month
+   layouts, whose resolved `parent:` and `marker:` equal
    this ask's, whose backlink names this ask's section, and that **no link in the parent points to**. If one
    exists, link it and write no other, and the reply says it was relinked. It is usually a refused round's
    (step 4); it may also be the doc of a chat item whose link the operator deleted, or of an item re-added word for
@@ -235,12 +240,12 @@ A side doc has one **attachment** and up to two **references** in its parent:
 | What | Where | What it means | When it is removed |
 |---|---|---|---|
 | **the attachment** | the side doc's own `parent:` and `marker:` | which document, and which ask, it belongs to | never: reuse (above) and moves (§5) key on it |
-| **the link** | `→ [discussion](…)`, `→ [answer](…)` or `→ [notes](…)` in the parent's text | where the thread sits | by the operator; you then drop its entry |
+| **the link** | `→ [discussion](…)`, `→ [answer](…)` or `→ [notes](…)` in the parent's text (`→ [proposal](…)` in older documents) | where the thread sits | by the operator; you then drop its entry |
 | **the index entry** | the parent's `discussions:` frontmatter | the side doc waits for the operator's review | by the operator: reviewed; the link stays |
 
 ```yaml
 discussions:
-  - doc: design.side/07-s3-side-docs.md
+  - doc: design.side/2026-10/2026-10-23-07-s3-side-docs.md
 ```
 
 - **Which document's index:** the side doc's `parent:`, the document that holds its link. A side doc opened from a
@@ -275,7 +280,7 @@ relative, so a move that keeps the file name keeps everything resolving. When yo
   **orphan** (its document is gone; a taken `spec.md` would stop the move). Rename the orphan to `spec_1.side/` (then
   `_2`, … until free), and give the moving document `spec.side/`: every tool finds a document's side docs from its
   file name. Name where the orphan went in the reply.
-- **A side doc keeps its name for life:** links and entries point at its `NN-slug`. Don't rename one inside the
+- **A side doc keeps its name for life:** links and entries point at its original path. Don't rename one inside the
   folder. When you find a dangling link or entry, name it in the reply.
 - **Links into the folder from other documents** are not rewritten: side docs are local references.
 
@@ -290,39 +295,58 @@ before/after documents.
 | # | Situation | The operator does | You do | The operator sees |
 |---|---|---|---|---|
 | 1 | any section | edits text directly, submits | read the changes since your last read; find no ask; write the snapshot back unchanged, folding the submit | the reply "read your edits; no asks" |
-| 2 | discussion | 🤖[tighten this paragraph] | edit the paragraph under the review mode's deletions directive, and remove the marker; under propose-strike, write it as a proposal marker instead (round.md §5) | the changed paragraph, or a proposal to accept or reject |
-| 3 | discussion | 🤖[why do we lock per file, not per section?] | create `<name>.side/NN-lock-granularity.md` holding the question and its answer; replace the marker with `→ [discussion](…)` | the link where the marker was; the text otherwise unchanged |
-| 4 | discussion | 🤖[add the numbers], with two readings | append `{the latency numbers or the cost numbers?}` | the marker, pending them |
-| 5 | discussion, unsure | 🤖[the retry story feels off] | treat it as a question: a side doc proposing what is off | a `→ [discussion]` link |
-| 6 | side doc | 🤖[a follow-up question] | open a further side doc in the same folder, `parent:` naming this one, and link it here | a link in the side doc; the parent untouched |
+| 2 | any | 🤖[tighten this paragraph] | a command: apply the clean paragraph edit (s1) and remove the marker | the changed paragraph, highlighted |
+| 3 | any | 🤖[why do we lock per file, not per section?] | a question: create `<name>.side/YYYY-MM/YYYY-MM-DD-NN-lock-granularity.md` holding the question and its answer; replace the marker with `→ [discussion](…)` | the link where the marker was; the text otherwise unchanged |
+| 4 | any | 🤖[add the numbers], with two readings | an unclear command: open a side doc asking which numbers; replace the marker with its link and index the doc | the link and an indexed question |
+| 5 | any, unsure | 🤖[the retry story feels off] | treat it as a question: a side doc proposing what is off | a `→ [discussion]` link |
+| 6 | side doc | 🤖[a follow-up question] | open a further side doc under the same side root in the round's month folder, `parent:` naming this one, and link it here | a link in the side doc; the parent untouched |
 | 7 | side doc | 🤖[ok] or 🤖[go with 2] | replace the marker with `Decided (operator): …`; leave the parent; the reply says to fold in from the parent's link | the one Decided line in the side doc |
-| 8 | side doc | 🤖[ok], when it proposed two things | append `{which: the rename or the strict rule?}` | the marker, pending them |
+| 8 | side doc | 🤖[ok], when it proposed two things | open a further side doc asking which proposal; replace the marker with its link and index the doc | a link under the same side root, in the round's month folder |
 | 9 | side doc | 🤖[file this as a parley issue] | file it; add a closing record at the end of the side doc | the side doc's record |
-| 10 | parent, after a discussion | 🤖[fold in] by the link | edit the parent from what the side doc settled, through the parent's write; mark the link `(folded <date>)`; add a closing note to the side doc; add no entry | the folded text and the folded link |
-| 11 | collaboration | 🤖[why…?] | answer in place, folded into clean prose | the answer in the text |
-| 12 | chat | adds item `5. what does S4 cost?` | create `<name>.side/<date>-NN-s4-cost.md`; append ` → [answer](…)` to item 5 | the link at item 5's end |
-| 13 | chat | adds item `6. move #353 to :2` | do it; the answer doc records what was done and where; append the link | the link; the reply says it was done |
-| 14 | chat | edits a linked item, or one of its sub-items | append the follow-up and its answer to the item's answer doc; leave the link | the reply names the doc it extended |
-| 15 | chat | deletes an item | drop its answer doc's index entry; the doc stays | the item and the entry gone; the doc kept |
-| 16 | any | a name in `collaboration-mode:` matches no heading | do the round with the default there; name the dangling entry in the reply | the reply line |
-| 17 | any | holds the lock past your write | defer to their next submit (the adapter's exit 3) | the locked state; past 30 minutes, a one-line ping |
-| 18 | any | (a previous round's write was refused) | link the side docs that round wrote, found by `parent:`, `marker:` and section among the unlinked ones; create no duplicates | the links, as if the first write had landed |
-| 19 | discussion | 🤖[why?] in a section, when an earlier 🤖[why?] elsewhere already has its linked side doc | open a new side doc: a linked doc is never reused | a new `→ [discussion]` link; the earlier discussion untouched |
-| 20 | discussion | 🤖[first in the section] answering a question in the text, or a bare 🤖[ok] | replace the marker with `Decided (operator): <the decision, restated>.` and carry it out; anything you add goes to a side doc linked `→ [notes](…)`; a bare acknowledgement gets only the line | one line in the text; the reasoning a click away |
-| 21 | parent | deletes a `→ [discussion]` link | drop its index entry; the side doc is unchanged | the link and the entry gone |
-| 22 | parent | removes an index entry | nothing: reviewed | the entry gone; the link stays |
-| 23 | chat, after 22 | edits the item whose answer doc they reviewed | append the follow-up to its answer doc; add the entry back | the entry back, at the end |
-| 24 | session file | deletes an Operator instructions item | drop its answer doc's index entry (`tl-lead status`) | the item and the entry gone |
-| 25 | parent | an ask whose marker matches a side doc whose link they deleted | relink that side doc (§4's reuse); add the entry back | the link and the entry back |
-| 26 | side doc 02, holding 06's link | 🤖[fold in] by 06's link | fold 06 into 02 only | 02 changed |
-| 27 | parent | renames `design.md` to `spec.md` in parley | (parley) move the folder to `spec.side/`; rewrite the side docs' backlinks, the parent's own links and its index; rename the registry entry | every link and entry still resolves |
-| 28 | any | asks you to move or archive a document | the steps of §5 | the same; the reply lists the rewrites |
-| 29 | any | a move whose target folder name is taken (an orphan `spec.side/`) | rename the orphan to `spec_1.side/` (then `_2`, …); the moving document takes `spec.side/` | the reply names where the orphan went |
+| 10 | parent, after a discussion | 🤖[fold this discussion in] by the link | edit the parent from what the side doc settled, through the parent's write; mark the link `(folded <date>)`; add a closing note to the side doc; add no entry | the folded text and the folded link |
+| 11 | any | 🤖[copy edit this section] | a command with scope s2: load the copy-editing brief and edit that section only | the section's changes, highlighted |
+| 12 | any | 🤖[give an example] before the first heading | scope s3: edit the whole document as asked | the document's changes, highlighted |
+| 13 | `@@chat@@` section | adds item `5. what does S4 cost?` | create `<name>.side/YYYY-MM/YYYY-MM-DD-NN-s4-cost.md`; append ` → [answer](…)` to item 5 | the link at item 5's end |
+| 14 | `@@chat@@` section | adds item `6. move #353 to :2` | do it; the answer doc records what was done and where; append the link | the link; the reply says it was done |
+| 15 | `@@chat@@` section | edits a linked item, or one of its sub-items | append the follow-up and its answer to the item's answer doc; leave the link | the reply names the doc it extended |
+| 16 | `@@chat@@` section | deletes an item | drop its answer doc's index entry; the doc stays | the item and the entry gone; the doc kept |
+| 17 | any | a `@@chat@@` line with a blank line before its heading | treat the section as ordinary; name the misplaced tag in the reply | the reply line |
+| 18 | any | holds the lock past your write | defer to their next submit (the adapter's exit 3) | the locked state; past 30 minutes, a one-line ping |
+| 19 | any | (a previous round's write was refused) | link the side docs that round wrote, found by `parent:`, `marker:` and section among the unlinked ones; create no duplicates | the links, as if the first write had landed |
+| 20 | any | 🤖[why?] in a section, when an earlier 🤖[why?] elsewhere already has its linked side doc | open a new side doc: a linked doc is never reused | a new `→ [discussion]` link; the earlier discussion untouched |
+| 21 | any | 🤖[first in the section] answering a question in the text, or a bare 🤖[ok] | replace the marker with `Decided (operator): <the decision, restated>.` and carry it out; anything you add goes to a side doc linked `→ [notes](…)`; a bare acknowledgement gets only the line | one line in the text; the reasoning a click away |
+| 22 | parent | deletes a `→ [discussion]` link | drop its index entry; the side doc is unchanged | the link and the entry gone |
+| 23 | parent | removes an index entry | nothing: reviewed | the entry gone; the link stays |
+| 24 | chat, after 23 | edits the item whose answer doc they reviewed | append the follow-up to its answer doc; add the entry back | the entry back, at the end |
+| 25 | session file | deletes an Operator instructions item | drop its answer doc's index entry (`tl-lead status`) | the item and the entry gone |
+| 26 | parent | an ask whose marker matches a side doc whose link they deleted | relink that side doc (§4's reuse); add the entry back | the link and the entry back |
+| 27 | side doc 02, holding 06's link | 🤖[fold in] by 06's link | fold 06 into 02 only | 02 changed |
+| 28 | parent | renames `design.md` to `spec.md` in parley | (parley) move the folder to `spec.side/`; rewrite the side docs' backlinks, the parent's own links and its index; rename the registry entry | every link and entry still resolves |
+| 29 | any | asks you to move or archive a document | the steps of §5 | the same; the reply lists the rewrites |
+| 30 | any | a move whose target folder name is taken (an orphan `spec.side/`) | rename the orphan to `spec_1.side/` (then `_2`, …); the moving document takes `spec.side/` | the reply names where the orphan went |
+| 31 | any | a document carrying legacy mode keys (§7) | read chat from them where they meant chat; ignore the rest; write no key | one notice line in the reply |
 
-## 7. Older documents
+## 7. Legacy mode keys
 
-Documents with no `collaboration-mode:` are discussion, and nothing is migrated. In a chat section, an item that
-ends in `→ done: …` (the TL's older form of an answered instruction) counts as answered, like a linked one. A document whose
-`process-instruction:` free text says "answer the operator's 🤖 comments in place" still opens side docs for
-questions: free text governs how edits are made, not where answers go, so it cannot reroute an answer. Give such a
-document `collaboration-mode: collaboration` to keep answers in place.
+Documents written before #575 carry mode keys. They stay readable and never break a round; **nothing new writes
+them**, and a round never deletes or rewrites one of their lines.
+
+| Legacy key or form | Read as |
+|---|---|
+| `collaboration-mode: chat` (frontmatter scalar) | the whole document is a chat section: every top-level item, in any section, is an ask |
+| a section map, `collaboration-mode: {chat: [names], default: …}` (block or flow form) | each named section is chat. Names match headings at any level after lowercasing, collapsing whitespace, trimming and dropping one trailing parenthesised annotation (`### Operator instructions (open)` matches `"operator instructions"`); a name that matches no heading is named in the notice. A `default: chat` makes the whole document chat |
+| a heading comment `<!-- collaboration-mode: chat -->` on the line directly under a heading | that section is chat |
+| `collaboration-mode: discussion` or `collaboration-mode: collaboration` (scalar, map default or heading comment) | nothing: the one mode applies. Questions get side docs and commands act, in issues, plans and projects too |
+| `presentation-mode`, `presentation`, `processing-mode`, `processing-instruction`, `process-instruction`, in frontmatter or a heading comment | nothing |
+| an unknown, empty or malformed value of any of these | nothing |
+
+- A legacy chat section keeps its old item grammar: `-`, `*` and `N.` items. A `@@chat@@` tag and a legacy form on
+  the same heading are one chat section, not a conflict, and it keeps the legacy grammar (`ChatSections` reports
+  it with `Source` "tag" and `Legacy` true).
+- **Report, never fail.** The reply carries the notice lines `pkg/sidedoc`'s `ChatSections` produces for the
+  document as submitted, word for word, one per legacy form (for example "retired keys ignored: presentation-mode,
+  processing-mode"); a line number in a notice counts lines of the submitted document, frontmatter included. A
+  mode key never fails a round and never makes it write nothing. Frontmatter that cannot be read (CR line endings,
+  a `...` or `%` line inside it, YAML that does not parse) is read as having no keys, and its notice says so.
+- In a chat section, an item that ends in `→ done: …` (the TL's older form of an answered instruction) counts as
+  answered, like a linked one.

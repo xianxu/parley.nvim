@@ -405,6 +405,14 @@ describe("attention_model.scan: an agent write is an mtime the operator's editor
         assert.same({}, Model.scan(state, { file(10, 0, "/a.side/old.md") }))
     end)
 
+    it("retains monthly saves for shared owning roots, rejecting deeper and nested layouts (#419)", function()
+        local state = run({ { submitted(PARENT, "m1"), 10 },
+            { saved(20, 0, "/a.side/2026-10/mine.md"), 20 },
+            { saved(20, 0, "/a.side/2026-10/deep/no.md"), 20 },
+            { saved(20, 0, "/a.side/old.side/no.md"), 20 } })
+        assert.same({ ["/a.side/2026-10/mine.md"] = "20.0" }, state.saved)
+    end)
+
     it("keeps only the saves a scan can still ask about, at most 2 × LIMIT, on every save", function()
         local state = run({ { submitted(PARENT, "m1"), 10 }, { saved(20, 0, "/a.side/x.md"), 20 },
             { saved(20, 0, "/elsewhere.side/y.md"), 20 } })

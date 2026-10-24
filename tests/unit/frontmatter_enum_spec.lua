@@ -3,7 +3,7 @@
 local enum = require("parley.frontmatter_enum")
 
 describe("frontmatter_enum (#384)", function()
-    local lines = { "---", "collaboration-mode: dis", "title: x", "---", "collaboration-mode: dis" }
+    local lines = { "---", "test-mode: al", "title: x", "---", "test-mode: al" }
 
     before_each(function()
         enum.declare("test-mode", { values = function() return { "alpha", "beta", "albatross" } end })
@@ -19,8 +19,8 @@ describe("frontmatter_enum (#384)", function()
     end)
 
     it("finds the value of a declared key inside the frontmatter", function()
-        local ctx = enum.context(lines, 2, #"collaboration-mode: dis")
-        assert.same({ key = "collaboration-mode", start = #"collaboration-mode: ", partial = "dis" }, ctx)
+        local ctx = enum.context(lines, 2, #"test-mode: al")
+        assert.same({ key = "test-mode", start = #"test-mode: ", partial = "al" }, ctx)
     end)
 
     it("starts after the colon and its spaces, with an empty partial", function()
@@ -51,15 +51,13 @@ describe("frontmatter_enum (#384)", function()
         assert.same({}, enum.candidates("test-scoped", "", "/repo/other/a.md"))
     end)
 
-    it("draws collaboration-mode from the resolver's own list (one source)", function()
-        local collaboration = require("parley.skills.review.collaboration")
-        assert.same(collaboration.modes, enum.candidates("collaboration-mode", "", "/any.md"))
-        for _, mode in ipairs(collaboration.modes) do
-            local _, err = collaboration.resolve({ "---", "collaboration-mode: " .. mode, "---", "# T" })
-            assert.is_nil(err, mode)
+    it("offers no retired editorial keys while retaining declared owners", function()
+        for _, key in ipairs({ "collaboration-mode", "presentation", "presentation-mode", "process-instruction", "processing-mode" }) do
+            assert.same({}, enum.candidates(key, "", "/any.md"))
+            assert.is_nil(enum.context({ "---", key .. ": ", "---" }, 2, #key + 2))
+            assert.is_false(vim.tbl_contains(enum.keys(), key))
         end
-        local _, err = collaboration.resolve({ "---", "collaboration-mode: nope", "---", "# T" })
-        assert.is_not_nil(err)
+        assert.is_true(vim.tbl_contains(enum.keys(), "status"))
     end)
 
     it("leaves no test key behind after teardown", function()
