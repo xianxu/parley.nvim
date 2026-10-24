@@ -304,3 +304,12 @@ Combined final correction lint:870files,0warnings/errors; git diff --check clean
 ### 2026-10-24 11:30 — close round2 REWORK / BR-4 approved
 
 Round2 independently verified BR-1/2/3 addressed (reverting executable fixes makes the regression tests fail). New BR-4 reports section-ownership-through-operations: to_end searches from a tag-widened source start and can consume a following section or invert at a preceding sibling. TL de5bf27d approves separate semantic heading/source extent and the full operation matrix plus native deletion/undo. The obsolete queued lease-3800866215 was cancelled normally before admission; no result claimed. Add REDs, fix the shared range owner, qualify both runtimes, then commit/push and queue a fresh suite before re-close. Live stage remains unchanged; #441 stays separate.
+
+
+### 2026-10-24 11:44 — BR-4 correction qualified
+
+Private section_range heading-row return now survives source widening: inner starts after the semantic heading and plain-document to_end searches from it. Public ranges remain unchanged. The144-case H1–H3 operation matrix covers scopes, inner/around, tag/heading/body cursor, preceding siblings, tagged/untagged following siblings and nested content; RED24failures each runtime with existing256range cases passing. GREEN409/409 on each runtime,0errors and clean census.
+
+Native command/textobject regressions captured8expected RED failures on compatibility; the standalone new spec passes8/8 on each runtime with clean census and verifies exact sibling bytes plus one-step undo. Root inspected source/tests and logs. Tests live in integration/entity_tag_delete_spec.lua, mapped under chat/entity_delete; original textobject/parity files are unchanged. Initial attempts to append native cases to large existing files hit the200s envelope before reaching them; those are incomplete runs, not BR-4 failures or flakes. The later unchanged original textobject spec completed18/18 on preferred runtime. No deadline increase or test suppression. Lint871files clean and diff check clean.
+
+Next: commit/push corrected head, fresh recorded pre-close and full close review; normal measured actuals. No landing before final code suite pass. Stage remains unchanged and hub owns fast-forward; #441 stays unclaimed/separate.

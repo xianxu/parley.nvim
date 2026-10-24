@@ -132,7 +132,9 @@ local function section_range(lines, row, bounds, in_code, tags)
 		end
 		last = i
 	end
-	return { kind = "section", first = tags[row - 1] and row - 1 or row, last = last }
+	-- Keep the semantic heading separate from its attached source extent.
+	-- Inner ranges and to_end still belong to this heading, not the tag.
+	return { kind = "section", first = tags[row - 1] and row - 1 or row, last = last }, row
 end
 
 --- Extend over the blank run that follows, bounded (dap semantics).
@@ -331,7 +333,7 @@ local function range_from_context(parsed, lines, row, opts, context)
 	local floor, patterns, in_code = context.floor, context.patterns, context.in_code
 	local idx, bounds = context.idx, context.bounds
 	local tags = context.tags
-	local found
+	local found, heading_row
 
 	if idx and on_question_line(parsed, idx, row) then
 		found = { kind = "question", first = bounds.first, last = bounds.last }
@@ -349,9 +351,9 @@ local function range_from_context(parsed, lines, row, opts, context)
 		return (found.first <= found.last) and found or nil
 	end
 
-	found = section_range(lines, row, bounds, in_code, tags)
+	found, heading_row = section_range(lines, row, bounds, in_code, tags)
 	if found and opts.inner then
-		found.first = found.first + (tags[found.first] and 2 or 1)
+		found.first = heading_row + 1
 		if found.first > found.last then
 			return nil
 		end
@@ -377,7 +379,7 @@ local function range_from_context(parsed, lines, row, opts, context)
 		if not bounds then
 			-- Outside any exchange: the enclosing section's end, else EOF.
 			local section = nil
-			for i = found.first, floor, -1 do
+			for i = heading_row or found.first, floor, -1 do
 				if heading_level_at(lines, i, in_code) then
 					section = section_range(lines, i, nil, in_code, tags)
 					break

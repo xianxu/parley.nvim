@@ -30,6 +30,40 @@ describe("review tag consumer ownership", function()
         end
         assert.same({ kind = "section", first = 7, last = 9 }, entity.range(nil, lines, 8))
     end)
+    -- Source ownership starts at the tag; semantic section ownership starts
+    -- at its heading. Every operation must retain the latter independently.
+    for level = 1, 3 do
+        for _, prior in ipairs({ false, true }) do
+            for _, next_tagged in ipairs({ false, true }) do
+                local prefix = string.rep("#", level)
+                local lines = prior and { prefix .. " Prior", "prior body", "" } or {}
+                local offset = #lines
+                vim.list_extend(lines, { "@@chat@@", prefix .. " First", "first body", "",
+                    string.rep("#", level + 1) .. " Child", "child body", "" })
+                if next_tagged then lines[#lines + 1] = "@@chat@@" end
+                vim.list_extend(lines, { prefix .. " Second", "keep me" })
+                for _, scope in ipairs({ "entity", "to_end" }) do
+                    for _, inner in ipairs({ false, true }) do
+                        for cursor, at in ipairs({ "tag", "heading", "body" }) do
+                            it(string.format("bounds H%d %s %s %s prior=%s next-tag=%s", level,
+                                scope, inner and "inner" or "around", at, tostring(prior),
+                                tostring(next_tagged)), function()
+                                local first = offset + ((inner or at == "body") and 3 or 1)
+                                local last = offset + 7
+                                if scope == "entity" then
+                                    last = offset + (at == "body" and (inner and 3 or 4)
+                                        or (inner and 6 or 7))
+                                end
+                                assert.same({ kind = at == "body" and "paragraph" or "section",
+                                    first = first, last = last }, entity.range(nil, lines,
+                                        offset + cursor, { scope = scope, inner = inner }))
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    end
     it("does not pull the following tag into a preceding paragraph", function()
         local lines = { "Body.", "@@chat@@", "## Tagged", "tail" }
         assert.same({ kind = "paragraph", first = 1, last = 1 }, entity.range(nil, lines, 1))

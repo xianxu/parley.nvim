@@ -209,6 +209,7 @@ atlas:
       - tests/unit/markdown_heading_spec.lua
       - tests/unit/markdown_heading_conformance_spec.lua
       - tests/integration/entity_textobj_spec.lua
+      - tests/integration/entity_tag_delete_spec.lua
       - tests/integration/review_tag_refusal_spec.lua
       - tests/integration/entity_delete_parity_spec.lua
 
