@@ -115,6 +115,18 @@ describe('bounded remote process evidence', function()
         assert.is_true(source.pending[1].canceled)
         source.release(); assert.equals(1, receipt.count)
     end)
+    it('measures its deadline from now even after the loop was blocked (#421)', function()
+        local source = fake.new({ [12]={started=stamp} }); source.hold=true
+        -- 1.2 s of synchronous work: a timer armed from the stale loop clock
+        -- would expire this 1 s deadline at once.
+        require('tests.helpers.loop_clock').block(1200)
+        local receipt = observe({12}, {source=source,deadline_ms=1000})
+        vim.wait(100, function() return false end) -- absence: a stale-clock deadline fires in the first loop turns
+        assert.is_nil(receipt.status, vim.inspect(receipt.status))
+        source.release(); complete(receipt)
+        assert.equals('complete', receipt.status.kind, vim.inspect(receipt.status))
+        assert.equals('alive', receipt.rows[12].kind)
+    end)
     it('copies caller pid and environment inputs', function()
         local source = fake.new({ [12]={started=stamp} }); source.hold=true
         local pids, env = {12}, {KEY='original'}

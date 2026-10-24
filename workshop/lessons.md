@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-10-23 (#421 — an injected delay inside a fixed budget is a race with real IO)
+
+- "Only under load, no trace" is not a root cause. Before calling a failure a machine stall, time the failing call itself. A 15 s deadline that answers in 0.35 ms was never slow: its timer was armed from libuv's cached clock after synchronous work. Arm every deadline timer through helper.start_deadline; tests/arch/deadline_timer_spec enforces it.
+- Reproduce under the failing run's own mapping, not only the file alone. The pair passed 30 of 30 alone and failed 5 of 20 once another spec ran first.
+- A scope revision that adds deliverables (close another issue, unregister its cases) also adds a Done-when clause, so the close checks it (BR-1).
+- A deadline test that injects a fixed delay (1500 ms of a 2000 ms budget) leaves the rest of the budget to real fsyncs, so a loaded disk fails it. Hold the completion instead, and release it only once the deadline under test has passed (the deadline the resource carries); a test for a fresh budget starts the next operation only after the old deadline has passed.
+- A case that does not test a deadline should not run under a product default shorter than the suite's arrival budget: pass timeout_ms=arrival.MS where the API takes one, so a short stall cannot fail an unrelated property.
+
 ## 2026-10-23 (#414 — "it did not wait" as a fact, not a time)
 
 - A wall-clock bound that equals the timeout it guards has no margin. The regression it targets (a wait cut off by that timeout) and a scheduling stall on a loaded machine give the same reading. Assert the cause instead: hold the fake's answer behind a gate the spec opens, then check that the operation is still pending when the call returns.
