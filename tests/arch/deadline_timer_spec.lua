@@ -15,6 +15,14 @@
 -- alias, and a remaining time computed on an earlier line (tasker.lua's
 -- reconcile delay, on an injected clock, is one). UI debounce and periodic
 -- timers are out of scope: a stale clock only makes one of their ticks early.
+--
+-- #431: vim.system arms its `timeout` the same raw way, right after the spawn,
+-- so a call that passes one goes through helper.system. A raw vim.system is a
+-- timeout call when a `timeout =` field appears on its line, the line before
+-- (an options table built there) or the next three (a multi-line table). A
+-- call forwarding an options variable counts too, since the caller's table
+-- may carry a timeout. It cannot see a timeout set further away for a literal
+-- table, or vim.system reached through an alias.
 local arch = require("tests.arch.arch_helper")
 
 local HELPER = "lua/parley/helper.lua"
@@ -26,7 +34,7 @@ local function scan(visit)
             local lines = vim.fn.readfile(file)
             for n, line in ipairs(lines) do
                 if not line:match("^%s*%-%-") then
-                    visit(file, n, line, lines[n + 1] or "")
+                    visit(file, n, line, lines[n + 1] or "", lines)
                 end
             end
         end
@@ -58,5 +66,21 @@ describe("arch: deadline timers refresh the loop clock", function()
         end)
         assert.are.same({}, offenders,
             "pass the absolute deadline to require('parley.helper').start_absolute_deadline (#421)")
+    end)
+    it("passes a vim.system timeout through helper.system", function()
+        local offenders = {}
+        scan(function(file, n, line, _, lines)
+            if line:match("vim%.system%s*[%(,]") then
+                local window = table.concat({ lines[n - 1] or "", line, lines[n + 1] or "",
+                    lines[n + 2] or "", lines[n + 3] or "" }, " ")
+                local forwarded = line:match("vim%.system%s*%(%s*[%w_]+%s*,%s*[%w_]+%s*[,%)]")
+                    or line:match("vim%.system%s*,%s*[%w_]+%s*,%s*[%w_]+%s*[,%)]")
+                if forwarded or window:match("timeout%s*=") then
+                    offenders[#offenders + 1] = ("%s:%d: %s"):format(file, n, vim.trim(line))
+                end
+            end
+        end)
+        assert.are.same({}, offenders,
+            "spawn a child with a timeout through require('parley.helper').system, which refreshes the loop clock (#431)")
     end)
 end)

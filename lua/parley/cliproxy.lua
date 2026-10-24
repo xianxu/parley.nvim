@@ -988,7 +988,7 @@ pids_on_port_async = function(port, cb, timeout_ms)
         return cb({}, "lsof unavailable")
     end
     local limit = timeout_ms or _lsof_guard_ms
-    local ok = pcall(vim.system, lsof_argv(port), { text = true, timeout = limit }, function(res)
+    local ok = pcall(require("parley.helper").system, lsof_argv(port), { text = true, timeout = limit }, function(res)
         vim.schedule(function()
             if res.code == 124 then -- vim.system's timeout: no answer is not "no listener"
                 return cb({}, "lsof timed out")

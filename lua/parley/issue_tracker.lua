@@ -108,7 +108,7 @@ local function git(root, args, opts, callback)
     if M._on_git then
         M._on_git(argv)
     end
-    local ok, err = pcall(vim.system, argv, {
+    local ok, err = pcall(require("parley.helper").system, argv, {
         text = false, -- cat-file frames are byte-sized; no newline rewriting
         stdin = opts.stdin,
         timeout = opts.timeout or M.read_timeout_ms,

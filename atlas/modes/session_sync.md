@@ -69,7 +69,10 @@ dispatch permits this narrowly scoped native reread without a deferred warning;
 dirty conflicts still reconcile outside input autocmds. Normal-mode first edits
 and observed unknown-period edits share the acquisition owner.
 
-The acquire/release commands have a named 500 ms bound. Namespace/store
+The acquire/release commands have a named 500 ms bound, measured from the
+spawn: `helper.system` refreshes libuv's loop clock first, since Neovim arms
+vim.system's kill timer from the cached clock and after synchronous work it
+killed the child at once (#431). Namespace/store
 unavailability or timeout leaves editing enabled with `not locked: Couch
 unreachable; edits may conflict`; the warning survives saves and outranks older
 submit receipts. A concurrent write after an unconfirmed edit uses the existing
