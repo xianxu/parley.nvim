@@ -179,11 +179,19 @@ def transition(state, operation, request, state_path):
     return result, 0, True
 
 
+def atomic_write(path, text):
+    # A spec polls for these files and then reads them: it must see the whole
+    # content or no file, never an empty file between create and write (#421).
+    temporary = "%s.%d.tmp" % (path, os.getpid())  # concurrent children never share one
+    Path(temporary).write_text(text)
+    os.replace(temporary, path)
+
+
 def main():
     args = sys.argv[1:]
     state_path = Path(os.environ["FAKE_COUCH_REGISTRY"])
-    Path(str(state_path) + ".editor-argv").write_text("\n".join(args) + "\n")
-    Path(str(state_path) + ".editor-pid").write_text(str(os.getpid()) + "\n")
+    atomic_write(str(state_path) + ".editor-argv", "\n".join(args) + "\n")
+    atomic_write(str(state_path) + ".editor-pid", str(os.getpid()) + "\n")
     with open(str(state_path) + ".editor-launches", "a") as launches:
         launches.write((args[1] if len(args) > 1 else "invalid") + "\n")
     mode = os.environ.get("FAKE_COUCH_EDITOR_MODE", "")
@@ -210,7 +218,7 @@ def main():
     if operation == "register" and gate:
         # PATH.held: published, acknowledgment held, so a spec can expire a
         # deadline in exactly that phase instead of racing startup (#421).
-        Path(gate + ".held").write_text(str(os.getpid()) + "\n")
+        atomic_write(gate + ".held", str(os.getpid()) + "\n")
         while not Path(gate).exists():
             time.sleep(0.01)
     if mode == "uncertain" and operation != "lookup":
