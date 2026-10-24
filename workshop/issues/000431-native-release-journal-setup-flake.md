@@ -85,6 +85,11 @@ local r = vim.system({ "sleep", "0.2" }, { timeout = 500 }):wait()
 print(r.code, r.signal, (uv.hrtime() - t0) / 1e6) -- 124 15 ~1ms on 0.11.7 and 0.12.5; 0 0 ~205 with update_time() before the spawn
 ```
 
+### 2026-10-24 — load reps (parley.nvim:1)
+
+- 20 reps per Neovim of the native spec, lock_leave_reminder and couch_spec (disposable clone, 3 CPU spinners plus an fsync dd loop, hard-capped, trap cleanup): each of the five regressions passed 40 of 40, on 0.11.7 and 0.12.5. Every failing rep failed only #427's undo/redo cases (once also #404 BR-1's Ctrl-C case): 11 of 20 reps on 0.11.7, 14 of 20 on 0.12.5.
+- That #427 rate is load, not this fix. A sequential red run (helper.system without the refresh) looked lower on 0.11.7 (1 of 8), but the machine's load differed between the runs (load average 29 from other slots). Alternating red and green under the same load, 6 pairs on 0.11.7: red failed #427 cases in 3 of 6 reps (12 case failures), green in 3 of 6 (9).
+
 ## Revisions
 
 ### 2026-10-23 — fold #432, #433 and #437 (TL approved)
