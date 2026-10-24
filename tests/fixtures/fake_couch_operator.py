@@ -6,7 +6,9 @@ FAKE_COUCH_OPERATOR_CODE / _EXIT: refusal before effects (default exit by code).
 FAKE_COUCH_OPERATOR_ACK: raw reply replacing a successful acknowledgment.
 FAKE_COUCH_OPERATOR_ACQUIRE_WRITE: replace document bytes before acquire ack.
 FAKE_COUCH_OPERATOR_DELAY: seconds after effects, before replying; SIGTERM kills
-this process directly, so no child retains the response pipes. Knobs except
+this process directly, so no child retains the response pipes.
+FAKE_COUCH_OPERATOR_PRE_DELAY: seconds before effects, a call killed at its
+budget before it changed anything (#432). Knobs except
 TRACE apply only to acquire by default; _OPS is a comma-list of verbs to target.
 Registry fixtures validate registration identity under the registry flock;
 standalone native fixtures adopt the supplied ID for an existing document.
@@ -78,6 +80,8 @@ def operate(args):
             if not path.is_file():
                 return refusal('not-registered', 'document is absent')
             targeted = op in os.environ.get('FAKE_COUCH_OPERATOR_OPS', 'operator-acquire').split(',')
+            if targeted:
+                time.sleep(float(os.environ.get('FAKE_COUCH_OPERATOR_PRE_DELAY', '0')))
             injection = os.environ.get('FAKE_COUCH_OPERATOR_CODE') if targeted else None
             if injection:
                 default = 7 if injection == 'session-sync-unavailable' else 3 if injection == 'operator-lock' else 1

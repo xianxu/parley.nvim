@@ -1,5 +1,18 @@
 # Lessons
 
+## 2026-10-24 (#432 — a kill at the budget is unknown, not failed)
+
+- A child killed at its timeout (vim.system code 124) may have done nothing, or done everything and lost its reply. Classifying it as failed and moving on leaves state that only the next user action repairs: #432's clean release kept its lock until the next turn. For every budgeted external call, name the reconciliation for the unconfirmed outcome. When the effect is idempotent per identity (a turn token), that is a bounded retry of the same request, which also confirms a lost reply.
+- Reproduce both shapes of an unconfirmed outcome: the delay before the effects (nothing happened) and after them (reply lost). They fail differently. One kept the lock; the other only reused the turn token, which no existing assertion saw.
+- A retry guard needs an identity that changes when the thing it protects changes. After a failed release, the next turn reused the same token, so the retry checks a generation that every acquire and every fresh release bumps.
+- Check a red control's failure mode, not just its exit code. The WARN control stalled the harness instead of failing: a vim.wait whose predicate makes a child RPC never times out here. A wait whose condition can stay false polls local state.
+
+## 2026-10-23 (#431 — a fix names its class, then finds every member)
+
+- After fixing a class, look for the same mechanism in code we don't own. #421 routed parley's deadline timers through helper.start_deadline, but vim.system arms its own timeout timer the same raw way, and the 500 ms operator lock lost its fake that way in four registered flakes. Standalone first: block the loop, spawn under a timeout, time it (killed after 0.9 ms). Then sweep every caller that passes the option, and lint for it.
+- Sweep a call-form lint against the existing census lints. Routing vim.system through a helper hid every spawn from tests/arch/spawn_seam_spec, whose census matched the literal `vim.system(`; a quiet coverage loss is worse than a red lint. Teach the census the new form instead.
+- A fold is a hypothesis per case. Give each case its own causal reproduction before claiming it. #432's stalled release removed the lock instead of retaining it, so it split back out rather than closing on a shared story.
+- Run the negative control and the fix A/B in one disposable clone, alternating, with only the file under test mapped. Two mapping runs sharing the machine produced unrelated failures that an alternating single-spec A/B ruled out.
 ## 2026-10-23 (#421 — an injected delay inside a fixed budget is a race with real IO)
 
 - "Only under load, no trace" is not a root cause. Before calling a failure a machine stall, time the failing call itself. A 15 s deadline that answers in 0.35 ms was never slow: its timer was armed from libuv's cached clock after synchronous work. Arm every deadline timer through helper.start_deadline; tests/arch/deadline_timer_spec enforces it.
@@ -1052,6 +1065,12 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 
 - #417 BR-2: a mode-specific input contract needs both accepted and refused native mapping cases. A direct function call with a recording notifier does not prove that Normal/Insert input survives a builtin error notice; forward to the real UI, assert no mutation, and type the next key.
 
+
+- #425: no-target handling belongs at the native fallback and must retain its caller context. Catch only the native absence codes for a gesture without an explicit selected reference; keep selected-target errors and source-cursor restoration under independent regression coverage. Test temporary bars with breadcrumbs explicitly disabled rather than overwriting a live renderer-owned bar and assuming it still owns those options.
+
+- #425 BR-1: restoring Insert mode after stopinsert does not preserve the insertion position. No-op gestures must retain the byte cursor and distinguish insertion before a character from insertion at EOL; test nonzero positions, multibyte boundaries and the next typed character.
+- #425 BR-2: a shared finite-feedback lease must coalesce equivalent purposes, not merely equal source buffers. Enumerate both arrival orders and queued/active phases; important leave feedback supersedes quiet feedback and cannot be displaced by it.
+- #425 BR-3: a changed user gesture needs its README explanation as well as its atlas map. Verify the concrete user-facing section at close.
 - #418 close BR-4: a root YAML scalar is outside flow context. Enumerate plain/quoted punctuation, indicator and numeric prefixes, named escapes, partial and complete headers before reusing a collection decoder; distinguish exact implicit types from strings that merely start with a digit.
 
 - #418 close round 3: quote context must be correct before semantic decoding, including comment scanning. Keep optional header fill narrower than delivery: unsupported representations skip insertion, while actual semantic consumers name the unreadable line instead of guessing settings. Preserve expressly supported legacy forms.
