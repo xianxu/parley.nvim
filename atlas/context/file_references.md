@@ -58,6 +58,10 @@ order (repeated destinations remain separate choices). Canceling leaves the
 source alone; edited/deleted sources, a different active buffer/window, or a
 newer invocation invalidate retained choices and delayed resolver results.
 With no occurrences, navigation falls back to [smart gf](artifact_refs.md).
+If native file lookup finds no filename or target, Alt+o briefly flashes
+“No file to open” in that window's bar, without a message prompt. The shared
+band restores the prior bar (including no bar); editing mode and text stay put.
+Other native open errors and explicit missing references retain their diagnostics.
 A recognized but missing target reports its own error and does not fall through.
 Unordered bullet items, including tight siblings and nested continuations,
 form their own navigation range. This does not change editing textobjects.
