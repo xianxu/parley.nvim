@@ -87,7 +87,8 @@ resetting between those steps. Later listeners have their own operation budget.
 Expiry leaves uncertain artifacts untouched and may refuse allocation. Both
 deadline timers start through `helper.start_deadline`, which refreshes libuv's
 cached loop clock first. Started raw after synchronous work, a timer could fire
-at once (#421); `tests/arch/deadline_timer_spec.lua` refuses a raw deadline-timer start.
+at once (#421); `tests/arch/deadline_timer_spec.lua` refuses a raw deadline-timer start,
+and a vim.system call with a timeout outside `helper.system` (#431).
 
 A runtime marker records directory/socket identities before listener publication.
 Cleanup revalidates the marker bytes and inode. Before `serverstop`, Parley checks

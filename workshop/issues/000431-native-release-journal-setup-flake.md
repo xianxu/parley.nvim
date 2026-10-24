@@ -31,7 +31,7 @@ Identify whether fixture setup races a valid clean release or production loses r
 
 ## Done when
 
-- Each of the four cases (#431's two, #432, #433, #437) has a causal reproduction that fails without the fix and passes with it; the four are unregistered, and #432, #433 and #437 close with this issue.
+- Each folded case (#431's journal and pre-detach cases, #433, #437) has a causal reproduction that fails without the fix and passes with it; those cases are unregistered, and #433 and #437 close with this issue. #432 split back out (Revision 2).
 - No vim.system call that passes a timeout can run on a stale loop clock: one helper refreshes it, and a tests/arch lint refuses a raw one.
 - The original missing-lock ordering has deterministic reproduction coverage.
 - The native journal/intent setup proves its required lock and the test exercises the intended production transition.
@@ -39,12 +39,12 @@ Identify whether fixture setup races a valid clean release or production loses r
 
 ## Plan
 
-- [ ] Causal reproduction per case: loop_clock.block before the acquire or release in each failing ordering (#431 journal setup and pre-detach payload, #432 eight-turn release, #433 synthetic-move baseline, #437 lock-reminder window close). Separately, measure the fake's operator-acquire latency under capped load (4 procs) to tell a stale-clock early kill from a real 500 ms overrun.
-- [ ] Fix the class (ARCH-PURPOSE, ARCH-DRY): one helper.system that refreshes the loop clock before vim.system, used by every call that passes vim.system a timeout (couch.run, couch.operator_lock, issue_tracker git, clipboard_image, cliproxy lsof probe, remote_process ps). If the overrun is real, operator_lock gets our own deadline started through helper.start_deadline instead of vim.system's timer.
-- [ ] tests/arch lint: refuse a vim.system call that passes a timeout outside helper.lua.
-- [ ] One regression per case ordering; negative controls reverting the fix; fixtures not testing the budget use arrival.MS.
+- [x] Causal reproduction per case: loop_clock.block before the acquire or release in each failing ordering (#431 journal setup and pre-detach payload, #432 eight-turn release, #433 synthetic-move baseline, #437 lock-reminder window close). Separately, measure the fake's operator-acquire latency under capped load (4 procs) to tell a stale-clock early kill from a real 500 ms overrun.
+- [x] Fix the class (ARCH-PURPOSE, ARCH-DRY): one helper.system that refreshes the loop clock before vim.system, used by every call that passes vim.system a timeout (couch.run, couch.operator_lock, issue_tracker git, clipboard_image, cliproxy lsof probe, remote_process ps). If the overrun is real, operator_lock gets our own deadline started through helper.start_deadline instead of vim.system's timer.
+- [x] tests/arch lint: refuse a vim.system call that passes a timeout outside helper.lua.
+- [x] One regression per case ordering; negative controls reverting the fix; fixtures not testing the budget use arrival.MS.
 - [ ] Both nvims (0.11.7, 0.12.5); 20 reps under capped load; then the suite. Unregister the four cases and close #432, #433 and #437 with this issue.
-- [ ] Keep the standalone Neovim repro (vim.system timeout after a blocked loop) for a possible upstream report.
+- [x] Keep the standalone Neovim repro (vim.system timeout after a blocked loop) for a possible upstream report.
 
 ## Log
 
@@ -65,8 +65,31 @@ Evidence /Volumes/TestScratch/parley-322-detach.wFHlYs/{HARNESS.md,summary.json,
 - Neovim's vim.system arms its timeout with a raw uv timer right after the synchronous spawn (runtime lua/vim/_system.lua:265, timer_oneshot, no update_time). libuv measures that timer from the cached loop clock. Measured standalone (`nvim --clean --headless -l vimsystem_stale.lua`): after a 1200 ms busy-block of the loop, vim.system({'sleep','0.2'},{timeout=500}):wait() returns code 124 (killed) after 0.9 ms on 0.11.7 and after 1.6 ms on 0.12.5. Calling uv.update_time() right before the spawn gives code 0 at about 207 ms. vim.wait and a bare :wait(N) are unaffected (they measured 528 ms for a 500 ms wait after the same block).
 - couch.operator_lock is exactly that call: vim.system(couch operator-acquire/release, timeout 500):wait(500). An early kill means acquire or release is not confirmed, which matches every failing case: a missing status.md.lock in setup and a nil lock payload (#431), a clean release not observed (#432), a baseline assertion after acquire (#433), and a turn never taken so no pulse (#437).
 
+### 2026-10-23 — reproduction, fix and measurements (parley.nvim:1)
+
+- Real overrun ruled out: operator-acquire plus operator-release through tests/fixtures/fake_couch_operator.py, 80 calls each, took p50 29 ms / max 31 ms quiet and p50 32 ms / p95 39 ms / max 49 ms under 3 CPU spinners plus an fsync dd loop. None came near 500 ms. The cause is the stale-clock early kill alone, so operator_lock keeps vim.system's timeout, now measured from a refreshed clock.
+- Class fix (ARCH-PURPOSE): helper.system refreshes the loop clock and calls vim.system. Every call that passes a timeout uses it: couch.run (which carries attention and the registry transport), couch.operator_lock, issue_tracker git, clipboard_image, the cliproxy lsof probe, the remote_process ps batch, fd_watchdog (found by the new lint) and image_shrink (it forwards its caller's options). tests/arch/deadline_timer_spec.lua refuses a raw vim.system with a `timeout =` field near it, or one forwarding an options variable. tests/arch/spawn_seam_spec.lua counts calls through helper.system at their own call sites, so its census is unchanged.
+- Regressions, each blocking the loop 1200 ms right before the call: couch_spec (operator_lock's child exits normally); lock_leave_reminder (#437: the turn is taken and the pulse comes); native #431 pre-detach acquire; native #431 journal at after-new/before-restore; native #433 synthetic-move release. In the native child, stall_next_lock wraps couch.operator_lock with a one-shot block.
+- Negative control (helper.system without the refresh, in a disposable clone): all five fail. Alternating native-spec runs in that clone: reverted 3 of 3 failed exactly the three native regressions; fixed 3 of 3 passed.
+- #432 does not fit. With the stall before its Esc release, the release comes back unavailable (vim.system reports 124 once its timer has fired), yet the lock is removed within the wait, so this mechanism does not produce #432's retained lock. Its regression was dropped and the case stays registered on #432 (Revision 2).
+- The #427 notice, identified on the side: in native fixtures the outside-pane registry lookup gets 'Invalid registry response' (the fake exits 2 with no FAKE_COUCH_REGISTRY), about 100 ms after open, and posts 'Remote view unavailable' asynchronously. Whether an undo/redo case's notifications == {} assertion sees it is a race. Two green session_sync mapping runs hit it five times (four of those in one run), the clone's three fixed native-only runs never did, and the earlier red mapping run did not. Reported to the TL for #427, not fixed here.
+- Standalone Neovim repro, for a possible upstream report (vim.system's timeout counts time the loop spent blocked before the spawn); run with `nvim --clean --headless -l repro.lua`:
+
+```lua
+local uv = vim.uv
+local function block(ms) local t = uv.hrtime() while (uv.hrtime() - t) / 1e6 < ms do end end
+uv.update_time(); block(1200)
+local t0 = uv.hrtime()
+local r = vim.system({ "sleep", "0.2" }, { timeout = 500 }):wait()
+print(r.code, r.signal, (uv.hrtime() - t0) / 1e6) -- 124 15 ~1ms on 0.11.7 and 0.12.5; 0 0 ~205 with update_time() before the spawn
+```
+
 ## Revisions
 
 ### 2026-10-23 — fold #432, #433 and #437 (TL approved)
 
 - Reason: same hypothesized cause, a native lock acquire or release through couch.operator_lock killed by vim.system's stale-clock timeout. Delta: this issue carries all four cases, and fixes the vim.system timeout class across its six call sites, with a lint. A case whose causal reproduction shows a different cause splits back out to its own issue.
+
+### 2026-10-23 — #432 splits back out
+
+- Reason: its causal reproduction shows a different outcome (lock removed, not retained), so the TL's split rule applies. Delta: #432's case stays registered on #432 and is not closed here; Done when names the three folded issues' cases only.
