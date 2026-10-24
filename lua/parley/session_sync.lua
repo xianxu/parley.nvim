@@ -438,6 +438,9 @@ dispatch_admission = function(buf, event, release_path)
     if event.type ~= "acquire" and event.type ~= "release" then return true end
     local releasing = event.type == "release"
     if releasing and not effect then return false, error_message or "no owned operator turn" end
+    -- A new acquire supersedes any pending release retry (#432).
+    if not releasing then s.release_generation = (s.release_generation or 0) + 1 end
+    local unconfirmed
     while effect do
         local outcome = { witness = effect.witness }
         if effect.kind == "acquire" then
@@ -472,6 +475,7 @@ dispatch_admission = function(buf, event, release_path)
             if token then
                 local result = couch.operator_lock("release", { ID = s.identity.ID, File = path }, token)
                 ok, reason = result.kind == "confirmed", result.error
+                unconfirmed = result.kind == "unavailable"
             else
                 -- Legacy exact-byte protection has no Couch turn identity.
                 if effect.proof and lock_bytes(path .. ".lock") == effect.proof then
@@ -498,7 +502,7 @@ dispatch_admission = function(buf, event, release_path)
         restore_edit_gate(buf, s)
         retry_maps(buf, s, false)
     end
-    if releasing then return error_message == nil, error_message end
+    if releasing then return error_message == nil, error_message, unconfirmed end
     refresh(buf)
     return view.phase == "held" or view.phase == "unconfirmed"
 end
@@ -1082,13 +1086,35 @@ local function automatic_release_eligible(buf, s)
     return not insert_intent(buf) and admission(s).baseline ~= nil
 end
 
--- The same acquisition-baseline release serves native undo and synthetic
--- migration protection. A matching content hash alone never owns a lock.
-M.release_if_baseline = function(buf)
-    buf = buffer_id(buf)
+-- An unavailable release is unconfirmed, not failed (#432): Couch may have
+-- been killed at its budget before the release ran, or ran it and lost the
+-- reply. A release is idempotent per turn token, so it is retried, bounded,
+-- while the same clean turn stands. A refused release is definitive.
+local RELEASE_RETRY_MS = { 1000, 2000, 4000 }
+
+local release_if_baseline
+local function retry_release(buf, s, attempt)
+    if not RELEASE_RETRY_MS[attempt] then
+        notify("operator lock not released: Couch did not confirm; press i then Esc, or submit, to retry", vim.log.levels.WARN)
+        return
+    end
+    local epoch, generation = s.epoch, s.release_generation
+    require("parley.helper").defer_deadline(function()
+        if state[buf] == s and s.epoch == epoch and s.release_generation == generation then
+            release_if_baseline(buf, attempt)
+        end
+    end, RELEASE_RETRY_MS[attempt])
+end
+
+-- A retry finds the lock ours or already gone: a lost reply may have removed it.
+release_if_baseline = function(buf, retrying)
     local s = state[buf]
+    local function ours()
+        local bytes = lock_bytes(M.lock_path(buf))
+        return bytes == admission(s).owned_lock or retrying and bytes == nil
+    end
     if not s or s.moving or not automatic_release_eligible(buf, s) or content_hash(buf) ~= admission(s).baseline then return false end
-    if not admission(s).owned_lock or lock_bytes(M.lock_path(buf)) ~= admission(s).owned_lock then return false end
+    if not admission(s).owned_lock or not ours() then return false end
     if disk_changed(buf) then
         violation(buf)
         return false
@@ -1098,12 +1124,23 @@ M.release_if_baseline = function(buf)
         local ok = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent write") end)
         if not ok or vim.bo[buf].modified or content_hash(buf) ~= admission(s).baseline then return false end
     end
-    if lock_bytes(M.lock_path(buf)) ~= admission(s).owned_lock then return false end
-    local ok = release_owned(buf, file_of(buf), admission(s).owned_lock)
-    if not ok then return false end
+    if not ours() then return false end
+    -- A fresh release supersedes an older one's pending retry.
+    if not retrying then s.release_generation = (s.release_generation or 0) + 1 end
+    local ok, _, unconfirmed = release_owned(buf, file_of(buf), admission(s).owned_lock)
+    if not ok then
+        if unconfirmed then retry_release(buf, s, (retrying or 0) + 1) end
+        return false
+    end
     refresh(buf)
     restart_idle(buf)
     return true
+end
+
+-- The same acquisition-baseline release serves native undo and synthetic
+-- migration protection. A matching content hash alone never owns a lock.
+M.release_if_baseline = function(buf)
+    return release_if_baseline(buffer_id(buf))
 end
 
 local function release_and_send(buf, owner, callback)

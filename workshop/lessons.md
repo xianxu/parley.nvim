@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-10-24 (#432 — a kill at the budget is unknown, not failed)
+
+- A child killed at its timeout (vim.system code 124) may have done nothing, or done everything and lost its reply. Classifying it as failed and moving on leaves state that only the next user action repairs: #432's clean release kept its lock until the next turn. For every budgeted external call, name the reconciliation for the unconfirmed outcome. When the effect is idempotent per identity (a turn token), that is a bounded retry of the same request, which also confirms a lost reply.
+- Reproduce both shapes of an unconfirmed outcome: the delay before the effects (nothing happened) and after them (reply lost). They fail differently. One kept the lock; the other only reused the turn token, which no existing assertion saw.
+- A retry guard needs an identity that changes when the thing it protects changes. After a failed release, the next turn reused the same token, so the retry checks a generation that every acquire and every fresh release bumps.
+- Check a red control's failure mode, not just its exit code. The WARN control stalled the harness instead of failing: a vim.wait whose predicate makes a child RPC never times out here. A wait whose condition can stay false polls local state.
+
 ## 2026-10-23 (#431 — a fix names its class, then finds every member)
 
 - After fixing a class, look for the same mechanism in code we don't own. #421 routed parley's deadline timers through helper.start_deadline, but vim.system arms its own timeout timer the same raw way, and the 500 ms operator lock lost its fake that way in four registered flakes. Standalone first: block the loop, spawn under a timeout, time it (killed after 0.9 ms). Then sweep every caller that passes the option, and lint for it.
