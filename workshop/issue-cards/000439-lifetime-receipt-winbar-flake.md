@@ -5,6 +5,7 @@ created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
 github_issue:
+flake_tests: [lua:tests/integration/agentic_document_lifetime_spec.lua#agentic document buffer lifetime keeps the owned native acknowledgement attached and preserves its submit receipt]
 ---
 
 # Native acknowledgement receipt winbar wait flakes under suite load
