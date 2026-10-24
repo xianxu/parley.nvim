@@ -84,7 +84,10 @@ distinct marked PIDs, the own PID plus 255 others fill the inspection batch; any
 uninspected marker stays unknown. Inspection gets one second and startup two
 seconds from allocation through the first durable listener publication, without
 resetting between those steps. Later listeners have their own operation budget.
-Expiry leaves uncertain artifacts untouched and may refuse allocation.
+Expiry leaves uncertain artifacts untouched and may refuse allocation. Both
+deadline timers start through `helper.start_deadline`, which refreshes libuv's
+cached loop clock first. Started raw after synchronous work, a timer could fire
+at once (#421); `tests/arch/deadline_timer_spec.lua` refuses a raw deadline-timer start.
 
 A runtime marker records directory/socket identities before listener publication.
 Cleanup revalidates the marker bytes and inode. Before `serverstop`, Parley checks
