@@ -144,7 +144,9 @@ fixtures describe old output, not new authoring policy.
 
 Added text gets a faint green background, changed text a faint blue one. Both
 are tinted from your theme's own background, so they stay quiet in any color
-scheme, and a deletion leaves no mark. To restyle them, set
+scheme, and a deletion leaves no mark. Skill and agent-edit explanations show
+without diagnostic underlines, keeping the tint consistent in Normal and Insert
+mode; link and reference underlines stay separate. To restyle them, set
 `highlight.edit_add` and `highlight.edit_change`. In Markdown
 documents, 🤖 markers and links show in full. In chats, Parley still hides its
 own branch links and model params. Markdown links there show in full too,

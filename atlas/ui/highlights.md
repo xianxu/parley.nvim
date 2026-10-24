@@ -132,3 +132,12 @@ fallback groups; `lua/parley/document/` owns live structural indexing; `highligh
 remains the pure materialized compatibility oracle.
 `tests/unit/highlighter_spec.lua`, `tests/unit/highlight_structure_spec.lua`, and
 `tests/integration/highlighting_spec.lua` exercise rendering and state.
+
+
+Edit explanations in the shared `parley_skill` diagnostic namespace disable only
+their diagnostic underline. The span tint and diagnostic messages/signs remain;
+reference extmarks and other plugins' diagnostic settings are independent.
+This prevents Neovim's deferred Insert-mode diagnostic redraw from changing the
+edit's visible style. `edit_highlight_native_spec.lua` compares composed screen
+cell attributes across native editing modes and diagnostic refreshes, including
+custom highlights and foreign/reference controls.
