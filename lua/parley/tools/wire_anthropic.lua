@@ -55,9 +55,10 @@ end
 --- Promoted here from skill_assembly.lua in #198: a forced tool choice is
 --- wire knowledge, and the OpenAI spelling differs, so a skill manifest
 --- must carry the tool NAME and let the wire shape it.
----@param tool_name string
----@return table
+---@param tool_name string|nil # nil selects automatic tool use
+---@return table|string
 function M.encode_tool_choice(tool_name)
+    if tool_name == nil then return { type = "auto" } end
     return { type = "tool", name = tool_name }
 end
 

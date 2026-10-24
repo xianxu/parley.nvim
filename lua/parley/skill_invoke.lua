@@ -375,7 +375,7 @@ function M.invoke(buf, manifest, args, opts)
     -- function={name=…}} — sending the anthropic shape to an OpenAI-family
     -- agent is a 400, which is what the widened tool-capable predicate would
     -- otherwise have started causing for the review and voice_apply skills.
-    if inv.force_tool then
+    if inv.force_tool or inv.tool_choice == "auto" then
         payload.tool_choice = wire.encode_tool_choice(
             agent.provider, agent.model, inv.force_tool)
     end
@@ -476,7 +476,7 @@ function M.invoke(buf, manifest, args, opts)
                             finish({ok=false,msg=reason,calls=calls,results={},original=original,applied=0},true)
                         end
                         if proposal_count ~= 1 then
-                            reject('guarded local review requires one proposal batch'); return
+                            reject(proposal_count == 0 and 'no edit proposed' or 'guarded local review requires one proposal batch'); return
                         end
                         if not require('parley.buffer_edit').resolve_user(source_capture) then
                             reject('local review source changed before proposal admission'); return
@@ -659,7 +659,7 @@ function M.invoke(buf, manifest, args, opts)
         function(_qid, transport_error) -- on_error (dispatcher argument 10)
             if read_state.logical or _gen[buf] ~= gen then return end
             p.logger.error("skill " .. tostring(manifest.name) .. " transport error")
-            finish({ ok = false, msg = "transport error", error = transport_error }, true)
+            finish({ ok = false, msg = require("parley.skill_failure").reason(transport_error), error = transport_error }, true)
         end,
         {generation_id=process_owner,logical_generation=process_owner,alive=function()return not read_state.logical end}
     )

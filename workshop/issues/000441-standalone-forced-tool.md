@@ -61,9 +61,9 @@ Production seams: skill_invoke's payload tool-choice construction and on_error c
 
 ## Plan
 
-- [ ] Replay the sanitized captured 400 through the normal invocation seam, red first; pin automatic review payloads for Anthropic and OpenAI wires, retaining named forcing for other skills.
-- [ ] Replace review's named forcing with automatic choice, encoded by the existing provider-wire owner. Preserve the local proposal validator and all edit authority; no-proposal, malformed and missing classifications refuse before any write/backup/reload.
-- [ ] Format a bounded safe reason from the structured transport failure at the skill boundary; expose it in review's bounded caption and message history without dumping response/request envelopes, headers or credentials. Keep cancellation/stale-generation guards and notification bounds.
+- [x] Replay the sanitized captured 400 through the normal invocation seam, red first; pin automatic review payloads for Anthropic and OpenAI wires, retaining named forcing for other skills.
+- [x] Replace review's named forcing with automatic choice, encoded by the existing provider-wire owner. Preserve the local proposal validator and all edit authority; no-proposal, malformed and missing classifications refuse before any write/backup/reload.
+- [x] Format a bounded safe reason from the structured transport failure at the skill boundary; expose it in review's bounded caption and message history without dumping response/request envelopes, headers or credentials. Keep cancellation/stale-generation guards and notification bounds.
 - [ ] Cover mixed command/question success, missing/invalid proposals, captured HTTP 400, other HTTP/transport failures and sensitive-envelope exclusion; run focused tests serially on both runtimes, then queued pre-close, close and hub-coordinated operator retry.
 
 
@@ -72,3 +72,12 @@ Production seams: skill_invoke's payload tool-choice construction and on_error c
 2026-10-24: filed unclaimed at TL b532446a's direction. No implementation or live configuration changes made while diagnosing #419. Inside-Couch #419 acceptance passes; this upstream rejection is excluded from #419's landing contract by that same instruction.
 
 2026-10-24: Claimed and ran start-plan after verifying #428 landed and archived. Root cause confirmed in source: review manifest forces propose_edits, skill_invoke encodes that name in the selected wire and overwrites payload.tool_choice; its on_error retains the structured failure but replaces the visible message with the constant transport error. Existing proposal-count and collaboration validation already run before effects. ARCH-DRY: tool-choice shapes remain in the existing wire registry; ARCH-PURE: safe error formatting is a pure boundary helper, not a second transport/parser. No retry loop, durable state, concurrency or per-keystroke work is added. Alternatives rejected: model-specific forcing exceptions drift with model support; allowing missing proposals would weaken write authority. Actions remain submit/retry: success applies validated commands and defers questions; rejected/unknown transport completion leaves source unchanged with the reason and manual retry. No new persisted format or artifact family. Plan sent to hub before code.
+
+
+2026-10-24: Implemented the approved auto choice through a validated optional manifest field, carried by disk provider and assembly; existing wires encode nil tool name as their own automatic form. Other named tools retain forcing. Zero proposals now return `no edit proposed`, including actual prose and empty streams, before read-only tools, backup or reload. Safe skill failure formatting only selects a bounded structured error.message, discards credential/request-bearing diagnostics and quoted arbitrary values, preserves enum names, and limits UTF-8 output to 240 bytes. Raw/malformed/partial/oversized envelopes and stderr never become a displayed reason. Both caption and :messages retain the reason; existing stale-generation/cancel guards remain.
+
+Verification: initial red replay found forced-wire, no-proposal, masked transport and caption failures; new helper tests initially failed because the helper was absent. Fixed two fixture defects (inner JSON quote escaping and explicit CLIProxy route selection) and a caller fixture missing its transport envelope. Verified the sanitized error fields directly against the actual local 10:40:15 log, without printing or retaining request/header material. Final targeted run: 230/0/0 across 11 files; installed /opt/homebrew/bin/nvim repeats 230/0/0. Each run has a clean process census. JSON/arrival architecture controls: 4/0/0, clean census. Logs retained at /Volumes/TestScratch/parley441-j0dbwg8e/{red,focused-final,operator-runtime,arch}.log. Final lint and queued pre-close follow; operator retry awaits hub coordination. No stage touched.
+
+## Revisions
+
+2026-10-24 — Hub approved the plan and required explicit prose-only handling: automatic choice may produce no tool call, so zero proposals refuse visibly as `no edit proposed`, before any tool, backup or reload. More than one proposal remains a separate invalid-batch refusal.

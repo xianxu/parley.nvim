@@ -210,6 +210,86 @@ describe("skill_invoke.invoke", function()
         assert.same({}, vim.fn.glob(path .. '.parley-backup.*', false, true))
     end)
 
+    it('automatic review applies only the classified command and preserves its question (#441)', function()
+        local original={'🤖[why?]','🤖[tighten this]'}
+        vim.fn.writefile(original,path); vim.cmd('edit!')
+        parley.dispatcher.query=function(_,_,payload,_,on_exit)
+            captured_payload=payload
+            tasker.set_query('qid_test',{raw_response=propose_edits_sse({
+                {old_string=original[2],new_string='Tight text.',explain='tightened'},
+            },{{line=0,col=0,raw=original[1],kind='question'},
+                {line=1,col=0,raw=original[2],kind='command'}})})
+            vim.schedule(function()on_exit('qid_test')end)
+        end
+        local review_manifest=vim.tbl_extend('force',require('parley.skills.review').skill,
+            {source=function()return 'Review' end})
+        skill_invoke.invoke(buf,review_manifest,{},{manual=true,
+            validate_edits=require('parley.skills.review.collaboration').validate_edits,
+            on_done=function(result)done_result=result end})
+        assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end))
+        assert.is_true(done_result.ok,done_result.msg)
+        assert.same({type='auto'},captured_payload.tool_choice)
+        assert.same({original[1],'Tight text.'},vim.fn.readfile(path))
+        assert.equals(1,done_result.review.deferred)
+    end)
+
+    for _, agent in ipairs({{provider='anthropic',model={model='claude-sonnet-5-5'}},
+        {provider='openai',model={model='gpt-5.4'}},
+        {provider='cliproxyapi',model={model='claude-sonnet-5-5',web_search_strategy='anthropic_tools_route'}}}) do
+        it('encodes review auto choice through the selected '..agent.provider..' wire (#441)',function()
+            assembly.resolve_agent=function()return agent end
+            parley.dispatcher.query=function(_,_,payload,_,_,_,_,_,_,on_error)
+                captured_payload=payload
+                vim.schedule(function()on_error('qid_test',{http_status=503})end)
+            end
+            local review_manifest=vim.tbl_extend('force',require('parley.skills.review').skill,
+                {source=function()return 'Review' end})
+            skill_invoke.invoke(buf,review_manifest,{},{manual=true,on_done=function(result)done_result=result end})
+            assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end))
+            assert.same(agent.provider=='openai' and 'auto' or {type='auto'},captured_payload.tool_choice)
+        end)
+    end
+
+    for _, prose in ipairs({'No edits are necessary.', ''}) do
+    it('reports no edit proposed before effects for an automatic review: '..prose..' (#441)', function()
+        local tick = vim.api.nvim_buf_get_changedtick(buf)
+        parley.dispatcher.query = function(_, _, payload, _, on_exit)
+            captured_payload = payload
+            tasker.set_query('qid_test', {raw_response=sse({
+                {type='content_block_start',index=0,content_block={type='text',text=prose}},
+                {type='content_block_stop',index=0},{type='message_stop'},
+            })})
+            vim.schedule(function() on_exit('qid_test') end)
+        end
+        local review_manifest = vim.tbl_extend('force', require('parley.skills.review').skill,
+            {source=function() return 'Review' end})
+        skill_invoke.invoke(buf, review_manifest, {}, {
+            manual=true, validate_edits=function() error('must not validate without a proposal') end,
+            on_done=function(result) done_result=result end,
+        })
+        assert.is_true(vim.wait(arrival.MS,function() return done_result~=nil end))
+        assert.is_false(done_result.ok)
+        assert.equals('no edit proposed',done_result.msg)
+        assert.same({type='auto'},captured_payload.tool_choice)
+        assert.equals(tick,vim.api.nvim_buf_get_changedtick(buf))
+        assert.same({'alpha beta'},vim.fn.readfile(path))
+        assert.same({},vim.fn.glob(path..'.parley-backup.*',false,true))
+    end)
+
+    end
+
+    it('delivers the captured upstream reason instead of transport error (#441)', function()
+        local capture=vim.json.decode(table.concat(vim.fn.readfile('tests/fixtures/review_tool_choice_rejection.json'),'\n'))
+        parley.dispatcher.query=function(_,_,_,_,_,_,_,_,_,on_error)
+            vim.schedule(function() on_error('qid_test',capture.response) end)
+        end
+        skill_invoke.invoke(buf,manifest(),{},{on_done=function(result)done_result=result end})
+        assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end))
+        assert.is_false(done_result.ok)
+        assert.equals('HTTP 400: tool_choice: type "tool" and "any" are not supported for this model.',done_result.msg)
+        assert.same({'alpha beta'},vim.fn.readfile(path))
+    end)
+
     it('guarded missing proposal fails before a read-only tool can run', function()
         local tick = vim.api.nvim_buf_get_changedtick(buf)
         parley.dispatcher.query = function(_, _, _, _, on_exit)

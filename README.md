@@ -117,7 +117,10 @@ reads the file and changes since its last read.
 Outside Couch, the same shortcut requests local review without a standing
 instruction or mode popup. The current robot ask selects the work: commands can
 edit this file; questions stay unchanged with a notice that Couch review answers
-them in a side document. Pure chat items launch no local generation. Put a
+them in a side document. Local review lets the model choose its tool, then validates
+one exact edit proposal before writing. Prose-only or empty replies report
+`no edit proposed`; provider failures show a bounded, sanitized reason with
+details in `:messages`. Pure chat items launch no local generation. Put a
 standalone `@@chat@@` immediately above a heading to make its section chat;
 robot asks inside it still work while the surrounding items remain yours.
 The tag stays visible as ordinary source, without a badge or chat-body tint.

@@ -69,9 +69,10 @@ end
 
 --- Compel a specific tool this turn. OpenAI spells this with the same
 --- `function` envelope it uses for definitions.
----@param tool_name string
----@return table
+---@param tool_name string|nil # nil selects automatic tool use
+---@return table|string
 function M.encode_tool_choice(tool_name)
+    if tool_name == nil then return "auto" end
     return { type = "function", ["function"] = { name = tool_name } }
 end
 

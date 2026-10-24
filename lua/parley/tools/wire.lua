@@ -132,12 +132,12 @@ function M.encode(provider, model, tool_definitions)
     return w.encode_tools(tool_definitions)
 end
 
---- Encode a forced tool choice for the wire this request will use.
+--- Encode a named tool choice, or automatic choice when tool_name is nil.
 --- Raises for the same reason `encode` does.
 ---@param provider string
 ---@param model table|string|nil
----@param tool_name string
----@return table
+---@param tool_name string|nil
+---@return table|string
 function M.encode_tool_choice(provider, model, tool_name)
     local w = M.resolve(provider, model)
     if not w then
