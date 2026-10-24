@@ -1,14 +1,22 @@
 ---
 id: 000427
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-24
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'e1f415152b52fb5a0677dfff6bf4a90721c2b8ed' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '53e49c53c4a973ba61abb6f0777e7cec0532ee1e' # card fields mirrored from issue-cards; edit via sdlc
 flake_tests: ["lua:tests/integration/session_sync_native_spec.lua#session-sync native edits undo releases acquisition baseline, redo retakes: open autosave=true", "lua:tests/integration/session_sync_native_spec.lua#session-sync native edits undo releases acquisition baseline, redo retakes: watch autosave=true"]
+started: 2026-10-24T10:09:05-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Native undo/redo autosave case sees Remote view unavailable
@@ -28,7 +36,11 @@ Find what makes the remote view unavailable during the undo/redo sequence with a
 
 ## Plan
 
-- [ ]
+Cause (traced in a disposable clone, nvim 0.11.7): opening an unregistered session file runs remote_session.observe, which sends one `couch --session-sync lookup`. The spec's registry-less fake models a Couch from before pair#437: `--session-sync` exits 2 unless FAKE_COUCH_STATUS is set. So the lookup fails and its callback posts 'Remote view unavailable', about 37 ms after the open. The undo/redo cases assert `notifications == {}` about 14 ms after the open, so normally the notice arrives after the assertion, during teardown with the buffer unloaded, and `current()` drops it. On a loaded machine the case runs slower than the lookup, and the notice wins. Every unregistered open in the file runs this lookup; only these cases assert that no notice arrived.
+
+- [ ] The fake gets a FAKE_COUCH_LOOKUP knob: without a registry, `--session-sync lookup` prints it, which models a current Couch with no registration for the path. Its default stays the pre-pair#437 exit 2, so the other registry-less specs keep their modeled Couch. The native spec sets FAKE_COUCH_LOOKUP to the absent reply in before_each, so its unregistered opens find no registration and post no notice.
+- [ ] Regression: an unregistered open whose lookup is unavailable (the knob unset) does post the notice, and the spec's notification capture sees it. This control shows the empty-notice assertion can still catch a real failure.
+- [ ] The traced red state: with the knob set, the lookup reports absent and no notice is posted. The undo/redo cases pass 20 reps per nvim under capped load, then the suite. The close unregisters both flakes, and the checktime sibling seen during #432 is covered by the same fix.
 
 ## Log
 
