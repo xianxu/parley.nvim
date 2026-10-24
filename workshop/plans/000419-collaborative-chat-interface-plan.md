@@ -34,7 +34,6 @@
 | ChatScan / chat-item projection: `scan`, `items` | `lua/parley/skills/review/chat_policy.lua` | new |
 | Legacy chat evidence decoder: `header`, `evidence` | `lua/parley/skills/review/collaboration_value.lua` | modified |
 | Local proposal validation: `validate` | `lua/parley/skills/review/local_proposal.lua` | new |
-| Flagless brief manifest/body loader: `list`, `load`, `context` | `lua/parley/skills/review/brief.lua` | new |
 | Old mode and standing-instruction flags | `lua/parley/skills/review/mode.lua`, `instruction.lua` | deleted |
 | Side-document path relationship: `month`, `member`, `root`, `parent`, `relation` | `lua/parley/side_document_path.lua` | new |
 | Historical span presentation projection: `effective` | `lua/parley/presentation.lua` | modified |
@@ -43,7 +42,6 @@
 - **Items:** separate operator-owned item extents from ready robot-marker asks inside chat. Tag grammar uses numbered `N.` items; legacy also `-`/`*`; tab stops, shallowest list indentation, continuations, prose breaks and answered links follow the pinned source. Each line is visited a constant number of times. Do not blanket-filter every marker in chat.
 - **Legacy evidence:** reuse the existing bounded scalar/map decoder and root-plain correction. Preserve known block/flow chat maps and quoted/plain strings. Errors become exact visible unread/malformed notices, never admission failure. Retired keys do not enter an interpretation pipeline. Do not grow a general YAML scanner: if supported legacy forms cannot match the pinned oracle, stop and bring the smallest mismatch to TL before adding syntax. Empty presence differs from missing; only a closed leading fence block can emit unread-frontmatter.
 - **Local proposal:** agent semantics remain agent-owned. Require each ready marker to be identified exactly once by `{line, col, raw, kind}` (zero-based line and byte column, matching parse_markers) in a review-only classification envelope, with `kind=command|question` (unclear/unsure resolve question). Coordinates and bytes bind it to this invocation snapshot. Question spans become protected; only declared command work may be applied. Missing/duplicate/stale/malformed classification refuses the complete local batch before any effect. Reject proposed edits that replace deferred questions or protected tag/heading/item/frontmatter bytes. No punctuation-based question detector.
-- **Brief loader:** names and bodies derive only from manifest role `brief`. Validate flag absence and name-only frontmatter; retire free-form. Load the five small brief bodies with the source so the agent can infer the applicable brief from the current ask. No mode args, bracket selectors, flags or standing instruction. No new completion list.
 - **Side path relation:** pure normalized path helpers distinguish flat and one-month layouts, derive one owning `.side` root, and accept a child opened from its actual parent only after its declared `parent:` resolves correctly under that root. No basename-only proof; no nested `.side` root for a side doc. Reuse `side_tree_model` parent-chain/cycle rules. The relationship does not itself grant Couch ownership.
 - **Historical presentation:** validate known values, absent fallback only, preserve unknown JSON members by leaving persistence with the existing producer. Render stored direct as no tint, highlight as tint, propose as existing marker content. New local edits always highlight. No document key can suppress or reinterpret a stored round.
 
@@ -51,6 +49,7 @@
 
 | Name | Lives in | Status | Wraps |
 |---|---|---|---|
+| Flagless brief loader: `list`, `load`, `context` | `lua/parley/skills/review/brief.lua` | new | packaged manifest/body filesystem reads; temporary-folder integration fixture |
 | Local admission integration: `validate_edits` | `lua/parley/skills/review/collaboration.lua` | modified | snapshot, policy and proposal guard |
 | Markdown structure adapter: `snapshot` | `lua/parley/skills/review/chat_structure.lua` | new | bundled string parser; immutable line snapshot |
 | Review invocation: `run_via_invoke` | `lua/parley/skills/review/init.lua`, `lua/parley/skill_invoke.lua` | modified | existing provider/tool/apply/reload lifetime |
@@ -63,11 +62,13 @@
 | Existing recursive mover | `lua/parley/document_move.lua`, `document_move_plan.lua` | modified if tests expose gap | existing journal/reconciliation |
 | Round display | `lua/parley/edit_round.lua`, `skill_render.lua` | modified | existing round request generation and extmarks |
 
+**Brief loader filesystem boundary:** names and bodies derive only from manifest role `brief`. Existing file reads validate flag absence and name-only frontmatter; retire free-form. Load five finite packaged bodies as task context, with no mode arguments, selectors, flags, standing instruction or new completion list. This is an integration seam tested against real temporary manifest/body files.
+
 **Structure boundary:** parse one string snapshot with Markdown grammar, extract heading/code/source ranges in one traversal, then call the pure policy. Keep the established outline/editing H1–H3 dialect unchanged: tag ownership only widens extents of an already supported editing heading. ATX H4–H6 and setext still define review policy. No guessed title-based attachment. If the bundled parser is unavailable, refuse local command execution requiring a policy proof visibly; Couch submit and ordinary rendering remain available. Test this explicit degraded state; do not silently use a different grammar.
 
 **Proposal boundary:** add optional `review_asks` metadata to the existing propose_edits schema; other tools/callers remain unchanged. Extend the existing pre-effect `validate_edits(snapshot, edits, input)` hook to receive complete input. Review requires exactly one proposal and complete typed classification; validates the whole batch before launching the existing tool producer. No new tool executor, state machine or write authority. Completion derives the deferral notice from that validated snapshot result; all-question rounds do not auto-resubmit endlessly. Preflight all calls before any producer starts; denied or missing-proposal responses complete as failure without reload. A no-op question batch completes successfully before tool dispatch/readback/reload/render/journal/projection, checking resolve_user(source_capture) plus existing generation so ABA edits invalidate it. Emit notices only from current successful on_done. Stop automatic resubmission whenever deferred questions remain. A no-op question batch must not create backups or write the source. Preserve generic skill callers that do not install the review hook.
 
-**External seams/fakes:** reuse existing provider/tasker response fixtures, async tool producer/file authority, filesystem-backed fake_couch and embedded editor fixtures. Do not use the live fleet for automated tests. Actual provider output is untrusted; classification is a model decision, while coverage, identity, protection and scope are deterministic validation. A malicious model could misclassify a question as a command; this semantic limit is explicit and matches the shared agent contract. Live checks cover ordinary wording and mixed asks.
+**External seams/fakes:** the brief loader reads packaged files through its existing `io.open` boundary. Its integration tests use a portable temporary folder containing real manifest/brief files and mutate/remove them between calls; no production data directory, network, cache or watcher is involved. Reuse existing provider/tasker response fixtures, async tool producer/file authority, filesystem-backed fake_couch and embedded editor fixtures. Do not use the live fleet for automated tests. Actual provider output is untrusted; classification is a model decision, while coverage, identity, protection and scope are deterministic validation. A malicious model could misclassify a question as a command; this semantic limit is explicit and matches the shared agent contract. Live checks cover ordinary wording and mixed asks.
 
 ## Actions, visible states and recovery
 
@@ -80,6 +81,7 @@ Actions: edit/save; submit locally; submit in Couch; reopen/follow link; move/re
 | Local command plus question | Command edit highlighted; question unchanged and limitation notice | Submit in Couch | None; question intentionally deferred |
 | Local question only / chat item only | Unchanged source; Couch limitation notice | Submit in Couch | None; no local answer/file allocated |
 | Unclassified/malformed/stale provider proposal | Visible refusal, no batch effects | Retry current invocation | Provider output discarded, operator text kept |
+| Declared legacy collaboration map unreadable within the supported subset | Local review unavailable: protection cannot be proven; use Couch review | Use Couch review or replace the legacy map with supported metadata/tags | No source mutation; local proposal discarded |
 | Edit/reload/context switch/cancel before completion | Existing cancelled/stale invocation outcome | Submit again | Existing externally completed disk effects follow current reconciliation path |
 | Markdown grammar unavailable | Decoration skipped visibly; local guarded edit unavailable | Submit in Couch | No text loss; no fabricated structural proof |
 | Side file missing/unreadable / parent invalid | Existing navigation/inheritance unavailable result | Reopen/follow link after repair | No automatic reparenting or deletion |
@@ -115,7 +117,7 @@ Pinned exported fixtures remain executable oracles; tests drive the actual funct
 | Production function | Adversarial class and mechanical guard |
 |---|---|
 | sync.validate_manifest / render_snapshot / read_output | Mutate versioned manifest/member and filesystem shape; assert complete preflight and byte-identical output on refusal. |
-| brief.list / brief.load | Mutate name-only manifest/body records; digest and flag-absence guard rejects half-migrated input. |
+| brief.list / brief.load / brief.context (filesystem integration) | Mutate real temporary manifest/body files, including missing/malformed files and retired flags; assert accepted output or visible refusal through the production loader. |
 | chat_structure.snapshot | Generate Markdown containers/literals and malformed delimiters; compare typed source coordinates with pinned fixtures, count traversal and parser calls. |
 | chat_policy.scan / chat_policy.items | Grammar-aware seeded documents plus pinned examples; assert disjoint valid/misplaced tags, laminar sections and exact submitted-line notices; mutation controls prove branches execute. |
 | collaboration_value.parse | Mutate legacy evidence beside arbitrary metadata; preserve supported chat forms and root-plain quote semantics, degrade unread evidence visibly without refusal. |
@@ -135,7 +137,7 @@ Pinned exported fixtures remain executable oracles; tests drive the actual funct
 
 ### 1. Pin contract and migrate bundle/brief consumers together
 
-**Files:** synchronizer above; `lua/parley/skills/review/{export.json,SKILL.md,round.md,collaboration-modes.md,review-convention.md,brief.lua,init.lua,local-adapter.md,briefs/,examples/}`; delete old generated `modes/` plus obsolete `mode.lua`/`instruction.lua` after sweeping imports. Tests: `tests/unit/review_protocol_export_test.py`, `tests/integration/review_protocol_bundle_spec.lua`, replace `review_mode_load_spec.lua` / `review_mode_spec.lua` / `review_instruction_spec.lua` with brief contracts.
+**Files:** synchronizer above; `lua/parley/skills/review/{export.json,SKILL.md,round.md,collaboration-modes.md,review-convention.md,brief.lua,init.lua,local-adapter.md,briefs/,examples/}`; delete old generated `modes/` plus obsolete `mode.lua`/`instruction.lua` after sweeping imports. Tests: `tests/unit/review_protocol_export_test.py`, `tests/integration/review_protocol_bundle_spec.lua`, replace `review_mode_load_spec.lua` / `review_mode_spec.lua` / `review_instruction_spec.lua` with filesystem-backed `tests/integration/review_brief_spec.lua` contracts.
 
 - [x] Write failing sync/brief tests using the function-level strategy above. Run `python3 -m unittest discover -s tests/unit -p review_protocol_export_test.py`; expect current v4 rejection.
 - [x] Materialize source members with `git show` from the exact pin, including the canonical grammar symlink target; record Git revision and member digests in test provenance. No copy from a moving working tree.
@@ -255,3 +257,15 @@ The 2026-10-24 #591 fleet notice supersedes prior --no-actual guidance for resti
 
 
 Qualification reconciliation: the final recorded full suite executes every mapped review, template, entity/reference/outline/highlight, attention/session/move and skill-system file on each runtime. Earlier focused harness runs, named in the issue Log, supplied RED/GREEN and adversarial controls before that full run. Task qualification boxes now reflect those returned results; the live row is complete under the explicit #441 allocation above, not a claim that the blocked standalone attempt passed. Close/merge rows stay pending until their gates finish.
+
+
+### 2026-10-24 11:01 — BR-3: classify the filesystem loader honestly
+
+The brief loader's public functions already perform manifest/body IO, so they are INTEGRATION, not PURE. Move its Core concepts row into Integration points, explicitly name io.open plus a portable temporary-folder seam, and move the unchanged filesystem-backed tests from unit to integration with traceability updated. Keep parsing/loading behavior and its finite packaged inputs unchanged; adding another adapter or injection API solely to relabel this code would create an unnecessary abstraction (ARCH-PURE, Simplicity First). The genuinely pure chat, proposal, path and presentation entities retain plain-table tests.
+
+
+### 2026-10-24 11:01 — BR-1 and BR-2 bounded rule corrections (TL680cdca5 / b34bb4e7)
+
+BR-1 preserves independent recognized chat/default evidence while ignoring existing scalar/list shapes: booleans, numbers, null/empty and mixed scalar lists in flow/block maps retain their exact pinned Go notices. Keep historical strict parse API behavior. Do not add a YAML node skipper, anchors/tags/block-scalar support or guessed partial extraction. For an explicitly declared legacy collaboration map that cannot be read (including nested ignored nodes before OR after chat), carry unread-declaration uncertainty to existing local admission and refuse source mutation visibly with use-Couch recovery. No-declaration closed headers keep their present notices/body-command behavior. This is a narrow local refusal approved by TLb34bb4e7, not a parser expansion; add both orderings and no-declaration controls through production admission (ARCH-SECURE, ARCH-ORDER).
+
+BR-2 separates Model.scan's existing rewritten event from new/retired discovered admission. An established descendant's rewritten event survives actual-parent removal from finder while its owning root remains tracked. New and retired candidates still require actual-parent membership, normalized/realpath relationship and existing timing proof. The sequence matrix includes permitted root discovery, established rewrite, refused new/retired siblings, operator saves and already-answered siblings (ARCH-PURPOSE). No new ownership state, watcher or allocator.

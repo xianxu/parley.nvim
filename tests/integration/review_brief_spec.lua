@@ -1,4 +1,5 @@
--- v4 briefs are task context, without behavior flags or editorial ordering.
+-- Filesystem integration: v4 manifest/body files in a portable temporary folder.
+-- Briefs are task context, without behavior flags or editorial ordering.
 local loaded, brief = pcall(require, "parley.skills.review.brief")
 local dir
 local function write(path, text)

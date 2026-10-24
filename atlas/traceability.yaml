@@ -816,9 +816,10 @@ atlas:
       - lua/parley/frontmatter.lua
       - lua/parley/couch.lua
     tests:
-      - tests/unit/review_brief_spec.lua
+      - tests/integration/review_brief_spec.lua
       - tests/unit/review_chat_structure_spec.lua
       - tests/unit/review_chat_policy_spec.lua
+      - tests/unit/review_legacy_evidence_spec.lua
       - tests/unit/review_chat_fixture_spec.lua
       - tests/unit/review_local_proposal_spec.lua
       - tests/unit/review_notice_spec.lua

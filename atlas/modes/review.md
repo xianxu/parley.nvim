@@ -374,7 +374,7 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- submi
 ## Key Files
 
 - `lua/parley/skills/review/init.lua` — packaged source composition, marker admission, deferred-question completion and bounded resubmit.
-- `lua/parley/skills/review/brief.lua` — version-4 named brief listing/loading; `briefs/` holds flagless task context.
+- `lua/parley/skills/review/brief.lua` — filesystem integration for version-4 named brief listing/loading; `briefs/` holds flagless task context.
 - `lua/parley/skills/review/chat_structure.lua` / `chat_policy.lua` — Markdown facts and pure chat/tag/item policy.
 - `lua/parley/skills/review/collaboration.lua` / `collaboration_value.lua` — snapshot permissions and readable legacy evidence.
 - `lua/parley/skills/review/local_proposal.lua` — pure exact-identity classifications, protected ranges and local question deferral.
