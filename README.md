@@ -123,7 +123,9 @@ robot asks inside it still work while the surrounding items remain yours.
 The tag stays visible as ordinary source, without a badge or chat-body tint.
 Legacy document keys remain in place and produce compatibility notices instead
 of selecting modes. Full notices stay in `:messages`; their short notification
-keeps native typing available.
+keeps native typing available. If an old section map cannot be read, local review
+leaves the file unchanged and asks you to use Couch review or replace the map
+with `@@chat@@` tags.
 
 Couch review owns side documents, answer files, follow-ups and folds. New links
 use `<name>.side/YYYY-MM/YYYY-MM-DD-NN-slug.md`; child discussions stay in that

@@ -290,3 +290,12 @@ The supported BR-1 matrix returned RED on each runtime:5passed/52failed/0errors,
 BR-2: root inspected the two-file fix and verified retained logs. Each mapped attention run had341passes/1failure/0errors solely because the concurrently added BR-1 spec was initially unmapped;314functional tests, including finder42 and model45, passed on each runtime. After mapping it under modes/review, single-source guard28/28 passes on each runtime; every final census is clean. New and retired attachment proofs remain unchanged; established rewritten events no longer depend on parent's current finder membership. Atlas records the event distinction.
 
 BR-3: moved existing eight filesystem-backed brief tests into integration, updated traceability/Core concepts/test strategy and kept runtime loader behavior unchanged. Preferred mapped review run and compatibility focused brief8/8 pass, both with clean census. No extra adapter/cache introduced. BR-1 evidence/admission correction remains in progress under the approved bounded rule; no fresh full-suite claim yet.
+
+
+### 2026-10-24 11:16 — close round1 corrections integrated
+
+BR-1 final149/149 across7specs pass on EACH supported runtime (79evidence,6native integration,64existing core/fixtures),0failures/errors and clean censuses; root verified retained logs and inspected the diff. Supported scalar/list node values preserve independent chat/default evidence with exact pinned Go notices; strict parse22still pass. One early monotonic explicit-map proof survives each fallible scanner/decode/preflight stage. Proven unread maps refuse before provider dispatch and through direct validation with clear use-Couch recovery; no-declaration controls remain editable. No node skipper, aliases/tagged-map inference or guessed partial fields. Declarations unreachable after earlier unsupported syntax remain explicitly beyond the proof.
+
+BR-2 established attention rewrites and BR-3 filesystem integration classification are qualified as recorded above. README/atlas/plan describe the narrow local exception and event split. Next: commit/push this final correction, queue sdlc local-check run --pre-close on its exact head, then full re-close with normal measurement and all three BR dispositions. Do not land before fresh suite and review pass. Staged/live checkout remainsa4cebca0; hub owns its fast-forward after landing. #441 remains separate/unclaimed.
+
+Combined final correction lint:870files,0warnings/errors; git diff --check clean.

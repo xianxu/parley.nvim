@@ -38,8 +38,11 @@ function M.scan(lines, facts)
             notice("collaboration-mode map is a legacy key; its chat sections are read as @@chat@@")
             if cm.default == "chat" then whole = true
             elseif cm.default ~= nil then notice("collaboration-mode map default: " .. cm.default .. " is retired and ignored") end
-            names = cm.chat or {}
-            if type(names) == "string" then names = { names } end
+            local declared = cm.chat or {}
+            if type(declared) == "string" then declared = { declared } end
+            -- Go's legacy reader ignores empty scalar heading-name nodes while
+            -- retaining every independent nonempty name in the same sequence.
+            for _, name in ipairs(declared) do if name ~= "" then names[#names + 1] = name end end
         end
         local found = {}
         for _, key in ipairs(retired) do if evidence.fields[key] then found[#found + 1] = key end end

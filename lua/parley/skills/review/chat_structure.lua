@@ -25,7 +25,7 @@ function M.snapshot(lines)
     end
     local header = values.header(lines)
     local body_start = header.readable and header.close + 1 or 1
-    local legacy_evidence, legacy_error = values.evidence(lines, header)
+    local legacy_evidence, legacy_error, legacy_refusal = values.evidence(lines, header)
     -- Closed metadata owns its bytes even when its legacy YAML is unreadable.
     -- Mask it before the Markdown grammar can promote metadata text to structure.
     local structural_start = header.closed and header.close + 1 or 1
@@ -45,7 +45,8 @@ function M.snapshot(lines)
         local facts = { headings = {}, code_lines = {}, literal_lines = {}, literal_ranges = {}, body_start = body_start,
             bytes = bytes, work = bytes + #lines, legacy_read = true,
             protected_header_end = header.closed and header.close or nil,
-            legacy_evidence = legacy_evidence, legacy_error = legacy_error }
+            legacy_evidence = legacy_evidence, legacy_error = legacy_error,
+            unread_legacy_map = legacy_refusal and legacy_refusal.unread_legacy_map or nil }
         -- An explicit DFS avoids Lua recursion limits on deeply nested containers.
         local pending = {}
         parser:for_each_tree(function(tree) pending[#pending + 1] = tree:root() end)

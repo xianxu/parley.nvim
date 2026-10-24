@@ -48,6 +48,10 @@ end
 function M.resolve(lines)
     local facts, err = require('parley.skills.review.chat_structure').snapshot(lines)
     if not facts then return nil, err end
+    if facts.unread_legacy_map then
+        return nil, 'frontmatter could not be read, so any legacy mode keys in it were not read; '
+            ..'local source mutation refused for the declared collaboration map; use Couch review'
+    end
     local scan = policy.scan(lines, facts)
     local starts, length = positions(lines)
     local plan = {scan=scan,lines=lines,starts=starts,length=length,protected={},warnings={},chat={},editable=true}

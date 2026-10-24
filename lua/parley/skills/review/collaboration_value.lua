@@ -81,9 +81,13 @@ local function decode(text, block_scalar, evidence)
             i = i + 1
         end
         local value = trim(text:sub(start, i - 1))
-        if value == "" or value:match("^[&*!|>%%@`?%-]") or value:find(":%s")
-            or value:match("^%d") or value:match("^[+.]%d")
-            or ({ null = true, ["~"] = true, ["true"] = true, ["false"] = true, yes = true, no = true, on = true, off = true })[value:lower()] then
+        -- Evidence reads yaml.Node.Value, not the scalar's implicit YAML type.
+        -- Keep its spelling for retired-value notices; the old API stays strict.
+        local implicit = value == "" or value:match("^%d") or value:match("^[+.]%d")
+            or ({ null = true, ["~"] = true, ["true"] = true, ["false"] = true, yes = true, no = true, on = true, off = true })[value:lower()]
+        local negative = evidence and not key and value:match("^%-%d")
+        if (value:match("^[&*!|>%%@`?%-]") and not negative) or value:find(":%s")
+            or implicit and (not evidence or key) then
             fail("expected a string; unsupported YAML value: " .. value)
         end
         return value
@@ -95,6 +99,7 @@ local function decode(text, block_scalar, evidence)
         local result = {}
         skip()
         while text:sub(i, i) ~= "]" do
+            if evidence and text:sub(i, i) == "," then fail("expected a heading-name sequence item") end
             result[#result + 1] = scalar(false)
             skip()
             local c = text:sub(i, i)
@@ -119,9 +124,14 @@ local function decode(text, block_scalar, evidence)
             if result[key] ~= nil then fail("duplicate mapping key: " .. key) end
             i = i + 1
             skip()
-            if key == "default" or evidence and key == "chat" and text:sub(i, i) ~= "[" then
-                result[key] = scalar(false)
-            else result[key] = list() end
+            if evidence then
+                if text:sub(i, i) == "[" then
+                    local names = list()
+                    -- A YAML collection has no scalar node value. Its members
+                    -- never turn a retired default into whole-document chat.
+                    result[key] = key == "default" and "" or names
+                else result[key] = scalar(false) end
+            else result[key] = key == "default" and scalar(false) or list() end
             skip()
             local c = text:sub(i, i)
             if c == "}" then break end
@@ -181,13 +191,24 @@ local function flow_balance(text, stack)
     end
 end
 
-local function root_fields(lines, close)
+local function root_fields(lines, close, observed)
     local entries, current, base, stack = {}, nil, nil, {}
     for row = 2, close - 1 do
         local line = lines[row]
         local prefix = line:match("^(%s*)") or ""
         if prefix:find("\t", 1, true) then fail("tabs in root indentation are unsupported") end
         local literal = current and base and #prefix > base and current.value:match('^[|>]')
+        -- A first block-map field is already a declaration witness even if
+        -- scanning its VALUE later fails. Inspect only the existing field token,
+        -- never a later nested child or text inside an alias/tagged value.
+        if observed and current and current.key == "collaboration-mode" and current.value == ""
+            and base and #prefix > base and #current.children == 0 then
+            local first = trim(line)
+            if first ~= "" and first:sub(1, 1) ~= "#"
+                and (first:sub(1, 1) == "{" or pcall(field_line, first)) then
+                observed.map_declared = true
+            end
+        end
         -- Split a root field before scanning its value: punctuation inside
         -- an already-started plain scalar cannot open a quoted YAML node.
         local root = #stack == 0 and (not base or #prefix == base)
@@ -202,6 +223,11 @@ local function root_fields(lines, close)
                 flow_balance(content, stack)
             elseif indent == base then
                 local key, raw = field_line(content)
+                -- Retain the explicit outer-map token before quote/comment
+                -- scanning can fail; no partial contents are used as evidence.
+                if observed and key == "collaboration-mode" and raw:sub(1, 1) == "{" then
+                    observed.map_declared = true
+                end
                 local value = uncomment(raw, not raw:match("^[%[{]"))
                 current = { key = key, value = value, children = {} }
                 entries[#entries + 1] = current
@@ -260,11 +286,13 @@ local function parse(lines, entries, evidence, close)
                 if child.indent ~= sequence_indent then fail("inconsistent sequence indentation") end
                 local name = child.text:match("^%-%s+(.+)$")
                 if not name then fail("expected a heading-name sequence item") end
-                names[#names + 1] = frontmatter.quote(decode(name, true))
+                names[#names + 1] = frontmatter.quote(decode(name, true, evidence))
                 index = index + 1
             end
-            if #names == 0 then fail("heading names require a list") end
-            value = "[" .. table.concat(names, ",") .. "]"
+            if #names == 0 then
+                if not evidence then fail("heading names require a list") end
+                value = ""
+            else value = "[" .. table.concat(names, ",") .. "]" end
         elseif value:sub(1, 1) == "[" then
             local continuation = { value }
             while index <= #values and values[index].indent > indent do
@@ -308,16 +336,20 @@ end
 function M.evidence(lines, header)
     header = header or M.header(lines)
     if not header.closed then return { fields = {} } end
-    if not header.readable then return nil, "unsupported frontmatter fence or document directive" end
-    local ok, entries = pcall(root_fields, lines, header.close)
-    if not ok then return nil, tostring(entries) end
+    local observed = {}
+    local ok, entries = pcall(root_fields, lines, header.close, observed)
+    local refusal = observed.map_declared and { unread_legacy_map = true } or nil
+    if not header.readable then
+        return nil, "unsupported frontmatter fence or document directive", refusal
+    end
+    if not ok then return nil, tostring(entries), refusal end
     local fields = {}
     for _, entry in ipairs(entries) do
-        if fields[entry.key] then return nil, "duplicate root field" end
+        if fields[entry.key] then return nil, "duplicate root field", refusal end
         fields[entry.key] = entry
     end
     local parsed, value = pcall(parse, lines, entries, true, header.close)
-    if not parsed then return nil, tostring(value) end
+    if not parsed then return nil, tostring(value), refusal end
     return { fields = fields, collaboration = value, close = header.close }
 end
 return M

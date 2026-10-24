@@ -248,7 +248,13 @@ collaboration values, presentation/instruction keys and unsupported closed
 frontmatter produce notices and do not select a mode. A leading fence without a
 closing fence is ordinary Markdown rather than a frontmatter block. Unknown
 legacy bytes are retained. `collaboration_value.evidence` is the bounded
-compatibility reader; it does not add a general YAML dependency.
+compatibility reader; it does not add a general YAML dependency. Ignored scalar
+and list values in a supported map cannot erase recognized chat/default
+evidence. If an explicit legacy collaboration map is unreadable, local source
+mutation refuses visibly with use-Couch recovery; it never guesses partial
+protection. This exception applies to the local adapter. A closed unreadable
+header without such a declaration keeps its notice and ordinary body commands.
+Unsupported YAML aliases/tags are not interpreted as map declarations.
 
 Older journals retain their recorded mode fields. Older Couch rounds retain
 stored round/span presentation, described in
