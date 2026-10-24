@@ -12,7 +12,7 @@
 
 ## Source and allocation
 
-- Policy/fixtures: landed ariadne#576 / PR420, Git `354e5fac5c96e0b2c26350ee712eb835746a6d67`, `construct/local/universal-review/{export.json,round.md,collaboration-modes.md,examples}` and `pkg/sidedoc/chat.go`.
+- Policy/fixtures: landed ariadne#581 / PR423, Git `5a17f789619d3dcaafec62ae51b350833836a3e7`, `construct/local/universal-review/{export.json,round.md,collaboration-modes.md,examples}` and `pkg/sidedoc/chat.go`.
 - New policy is one collaborative behavior, no mode keys or standing instruction, and highlight for new agent edits. Preserve old metadata; notices are verbatim from the pinned parser/examples.
 - TL 3d546ddc: outside Couch remains single-buffer. Questions remain untouched with `questions are answered in a side doc by Couch review; left unchanged`; commands still apply. Couch's agent review owns multi-document side/answer docs, follow-ups, decisions, folds and index writes.
 - Pair #838 is unlanded (pair:3). No stacking, runtime import or dependence on its proposed Read.Editorial shape. Existing round JSON is the integration seam.
@@ -233,3 +233,10 @@ Use sdlc local-check run --pre-close before close/boarding; trusted main selects
 ### 2026-10-23 19:41 — full-suite consumer and purity corrections
 
 The early pre-close suite found remaining ChatNew root/child assertions for the retired collaboration key, and the pure-module guard caught the buffer-only outline adapter in question_tags. Sweep remaining mode-key assertions, preserving deliberate legacy reader fixtures; new roots/children assert absence of all retired keys. Move the buffer adapter into its sole existing IO caller, outline, rather than weakening the purity guard. Its helper becomes private; the public question_tags.review_tags_for_buffer is removed. No product behavior change or new owner. The separate endpoint teardown timeout is not attributed to #430; wait for the complete failure set before a retry.
+
+
+### 2026-10-23 20:33 — pin the landed shared header and answer-target contract
+
+Repin the generated v4 package to ariadne#581 / PR423, Git5a17f789619d3dcaafec62ae51b350833836a3e7 (verified as an ancestor of primary origin/main). The manifest stays v4:84members,75fixture files,17cases including15collaboration cases and2move cases. The new frontmatter-unread-tag oracle proves that declarations inside a closed unreadable leading header have no chat effect; preserve the exact unread notice, header bytes and ordinary body command. The new chat-answer-invalid oracle keeps a malformed destination open. Match the shared nonempty/no-whitespace/no-parentheses target rule, including Go's Unicode White_Space set, without filename normalization or a second parser (ARCH-DRY).
+
+The two fixture cases and answer-target regressions pass23tests on each supported runtime. The export repin was byte-verified against the landed Git tree; Python export tests28 and its Lua wrapper1 pass. Next full pre-close waits for parley.nvim#421's landed deadline-clock correction per TL78192242; do not stack its branch or retry the previous red head. No close, stage or merge yet.

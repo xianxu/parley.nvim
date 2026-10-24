@@ -18,8 +18,8 @@
     {
       "role": "collaboration-modes",
       "path": "collaboration-modes.md",
-      "bytes": 29903,
-      "sha256": "19ed710d50629ef552408e4d92c6c6f4c3198dd463f85d00df8de0fd81009b0e"
+      "bytes": 30341,
+      "sha256": "846f6484aad5b310f062dc796c9b7aaafe0976810a3fe3ab31650f0bf63e7d54"
     },
     {
       "role": "adapter",
@@ -170,6 +170,34 @@
     },
     {
       "role": "fixture",
+      "name": "chat-answer-invalid",
+      "path": "examples/chat-answer-invalid/after/session.md",
+      "bytes": 234,
+      "sha256": "74e8fa68b525d781468a69e11a1875329e79fff32f200367e6d99cba10ed7228"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-answer-invalid",
+      "path": "examples/chat-answer-invalid/after/session.side/2026-10/2026-10-23-01-cap-five.md",
+      "bytes": 287,
+      "sha256": "b470c1192fc563d258d7750df4f0fe77e661ceabc5c3702dc26e078ae3a12e18"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-answer-invalid",
+      "path": "examples/chat-answer-invalid/before/session.md",
+      "bytes": 95,
+      "sha256": "bb0109c97d4b8049603f2ff4c259629d89c768581d0befc0ad88a5efbe08173d"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-answer-invalid",
+      "path": "examples/chat-answer-invalid/case.md",
+      "bytes": 498,
+      "sha256": "662af597e55e7b79441372cdb52e053dc53cffbc5e9e9138c4becb0c1883213f"
+    },
+    {
+      "role": "fixture",
       "name": "chat-tag",
       "path": "examples/chat-tag/after/session.md",
       "bytes": 745,
@@ -244,6 +272,27 @@
       "path": "examples/chat-tag-misplaced/case.md",
       "bytes": 410,
       "sha256": "f7c1dd93e29f1f6f8a5b64a5929c0c87e0f82c7c873d98d568a05d9c4d233b4a"
+    },
+    {
+      "role": "fixture",
+      "name": "frontmatter-unread-tag",
+      "path": "examples/frontmatter-unread-tag/after/note.md",
+      "bytes": 117,
+      "sha256": "e57558d21b387c29be6e13ad02a3adb163d5ef0c4a36c5489db9b2a15272f77c"
+    },
+    {
+      "role": "fixture",
+      "name": "frontmatter-unread-tag",
+      "path": "examples/frontmatter-unread-tag/before/note.md",
+      "bytes": 114,
+      "sha256": "9a8f5fe02bd20848b9986450217fe4ed6bdba4e5ced379411e46ab89133d7eac"
+    },
+    {
+      "role": "fixture",
+      "name": "frontmatter-unread-tag",
+      "path": "examples/frontmatter-unread-tag/case.md",
+      "bytes": 632,
+      "sha256": "dbc616a00c83b3c6491c7f6d5dffabadd1f04ac37e0c278a5ce9a2f5c49d0255"
     },
     {
       "role": "fixture",

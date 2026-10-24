@@ -629,23 +629,23 @@ class ExportTest(unittest.TestCase):
 
     def test_packaged_snapshot_needs_no_source_checkout(self):
         output = ROOT / 'lua/parley/skills/review'
-        # Immutable provenance: ariadne 354e5fac5c96e0b2c26350ee712eb835746a6d67.
+        # Immutable provenance: ariadne 5a17f789619d3dcaafec62ae51b350833836a3e7.
         # Extracted with git show; grammar symlink ../fix/review-convention.md
         # resolves to that commit's construct/local/fix/review-convention.md.
         exported = (output / 'export.json').read_bytes()
-        self.assertEqual('6669fc014c9724317c672e83481eed1b9eb3a600b70b3b048f463096a4111d75',
+        self.assertEqual('85e60265e25341b7351ddabdadd288d9fc209a254a70249b8aacf18bf410eee0',
                          hashlib.sha256(exported).hexdigest())
         manifest = json.loads(exported)
         self.api.validate_manifest(manifest)
         self.assertEqual(['collaboration-modes.md'],
                          [m['path'] for m in manifest['members'] if m['role'] == 'collaboration-modes'])
         self.assertEqual(4, manifest['version'])
-        self.assertEqual(77, len(manifest['members']))
+        self.assertEqual(84, len(manifest['members']))
         self.assertEqual(5, sum(m['role'] == 'brief' for m in manifest['members']))
-        self.assertEqual(68, sum(m['role'] == 'fixture' for m in manifest['members']))
+        self.assertEqual(75, sum(m['role'] == 'fixture' for m in manifest['members']))
         cases = {m['name'] for m in manifest['members'] if m['role'] == 'fixture'}
-        self.assertEqual(15, len(cases))
-        self.assertTrue({'move-rename', 'move-orphan'}.issubset(cases))
+        self.assertEqual(17, len(cases))
+        self.assertTrue({'move-rename', 'move-orphan', 'chat-answer-invalid', 'frontmatter-unread-tag'}.issubset(cases))
         self.assertFalse((output / 'modes').exists())
         for case in cases:
             paths = {m['path'] for m in manifest['members'] if m['role'] == 'fixture' and m['name'] == case}

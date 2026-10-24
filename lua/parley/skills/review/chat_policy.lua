@@ -143,6 +143,20 @@ local function indent(line)
     return count
 end
 
+-- Match the landed Go reader's ValidAnswerTarget, including Unicode's fixed
+-- White_Space characters. Byte sequences test that property without normalizing
+-- filenames or treating arbitrary UTF-8 continuation bytes as whitespace.
+local function answered(line)
+    if line:match("→%s*done:") then return true end
+    local target = line:match("→%s*%[answer%]%(([^)]*)%)%s*$")
+    return target ~= nil and target ~= "" and not target:find("[%s()]")
+        and not target:find("\194[\133\160]")
+        and not target:find("\225\154\128", 1, true)
+        and not target:find("\226\128[\128-\138\168\169\175]")
+        and not target:find("\226\129\159", 1, true)
+        and not target:find("\227\128\128", 1, true)
+end
+
 function M.items(lines, scan)
     local shallow, candidates = {}, {}
     for row, line in ipairs(lines) do
@@ -172,7 +186,7 @@ function M.items(lines, scan)
             else blank = false end
             if current and trim(line) ~= "" then
                 current.finish = row
-                if not code and (line:match("→%s*%[answer%]%([^)]*%)%s*$") or line:match("→%s*done:")) then current.answered = true end
+                if not code and answered(line) then current.answered = true end
             end
         end
         previous = section

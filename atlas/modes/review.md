@@ -198,9 +198,9 @@ local requests refuse visibly and leave Couch submission available.
 
 ### Canonical package
 
-The shipped source is pinned to ariadne#576, Git
-`354e5fac5c96e0b2c26350ee712eb835746a6d67`, whose
-[collaboration contract](https://github.com/xianxu/ariadne/blob/354e5fac5c96e0b2c26350ee712eb835746a6d67/construct/local/universal-review/collaboration-modes.md)
+The shipped source is pinned to ariadne#581, Git
+`5a17f789619d3dcaafec62ae51b350833836a3e7`, whose
+[collaboration contract](https://github.com/xianxu/ariadne/blob/5a17f789619d3dcaafec62ae51b350833836a3e7/construct/local/universal-review/collaboration-modes.md)
 owns the agent-side outcomes. `scripts/sync-review-protocol.py --source DIR
 --output lua/parley/skills/review` validates export version 4, roles, safe member
 paths, byte counts and SHA256 before updating the finite package. `--check`
@@ -209,7 +209,10 @@ flagless briefs cannot be interpreted as the earlier mode format.
 
 `export.json` identifies the canonical round, review convention, collaboration
 policy, named briefs and example fixtures. Generated `SKILL.md` composes the
-policy members; fixtures are validation data and never prompt prose. The package
+policy members; fixtures are validation data and never prompt prose. The v4 pin includes the
+closed unreadable-header and malformed answer-link cases: header declarations
+have no effect, body asks remain eligible, and an answer destination must be
+nonempty with no whitespace or parentheses. The package
 runs without a sibling checkout or runtime peer lookup. Parley's Lua adapter and
 `local-adapter.md` remain locally owned; stale generated mode members are removed
 explicitly. `tests/integration/review_protocol_bundle_spec.lua` is the executable

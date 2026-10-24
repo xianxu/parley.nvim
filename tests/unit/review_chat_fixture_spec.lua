@@ -37,6 +37,14 @@ local cases = {
         items={{line=5,finish=6,answered=true},{line=7,finish=7,answered=false},{line=8,finish=8,answered=false}},
     },
     ['chat-tag-misplaced'] = {sections={},tags={},misplaced={3},items={},notices={}},
+    ['chat-answer-invalid'] = {
+        sections={{heading=4,finish=5,source='tag',legacy=false}},tags={3},misplaced={},notices={},
+        items={{line=5,finish=5,answered=false}},
+    },
+    ['frontmatter-unread-tag'] = {
+        sections={},tags={},misplaced={},items={},
+        notices={'frontmatter could not be read, so any legacy mode keys in it were not read'},
+    },
     ['legacy-chat-scalar'] = {
         sections={{heading=0,finish=13,source='legacy-scalar',legacy=true}},tags={},misplaced={},
         items={{line=9,finish=9,answered=false},{line=13,finish=13,answered=false}},
@@ -82,11 +90,20 @@ local function project(name)
 end
 
 describe('shipped chat fixture conformance', function()
-    for _, name in ipairs({'chat-tag','chat-tag-misplaced','legacy-chat-scalar','legacy-chat-map','legacy-chat-comment','legacy-keys-ignored'}) do
+    for _, name in ipairs({'chat-tag','chat-tag-misplaced','chat-answer-invalid','frontmatter-unread-tag','legacy-chat-scalar','legacy-chat-map','legacy-chat-comment','legacy-keys-ignored'}) do
         it(name .. ' has the expected sections, item extents and notices', function()
             check(cases[name], project(name))
         end)
     end
+    it('admits the shared body command while preserving its unreadable closed header', function()
+        local lines = load('frontmatter-unread-tag')
+        local expected = fixture('examples/frontmatter-unread-tag/after/note.md', 'frontmatter-unread-tag')
+        local err, summary = require('parley.skills.review.collaboration').validate_edits(table.concat(lines,'\n'),
+            {{old_string=lines[11],new_string='Retries back off exponentially: 1 s, then 2 s, then 4 s.',explain='example'}},
+            {review_asks={{line=10,col=32,raw='🤖[give an example]',kind='command'}}})
+        assert.is_nil(err)
+        assert.equals(expected:gsub('\n$',''),summary.content)
+    end)
     it('detects an omitted tag or chat policy in the fixture projection', function()
         local scan, items, reply = project('chat-tag')
         local missing_tag = vim.deepcopy(scan)

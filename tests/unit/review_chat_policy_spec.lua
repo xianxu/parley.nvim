@@ -66,6 +66,26 @@ describe("chat policy", function()
         result = scan({ "---", "collaboration-mode:", "---", "# Notes" })
         assert.equals("collaboration-mode is empty or malformed; ignored", result.notices[1])
     end)
+    it("keeps malformed answer destinations open under the shared target rule", function()
+        local spaces = { " ", "\t", "\n", "\v", "\f", "\r", "\194\133", "\194\160", "\225\154\128",
+            "\226\128\168", "\226\128\169", "\226\128\175", "\226\129\159", "\227\128\128" }
+        for byte = 128, 138 do spaces[#spaces + 1] = string.char(226, 128, byte) end
+        local invalid = { "", "broken path", "(answer)", "a(b", "a)b" }
+        for _, space in ipairs(spaces) do invalid[#invalid + 1] = "a" .. space .. "b" end
+        for _, target in ipairs(invalid) do
+            local lines = vim.split("@@chat@@\n# Inbox\n1. Ask → [answer](" .. target .. ")", "\n", {plain=true})
+            local items = policy.items(lines, scan(lines))
+            assert.equals(1, #items)
+            assert.is_false(items[1].answered, vim.inspect(target))
+        end
+        for _, target in ipairs({ "answer.md", "../2026-10/answer.md", "caf𝖊.md", "回答.md", "a%20b.md" }) do
+            local lines = vim.split("@@chat@@\n# Inbox\n1. Ask → [answer](" .. target .. ")", "\n", {plain=true})
+            assert.is_true(policy.items(lines, scan(lines))[1].answered, target)
+        end
+        local lines = { "@@chat@@", "# Inbox", "1. Older form → done: finished" }
+        assert.is_true(policy.items(lines, scan(lines))[1].answered)
+    end)
+
     it("uses innermost grammar and preserves item coordinates and blank-prose boundaries", function()
         local lines = { "# Outer", "<!-- collaboration-mode: chat -->", "- old", "", "prose", "@@chat@@", "## Inner", "- ordinary", "1. ask 🤖[question]", "   continuation", "", "prose", "2. other", "   → [answer](x)", "   follow-up" }
         local result = scan(lines)
