@@ -148,6 +148,79 @@ describe("skill_invoke.invoke", function()
         assert.same({ 'alpha beta' }, vim.fn.readfile(path))
     end)
 
+    it('guarded refusal does not reload or alter the native changedtick', function()
+        local tick = vim.api.nvim_buf_get_changedtick(buf)
+        skill_invoke.invoke(buf, manifest(), {}, {
+            validate_edits = function() return 'refused by current snapshot' end,
+            on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
+        assert.is_false(done_result.ok)
+        assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+        assert.same({'alpha beta'}, vim.fn.readfile(path))
+        assert.same({}, vim.fn.glob(path .. '.parley-backup.*', false, true))
+    end)
+
+    it('validated question-only no-op completes without invoking a write tool', function()
+        local tick = vim.api.nvim_buf_get_changedtick(buf)
+        parley.dispatcher.query = function(_, _, _, _, on_exit)
+            tasker.set_query('qid_test', {raw_response=propose_edits_sse({})})
+            vim.schedule(function() on_exit('qid_test') end)
+        end
+        skill_invoke.invoke(buf, manifest(), {}, {
+            validate_edits = function(_, edits, input)
+                assert.same({}, edits)
+                assert.is_table(input)
+                return nil, {deferred=1,noop=true,content='alpha beta'}
+            end,
+            on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
+        assert.is_true(done_result.ok)
+        assert.equals(0, done_result.applied)
+        assert.equals(1, done_result.review.deferred)
+        assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+        assert.same({'alpha beta'}, vim.fn.readfile(path))
+        assert.same({}, vim.fn.glob(path .. '.parley-backup.*', false, true))
+    end)
+
+    it('guarded missing proposal fails before a read-only tool can run', function()
+        local tick = vim.api.nvim_buf_get_changedtick(buf)
+        parley.dispatcher.query = function(_, _, _, _, on_exit)
+            tasker.set_query('qid_test', {raw_response=read_file_sse(path)})
+            vim.schedule(function() on_exit('qid_test') end)
+        end
+        skill_invoke.invoke(buf, manifest({tools={'read_file'}}), {}, {
+            validate_edits = function() error('no proposal to validate') end,
+            on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
+        assert.is_false(done_result.ok)
+        assert.equals(tick, vim.api.nvim_buf_get_changedtick(buf))
+    end)
+
+    for _, change in ipairs({'edit', 'aba'}) do
+        it('guarded question-only completion rejects source ' .. change, function()
+            local exit
+            parley.dispatcher.query = function(_, _, _, _, on_exit)
+                tasker.set_query('qid_test', {raw_response=propose_edits_sse({})})
+                exit=on_exit
+            end
+            skill_invoke.invoke(buf, manifest(), {}, {
+                validate_edits=function() return nil,{deferred=1,noop=true,content='alpha beta'} end,
+                on_done=function(result) done_result=result end,
+            })
+            vim.api.nvim_buf_set_lines(buf,0,-1,false,{'new user text'})
+            if change=='aba' then vim.api.nvim_buf_set_lines(buf,0,-1,false,{'alpha beta'}) end
+            local tick=vim.api.nvim_buf_get_changedtick(buf)
+            exit('qid_test')
+            assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end))
+            assert.is_false(done_result.ok)
+            assert.equals(tick,vim.api.nvim_buf_get_changedtick(buf))
+            assert.same({},vim.fn.glob(path..'.parley-backup.*',false,true))
+        end)
+    end
+
     for _, case in ipairs(require('tests.helpers.collaboration_declarations')) do
         it('does not write through unrecognized chat declaration: ' .. case.name, function()
             local document = { '---' }

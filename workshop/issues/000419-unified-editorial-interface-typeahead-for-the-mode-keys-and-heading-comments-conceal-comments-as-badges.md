@@ -108,6 +108,14 @@ additive span contract.
 ### 2026-10-22
 
 
+### 2026-10-23 — implementation gate and first verified slices
+
+Plan-quality accepted PQ-1/PQ-2; estimate-quality INFO accepted the calibrated 4.77 h derivation (advisory: feature sizes differ; include qualification inside each feature allocation). change-code completed successfully on this branch. No actual adopted.
+
+Root proposal/core driver RED: seven missing-guard assertions and three driver failures (refusal bumped changedtick, question-only failed, missing proposal succeeded), zero test errors. GREEN: 69 driver +7 pure proposal cases, both targeted harness census phases clean, exit0 on current runtime. Guarded calls now preflight before any producer; refusal and validated no-op bypass source readback/apply. New pure local_proposal owns classification identity/coverage and protected-byte validation; existing skill_invoke/tool write owner remains authoritative. Routing/UI integration and compatibility runtime qualification remain outstanding.
+
+Parallel bundle slice reports Python28 and brief8 green with pinned v4; monthly reader slice reports101 focused green. Those reports are provisional until root integration verification. Top-level missing-module RED tests exposed a Plenary hang; owned foreground runs were interrupted, wrapper census ended clean, and tests now use assertion-based missing-module failure. No live fleet process was signalled and no full suite has started.
+
 ## Revisions
 
 ### 2026-10-23 11:15 — operator pivot to collaborative review and @@chat@@
