@@ -54,7 +54,7 @@ Design (test-only; product deadlines unchanged):
 - [x] #430 (revision): gate both absolute-deadline cases on the fake's held publication; controls S (slow startup) and J (no join).
 - [x] Root cause (revision 2): deadline timers through helper.start_deadline; blocked-loop regressions; arch lint; controls R1, R2.
 - [x] 20 reps under capped load (endpoint, remote_process, remote_runtime, lint); remote_session mapping.
-- [ ] One suite.
+- [x] One suite.
 
 ## Revisions
 
