@@ -1,6 +1,6 @@
 ---
 id: 000436
-status: working
+status: codecomplete
 created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.02
+tracker:
+    version: 1
+    completion:
+        token: close-e56b761e10d3
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: acde0888ea717bdab41bcbe2efd4549e865d2791
+        evidence_commit: 80c7dc66a8c296802192c7d0173c8d68b168fe75
 ---
 
 # substrate refresh: regenerated vocabulary after ariadne#576
