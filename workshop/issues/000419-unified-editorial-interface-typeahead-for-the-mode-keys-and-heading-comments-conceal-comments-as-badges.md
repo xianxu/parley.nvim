@@ -27,7 +27,7 @@ flow: {kind: full, provenance: operator}
 
 **Active contract, 2026-10-23:** one collaborative behavior, `@@chat@@` sections, and highlight for new edits. The operator pivot and TL allocation supersede the historical three-axis interface below. Source contract and exported fixtures are pinned to landed ariadne#576, Git `354e5fac5c96e0b2c26350ee712eb835746a6d67` (PR420). Preserve legacy metadata; create no mode keys or standing instruction. Remove existing mode/selector completion as well as omitting new typeahead.
 
-Share one snapshot-derived chat projection between admission/protection, tag decoration and heading attachment. A standalone tag directly above a parsed ATX heading, outside code, is chat; boundaries, legacy scalar/maps/comments, nested item grammar and exact notices follow the pinned source. Malformed or retired mode metadata emits notices and never refuses an otherwise valid round. Keep `@@chat@@` visible with a light highlight; ordinary tags and references retain their behavior.
+Share one snapshot-derived chat projection between admission/protection, tag recognition and heading attachment. A standalone tag directly above a parsed ATX heading, outside code, is chat; boundaries, legacy scalar/maps/comments, nested item grammar and exact notices follow the pinned source. Malformed or retired mode metadata emits notices and never refuses an otherwise valid round. Legacy map entry matching is explicitly ASCII-only (TL 2a6920bd); a non-ASCII name is unmatched with `legacy chat map entry not matched; use @@chat@@`, never guessed. Tagged Unicode headings remain supported. Keep `@@chat@@` visible as ordinary text, with no tint or conceal (TL b8c4f2df); ordinary tags and references retain their behavior.
 
 **Local adapter boundary (authenticated TL 3d546ddc):** outside Couch, retain the existing single-buffer write owner. Commands apply in place. Question/unclear/unsure asks remain byte-identical and produce the visible notice `questions are answered in a side doc by Couch review; left unchanged`. Never answer a question in place or allocate a local side doc. Couch's agent review owns multi-document questions, chat answers, follow-ups, folds and index writes. This is an explicit supported limitation, not a deferred second writer.
 
@@ -80,12 +80,12 @@ additive span contract.
 ## Done when
 
 - The pinned v4 export, five flagless briefs and exported reference fixtures are packaged and verified; the old mode/standing-instruction pipeline and completion are retired. New templates write no mode keys. Existing metadata remains untouched.
-- The production chat projection matches pinned tag/legacy contexts and exact notices, including empty collaboration-mode and a leading thematic break. Duplicate normalized headings all match; nesting, code and literal exclusions are covered.
-- A valid tag remains visible and lightly highlighted and moves with its heading through native section operations. Moving/deleting the preceding section does not take it; ordinary tags/references and the established editing-heading dialect stay compatible.
+- The production chat projection matches pinned tag/legacy contexts and exact notices, including empty collaboration-mode and a leading thematic break. The TL-approved ASCII legacy-map bound emits the exact migration notice for non-ASCII names. Duplicate normalized headings all match; nesting, code and literal exclusions are covered.
+- A valid tag remains visible as ordinary text without tint or conceal and moves with its heading through native section operations. Moving/deleting the preceding section does not take it; ordinary tags/references and the established editing-heading dialect stay compatible.
 - Outside Couch, commands apply through the existing write owner; questions remain unchanged with the exact limitation notice above. Mixed question/command batches preserve questions, and missing/malformed classification cannot cause a write. No local side docs are created.
 - Monthly side docs, actual parents, same-root grandchildren, old flat files and existing linked qa files retain correct navigation/ownership and attention. Recursive document moves preserve links, backlinks and index entries using the existing transaction owner.
 - New round edits highlight; stored mixed/legacy rounds retain per-span > round > highlight fallback with strict validation and unknown-field preservation where rewritten.
-- Both supported Neovim runtimes pass mapped unit/native/conformance tests, counted N/2N growth controls and a fresh recorded suite. Hub-arranged live acceptance verifies tag display/moves, Couch question-to-link behavior, monthly link navigation and the local question limitation.
+- Both supported Neovim runtimes pass mapped unit/native/conformance tests, counted N/2N policy-growth controls and a fresh recorded suite. Hub-arranged live acceptance verifies tag display/moves, Couch question-to-link behavior, monthly link navigation and the local question limitation.
 
 <details>
 <summary>Superseded original acceptance — historical evidence</summary>
@@ -176,3 +176,40 @@ total: 4.77
 ```
 
 Design subtotal 1.965 ×1.15 + implementation subtotal 2.51 = 4.76975 h, rounded to 4.77 h. No cross-repo vendor overhead: only Parley's code changes; landed source pins supply contracts. This forecasts the approved scope, without adopting the earlier overlapping claim window as an actual.
+
+
+### 2026-10-23 17:48 — explicit legacy-map name envelope
+
+TL 2a6920bd declined a Unicode normalization seam: the real legacy names are ASCII and migration uses tags. Bound legacy-map name matching to ASCII; non-ASCII entries are unmatched with one exact `legacy chat map entry not matched; use @@chat@@` notice, rather than a guess. Tag recognition still accepts Unicode headings. Production policy and regression tests record this intentional source-oracle exception. No new Unicode utility or parser surface.
+
+
+### 2026-10-23 17:54 — optional tint removed after measured qualification
+
+TL b8c4f2df removed tint from #419. Keep tags recognized, attached to headings and protected, rendered as ordinary text. Record failed Neovim0.12.5 qualification: 50-sample512heading/2048line/30KiB fixture p95render58.462ms; laterprofile render51.377ms/snapshot38.690ms/policy2.178ms. The smaller64heading/2048line/39KiB fixture still yielded render22.323ms/snapshot15.415ms/policy0.497ms, existingviewport9.183ms. 0.11.7 latency was not qualified before the removal. get_node_text was already a direct byte-span source:sub; the copying hypothesis was disproven and cosmetic rewrite reverted. No further parser optimization or cache is introduced for optional decoration.
+
+Filed #434 unclaimed (`optional @@chat@@ tint within a render budget`) with these measurements and operator-demand prerequisite. Active Spec/Done-when/plan now require ordinary text and no render-time policy parse; earlier tint envelopes remain historical. The rest of #419 continues, with joint operator acceptance alongside pair#838 at the end.
+
+
+### 2026-10-23 18:15 — implementation checkpoints and adversarial integration
+
+Imported the exact v4 bundle and five flagless briefs in 20ae1789; monthly side-path readers and historical stored presentation are checkpointed in bf327a83. Focused notice/submit migration passes 87 cases on each of Neovim0.12.5 and0.11.7, including12 native attached-UI cases; full notices remain exact in :messages while bounded captions permit the next typed key. Routing/source projection controls pass11 cases; heading/item newline regression first reproduced tag detachment and then passed with the protected boundary fix.
+
+Fresh review identified a buffer-to-disk preimage gap: an external disk edit could move an otherwise permitted old_string into an operator-owned item without changing the buffer witness. A held-provider regression reproduced a successful forbidden write. The existing async write owner now checks private invocation bytes before any backup/write, retaining the existing revision CAS afterward. The regression plus driver70 and async19 cases pass on both runtimes, with unchanged buffer tick and no backup on refusal. Additional forged-input proof control and parser closed-header/growth verification are pending. Byte-different/non-UTF8-Unix local representations refuse visibly; no normalization can bypass the byte proof. Full suite, final close review and joint operator acceptance have not run.
+
+Recovery gap: previous terminal capture is unavailable (couch --peek returned source none); current branch, committed plan, issue Log, authenticated messages and returned test results supply continuity. Next: finish closed-header/eligibility checks, update traceability, commit/push the remaining changes, then run the recorded full suite on the candidate head. No tint work remains; #434's filing report is submitted to the hub.
+
+
+### 2026-10-23 18:17 — shared closed-header edge and remaining qualification
+
+TL05fc963f approved ignoring tag/heading declarations inside any closed leading header while retaining unread-header notices and admitting body commands, with a shared prerequisite: ariadne#581 must land the same behavior and fixture. ariadne:2 acknowledged that it will send the merge revision/case paths; keep #576's pin until then. No unlanded files are consumed. Final source qualification/landing waits for that pin; unrelated implementation checks continue.
+
+Core52 focused tests passed both runtimes, including closed unreadable-header byte preservation and actual local admission. New literal eligibility improved from3.94x to2.18x VM instructions at64/128 input. The untouched parse_markers path still measures3.481041x; filed unclaimed #435 with discovery evidence and an explicit normal-harness regression prerequisite. No global linear claim. Documentation/static/export checks33 and production-mapped typeahead18 pass. Most feature slices are committed; reference unknown-lookup/native refusal and month/grandchild move qualification remain active. One native whole-spec qualification hit its200s deadline before the new refusal cases; preserve that unresolved verification limit, isolate the new cases, and let the final suite verify the existing native spec normally.
+
+
+### 2026-10-23 18:23 — committed candidate; awaiting shared fixture pin
+
+Current implementation checkpoint f6e32d3f includes visible ordinary tags, attached/protected heading ownership, typed lookup failures and native refusal; root reference-selection control proves one shared projection. Root final focus165 passed on0.12.5 (async20, reference62, invocation70, presentation13); core/pinned-before fixtures60, focused native refusal12 and monthly real-move6 each pass both0.12.5 and0.11.7. Whole-tree lint866files reports0warnings/0errors and diff checks are clean. The existing large native entity regression hit its200s qualification deadline in one targeted run; new native cases were isolated and passed, but the final suite still must verify that existing file. This is not a full-suite pass.
+
+Actual preview at codepin0a1283df:9.24h, window11:08:07–18:21:44, including357.3minutes11:18–17:15 for #418/#322. TL59404f19 approves close --no-actual with --verified citing that contaminated concurrent-claim attribution (ariadne#580), no typed hours. No actual adopted.
+
+Remaining prerequisite: landed ariadne#581 and its new closed-header fixture/manifest pin; ariadne:2 will send it. Current bundle remains exactly #576. After repin: focused qualification, push candidate, one recorded suite, fresh hub-approved stage/joint operator check, close review and merge. No stage or merge action is authorized by old #322 approval; no :0 files touched. Follow-ups #434 and #435 are unclaimed and reported to hub with submitted receipts.
