@@ -1,13 +1,13 @@
 ---
 id: 000431
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-24
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '922188ffb7293c2baaaaf6fda6ee1c66edc913bf' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '64aec5f6bb2ca93afe81d8f76fa6006ebbfdc68c' # card fields mirrored from issue-cards; edit via sdlc
 flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retained release journal respects current intent at after-new/before-restore (#404), lua:tests/integration/session_sync_native_spec.lua#session-sync native edits detaches without unlocking and preserves user option overrides]
 started: 2026-10-23T23:11:45-07:00
 claimant:
@@ -18,6 +18,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "736a12ff", done: "63bf4436"}
+actual_hours: N/A
 ---
 
 # Native release-journal test intermittently loses its setup lock
