@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-24 (#427 — a fake defaults to the current external version)
+
+- A fake's default models the external system as it is today. Older versions are an explicit opt-in. The registry-less fake Couch still answered `--session-sync lookup` like a Couch from before pair#437. Every unregistered open then posted a late 'Remote view unavailable' notice, which raced any assertion that no notice arrived. Nothing failed while tests were fast.
+- Before calling a race intermittent, timestamp both sides. The notice lost by about 23 ms on a normal run, landing in teardown where the callback's buffer guard dropped it. Adding a 200 ms wait made it fail every time, and that delay is the red half of the control.
+
 ## 2026-10-24 (#432 — a kill at the budget is unknown, not failed)
 
 - A child killed at its timeout (vim.system code 124) may have done nothing, or done everything and lost its reply. Classifying it as failed and moving on leaves state that only the next user action repairs: #432's clean release kept its lock until the next turn. For every budgeted external call, name the reconciliation for the unconfirmed outcome. When the effect is idempotent per identity (a turn token), that is a bounded retry of the same request, which also confirms a lost reply.
