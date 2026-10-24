@@ -107,6 +107,8 @@ Next workflow gates: close review, then landing; hub owns live checkout fast-for
 
 ## Log
 
+
+- 2026-10-24: closed — BR-4 corrected on pushed 588a7b6f042e4e166a5095152515ab450721a872: private semantic heading anchor survives tag source extent; unit matrix RED24 failures each runtime then GREEN409 each, existing256 range cases retained. Native actual command/textobject sibling preservation plus undo RED8 compatibility failures then GREEN8 each runtime, clean final censuses. Unchanged original preferred textobject18 passes; earlier large-spec attempts hit existing200s deadline before regressions and are incomplete, no flake or pass inferred. Traceability28 and lint871 clean. TL de5bf27d approved correction and obsolete queued suite cancellation; fresh recorded pre-close on this exact head is retained, review overlap per tl-worker, no landing before final code PASS. Round2 independently disposed BR-1/2/3. Operator inside-Couch PASS ee5f49e0 and TL b532446a accepted #419; standalone forced-tool HTTP400 belongs to unclaimed #441. Measure normally; no typed hours.; review verdict: SHIP
 ### 2026-10-22
 
 
