@@ -44,7 +44,7 @@ Identify whether fixture setup races a valid clean release or production loses r
 - [x] Fix the class (ARCH-PURPOSE, ARCH-DRY): one helper.system that refreshes the loop clock before vim.system, used by every call that passes vim.system a timeout (couch.run, couch.operator_lock, issue_tracker git, clipboard_image, cliproxy lsof probe, remote_process ps). If the overrun is real, operator_lock gets our own deadline started through helper.start_deadline instead of vim.system's timer.
 - [x] tests/arch lint: refuse a vim.system call that passes a timeout outside helper.lua.
 - [x] One regression per case ordering; negative controls reverting the fix; fixtures not testing the budget use arrival.MS.
-- [ ] Both nvims (0.11.7, 0.12.5); 20 reps under capped load; then the suite. Unregister the four cases and close #432, #433 and #437 with this issue.
+- [x] Both nvims (0.11.7, 0.12.5); 20 reps under capped load; then the suite. Unregister the cases and close #433 and #437 with this issue (#432 split out, Revision 2).
 - [x] Keep the standalone Neovim repro (vim.system timeout after a blocked loop) for a possible upstream report.
 
 ## Log
