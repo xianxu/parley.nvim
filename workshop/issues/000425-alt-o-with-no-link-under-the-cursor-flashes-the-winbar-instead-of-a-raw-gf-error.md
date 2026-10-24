@@ -96,3 +96,12 @@ Red controls in review-red2.log confirm12/12 nonzero/EOL/UTF-8 insertion cases f
 BR-2 red controls: priority-red.log exits2,18 passed/6 failed. All four queued/active notice × buffer/window departure cases lose their warning, and both reverse-order cases show quiet feedback cancelling leave feedback. The existing pulse owner now carries purpose; only same-source/same-purpose events coalesce, and a quiet notice cannot displace a leave reminder. No parallel timer or owner added. README now explains the quiet cue and original-bar restoration (BR-3). Final shared/native controls and lint are running; no stage or landing yet.
 
 Final review-fix verification: review-green.log exits0,82/0/0 (renderer32, leave24, native no-target26), clean census. All16 initial review controls and both reverse-priority controls now pass. review-lint.log exits0,854 files/0warnings/errors; git diff-check clean. Next: push, run sdlc local-check run --pre-close on that head, full re-close (REWORK had not finalized), then the hub-sequenced live check before landing.
+
+
+### 2026-10-24 — SHIP; recorded suite blocked by registered #427
+
+Close round2 returned SHIP, all BR-1/2/3 addressed, evidence commit7e43bea490d4b9387f4ae8d3823d32890b5b11bc. The hub waived an operator stage for #425 (delivery35811c71-0a17-4aad-b19b-946d355210c8); :0 remains untouched and landing waits for passing tests.
+
+Pre-close selector correctly chose suite because trains are off and main has no affected declaration. The full run on3f9321f80a8aff88078f4d30f69c04637b8586ed completed7m25s, only session_sync_native_spec.lua failed: case session-sync native edits undo releases acquisition baseline, redo retakes: watch autosave=true, expected no notices but received Remote view unavailable; reopen the file to retry. Native summary143/1/0, clean census. Exact identity is already registered on open #427. Raw log /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/e4d0be42c9dc1b5f590f98b2f136b726.log SHA2563eb01c540943996bf01c881cdde8119c31b7da1d573b155110a46aa73271e1ac. Recorded outcome is unattributable-failure, not a resumable typed-case failure.
+
+Tried the supported exact-attempt resume. Refusal: resume proof for parent e4d0be42c9dc1b5f590f98b2f136b726 is unavailable: parent is not an ordinary completed resumable suite failure; fix/advance the code and run a suite on a new head. No blind rerun, dummy code advance or waiver attempted. Report this exact refusal to the hub and wait for its guidance on the registered-flake/legacy-attempt gate. #428 remains queued after landing.
