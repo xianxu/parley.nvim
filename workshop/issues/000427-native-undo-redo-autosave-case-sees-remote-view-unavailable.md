@@ -1,13 +1,13 @@
 ---
 id: 000427
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-23
 updated: 2026-10-24
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '53e49c53c4a973ba61abb6f0777e7cec0532ee1e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '0d36a79ef1b8483602b54de90fc2fe45a497e0d4' # card fields mirrored from issue-cards; edit via sdlc
 flake_tests: ["lua:tests/integration/session_sync_native_spec.lua#session-sync native edits undo releases acquisition baseline, redo retakes: open autosave=true", "lua:tests/integration/session_sync_native_spec.lua#session-sync native edits undo releases acquisition baseline, redo retakes: watch autosave=true"]
 started: 2026-10-24T10:09:05-07:00
 claimant:
@@ -18,6 +18,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "ef68f68a", done: "d8ec5b65"}
+actual_hours: 1.49
 ---
 
 # Native undo/redo autosave case sees Remote view unavailable
