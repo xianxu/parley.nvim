@@ -1,6 +1,6 @@
 ---
 id: 000430
-status: working
+status: wontfix
 created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
@@ -14,6 +14,12 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+tracker:
+    version: 1
+    abandoned:
+        ref: refs/ariadne/abandoned/000430
+        branch: 000430-endpoint-deadline-startup-flake
+        head: 51a4876710cf21e114ec53d57137123cdc15563b
 ---
 
 # Endpoint deadline test races Python startup and registry publication
