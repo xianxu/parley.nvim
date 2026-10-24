@@ -113,8 +113,9 @@ See [the open-descriptor watchdog](atlas/infra/fd_watchdog.md).
 
 In a Couch pane, **Alt+Return** sends only `submitted: ABSOLUTE_PATH` through
 the registered document flow. The agent's shared `xx-universal-review` skill
-reads the file's `process-instruction:` and changes since its last read.
-Outside Couch, the same shortcut runs Parley's inline review using the bundled
+reads the file and changes since its last read.
+Outside Couch, the same shortcut requests Parley's local review without prompting
+for or inserting a standing instruction. Ready robot comments use the bundled
 canonical round, marker grammar, collaboration modes (when exported) and review
 modes with its local editing tool.
 Local review answers discussion (the default) and collaboration in place.
