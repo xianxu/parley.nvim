@@ -810,6 +810,7 @@ atlas:
       - tests/unit/frontmatter_spec.lua
       - tests/unit/couch_spec.lua
       - tests/integration/review_send_spec.lua
+      - tests/integration/review_send_native_spec.lua
       - tests/unit/comment_codec_spec.lua
       - tests/unit/comment_view_spec.lua
       - tests/unit/comment_thread_spec.lua
@@ -1496,6 +1497,7 @@ atlas:
       - lua/parley/remote_process.lua
       - lua/parley/document_registry.lua
       - tests/helpers/fake_process_source.lua
+      - tests/helpers/loop_clock.lua
       - tests/helpers/remote_runtime_fixture.lua
       - tests/helpers/fixture_files.lua
       - tests/helpers/embedded_nvim.lua
@@ -1516,6 +1518,7 @@ atlas:
       - tests/unit/remote_runtime_record_spec.lua
       - tests/integration/remote_process_spec.lua
       - tests/integration/remote_runtime_spec.lua
+      - tests/arch/deadline_timer_spec.lua
       - tests/integration/remote_runtime_fixture_spec.lua
       - tests/integration/embedded_nvim_spec.lua
       - tests/integration/editor_endpoint_registry_spec.lua

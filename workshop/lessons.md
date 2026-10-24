@@ -1,5 +1,27 @@
 # Lessons
 
+## 2026-10-23 (#421 — an injected delay inside a fixed budget is a race with real IO)
+
+- "Only under load, no trace" is not a root cause. Before calling a failure a machine stall, time the failing call itself. A 15 s deadline that answers in 0.35 ms was never slow: its timer was armed from libuv's cached clock after synchronous work. Arm every deadline timer through helper.start_deadline; tests/arch/deadline_timer_spec enforces it.
+- Reproduce under the failing run's own mapping, not only the file alone. The pair passed 30 of 30 alone and failed 5 of 20 once another spec ran first.
+- A scope revision that adds deliverables (close another issue, unregister its cases) also adds a Done-when clause, so the close checks it (BR-1).
+- A deadline test that injects a fixed delay (1500 ms of a 2000 ms budget) leaves the rest of the budget to real fsyncs, so a loaded disk fails it. Hold the completion instead, and release it only once the deadline under test has passed (the deadline the resource carries); a test for a fresh budget starts the next operation only after the old deadline has passed.
+- A case that does not test a deadline should not run under a product default shorter than the suite's arrival budget: pass timeout_ms=arrival.MS where the API takes one, so a short stall cannot fail an unrelated property.
+
+## 2026-10-23 (#414 — "it did not wait" as a fact, not a time)
+
+- A wall-clock bound that equals the timeout it guards has no margin. The regression it targets (a wait cut off by that timeout) and a scheduling stall on a loaded machine give the same reading. Assert the cause instead: hold the fake's answer behind a gate the spec opens, then check that the operation is still pending when the call returns.
+- A causal check proves something only when every shape of the regression changes what it observes. With the gate held longer than the caller's timeout, a wait cut off by that timeout looked the same as no wait. Keep the fake's bound below the caller's timeout, have the fake record each answer it gives, and run one control per shape: a wait that uses the answer, one that ignores it, and one that a timeout cuts off (#414 BR-1).
+- A gated fake must also bound itself and release when the spec's directory goes away, so a spec that never opens the gate cannot leave a process behind.
+- A background load generator gets a hard time cap inside its own loop and a trap that kills it on every exit. A probe whose setup step failed once left four load loops spinning for nearly four hours, because the cleanup was the last command of a chain that never ran.
+
+- #418 plan review: an authorized preparation edit is still an edit to native observers. Trace the production observer into the current operation's invalidation before putting a buffer mutation inside save/submit. Model a narrowly witnessed preparation stage on that operation; never mute all changed events, since a reentrant unrelated edit must still cancel stale work. Test the real observer and exact projected before/after content through controlled interruptions.
+
+- #418 generated properties: when the shared presence scanner normalizes key case, every downstream reader must use that same identity; otherwise filling can preserve a present setting while routing as if it were missing. Test quoted and mixed-case keys through both resolution and fill. Header byte budgets include fences and must also validate the projected additions.
+
+- #418 full-suite correction: a repeat-submit fixture must locate its body after metadata preparation. Fixed line numbers can overwrite a newly inserted fence and make downstream receipt/attention tests fail for the wrong reason. Preserve per-file header variants and assert the intended body target before editing.
+
+- #418 close BR-1/BR-2: additive YAML insertion must preserve value type, decoded contents and the existing root layout. Presence/preservation tests alone miss a first fill that cannot be read on the next submit. Generate implicit-type/control-string and indentation cases; require resolve/fill round-trip plus a real native insertion, and validate the projected header.
 ## 2026-10-23 (#423 — a length guard and the fixtures that test it)
 
 - A test for a size limit must hold at every input the guard accepts, not only at this checkout's input. Fixtures derived from an ambient root (tempname(), TMPDIR) grow with that root; build them relative to a cwd, and run the suite at the longest accepted root once.
@@ -1036,3 +1058,17 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #425 BR-1: restoring Insert mode after stopinsert does not preserve the insertion position. No-op gestures must retain the byte cursor and distinguish insertion before a character from insertion at EOL; test nonzero positions, multibyte boundaries and the next typed character.
 - #425 BR-2: a shared finite-feedback lease must coalesce equivalent purposes, not merely equal source buffers. Enumerate both arrival orders and queued/active phases; important leave feedback supersedes quiet feedback and cannot be displaced by it.
 - #425 BR-3: a changed user gesture needs its README explanation as well as its atlas map. Verify the concrete user-facing section at close.
+- #418 close BR-4: a root YAML scalar is outside flow context. Enumerate plain/quoted punctuation, indicator and numeric prefixes, named escapes, partial and complete headers before reusing a collection decoder; distinguish exact implicit types from strings that merely start with a digit.
+
+- #418 close round 3: quote context must be correct before semantic decoding, including comment scanning. Keep optional header fill narrower than delivery: unsupported representations skip insertion, while actual semantic consumers name the unreadable line instead of guessing settings. Preserve expressly supported legacy forms.
+- #418 counted-growth tests: cached JIT traces can bypass debug instruction sampling. Flush traces and count interpreter instructions before comparing N/2N; do not relax a growth ratio to compensate for missing measurement.
+
+- #418: counted Lua instructions cannot reveal backtracking inside native string patterns. Remove unrequested inference rather than widening the YAML surface; adversarial colon/digit instructions must retain string semantics. Avoid adjacent greedy repetitions over overlapping character sets in an interactive bounded parser.
+
+
+## 2026-10-23 (#418 — root scalar lexical context)
+
+- Split the root key/value before scanning a plain scalar for comments. A quote starts a quoted root scalar only at its first character; punctuation later in ordinary instruction text does not reopen YAML quoting. Keep flow collection context separate, and test unrelated metadata beside both scalar and mapped legacy chat declarations.
+- After an operator scope pivot, keep prior plan rows explicitly historical and publish a current entity inventory; do not let an old completed checklist claim that removed runtime APIs remain part of delivery.
+
+- #322 close: when renaming a workflow in documentation, trace each recording/exclusion claim to its actual producer before replacing the old label. A broad text substitution can turn an obsolete exception into a false statement about a now-recorded path.

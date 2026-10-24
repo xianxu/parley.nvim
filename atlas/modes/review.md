@@ -103,7 +103,7 @@ tolerates #125 multi-line markers so old documents keep resolving.
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
 | `<M-s>`         | Open the **skill picker** (review is one of the skills) |
-| `<M-CR>`        | Submit the document in a Couch pane; run the existing instruction-based review outside Couch (below). |
+| `<M-CR>`        | Submit the document in a Couch pane; request a mode-free local review outside Couch (below). |
 
 ## Accepting and rejecting markers
 
@@ -115,7 +115,7 @@ longer dialogue also accepts deletion because no single replacement is selected.
 Unanchored commentary disappears on either action. These rules are implemented
 by `drill_in.resolve` and tested with the shared marker parser.
 
-## Alt+Return: process-instruction and the slot send (#316)
+## Alt+Return: pane submission and local review (#322)
 
 Inside a Couch pane, Alt+Return in a named Markdown document follows
 [agentic document submission](session_sync.md) (#332): save, register on first
@@ -129,31 +129,20 @@ while a business `owner:` field does not. Confirmed membership survives header
 edits. Unknown offline membership stays editable with `Couch unavailable:
 agentic state unknown`; known attached/cached identities keep turn protection.
 
-Outside a Couch pane, the existing review behavior remains: the standing
-instruction lives in the document's frontmatter, one line the operator edits
-per round. The review-mode menu float (#133 M4) is gone.
+Outside a Couch pane, Alt+Return reports `review: local review requested` and
+calls the existing local review owner with empty arguments. It does not ask for,
+read as an instruction, or write `process-instruction:`. Plain documents and
+partial headers stay unchanged. Existing metadata is preserved; the v4 legacy-key
+mapping/notices and chat-tag policy are part of #419.
 
-```yaml
-process-instruction: "[copy-edit] keep the voice"
-```
-
-- **Grammar** (`skills/review/instruction.lua`, PURE): each leading `[name]`
-  names a stock prompt — a `modes/<name>.md` file, or a unique prefix of one
-  (`[copy-edit]` → `copy-editing`); the rest is free text added to it. No
-  `[name]` means `free-form`. Several names contribute their briefs; the first
-  one's knobs (`scope`, `deletions`, `frontier`) give the round's directives.
-  The local source passes neutral mode data to the canonical round's flag
-  table (`source(ctx)` takes `args.modes`).
-- **Quoting:** `[copy-edit] keep` is not valid YAML (sdlc's yaml.v3 rejects it in
-  issue frontmatter), so parley writes the value double-quoted when it needs it
-  (`frontmatter.needs_quote`) and reads either form. Typing `[` in the value
-  completes the mode names (from the modes directory); accepting one quotes the
-  line.
-- **Where it goes** (`lua/parley/review_send.lua`): without a Couch thread,
-  the instruction runs `run_via_invoke` here. Typed legacy session-sync files
-  keep their dedicated submit path.
-- **No line yet:** outside Couch, Alt+Return asks once and writes the answer
-  into the frontmatter (creating one), then runs the review.
+The local review still requires a ready `🤖[...]` comment. No-marker documents
+report no work, pending-only documents ask for the operator's reply, and protected
+chat or invalid legacy collaboration routing retain their current visible
+outcomes. An unnamed buffer reports save-first. Provider errors and cancellation
+stay with the existing review/skill-invocation owner; the route notice means a
+request was made, not that generation or an edit completed. Typed legacy
+session-sync files retain their dedicated submit path. Legacy `[` instruction
+completion remains until #419 removes it; Alt+Return no longer consumes it.
 
 The sidecar (`*.parley-journal.md`) is excluded from review attachment
 (`is_journal_sidecar`). `<M-CR>` is free here — chat-respond's `<M-CR>` is
@@ -241,10 +230,14 @@ Root frontmatter must be a closed block mapping; uniformly indented and
 quoted/escaped keys are decoded. Root flow maps, sequences, complex keys,
 tags/anchors/aliases and merge keys refuse instead of becoming absent routing.
 Unrelated nested metadata and literal blocks do not define root routing. The pure
+parser splits a root key from its value before scanning comments: a quote opens
+a quoted root scalar only at the value's first character. Literal quotes after
+punctuation in unrelated plain text cannot hide a legacy chat declaration (#418).
+The existing flow-map/list grammar keeps its own quote context. The pure
 `review/collaboration.lua` resolver handles normalized heading names, repeated
 headings, ATX levels 1–6, fenced code, nearest named ancestors and dangling-name
 warnings. Unknown modes and cross-mode heading conflicts refuse before local
-generation; review_send also checks them before prompting for an instruction.
+generation; the local review owner performs admission after review_send selects the local route.
 
 `review.run_via_invoke` uses that plan for admission and resubmission, excluding
 chat markers. Discussion/default and collaboration answer in place; chat
@@ -361,7 +354,7 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- submi
 - `lua/parley/skills/review/mode.lua` — Mode parse (PURE) + load/list IO seam
 - `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam
-- `lua/parley/review_send.lua` — `<M-CR>` dispatch to agentic submission in Couch; existing in-editor fallback, add-instruction prompt and `[` completion outside Couch
+- `lua/parley/review_send.lua` — `<M-CR>` dispatch to agentic submission in Couch; mode-free in-editor fallback with a visible route notice; legacy `[` completion until #419
 - `lua/parley/agentic_document.lua` — named-document registration/admission and native rename hooks; see [session-sync](session_sync.md)
 - `lua/parley/skills/review/instruction.lua` — `process-instruction` grammar, mode expansion and neutral context (PURE)
 - `lua/parley/frontmatter.lua` — shared frontmatter reader (hyphenated keys, raw values, quoting; PURE)

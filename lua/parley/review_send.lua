@@ -1,5 +1,5 @@
 -- Alt+Return submits Couch documents through S1's registered coordinator.
--- Outside Couch, process-instruction selects the local inline review.
+-- Outside Couch, request the existing local review without standing instructions.
 -- This module owns no peer transport, payload builder or diff baseline.
 
 local frontmatter = require("parley.frontmatter")
@@ -18,39 +18,6 @@ local function modes()
 	return dir and require("parley.skills.review.mode").list(dir) or {}
 end
 
---- The instruction text from frontmatter lines; nil when the key is absent.
---- A quoted value is its quoted scalar (a comment may follow it); a plain one
---- is the whole line after the colon, `#` included.
----@param lines string[]
----@return string|nil
-M.instruction_value = function(lines)
-	local fm = frontmatter.parse(lines)
-	local raw = fm and fm.raw[M.KEY]
-	if raw and frontmatter.quoted_span(raw) then
-		return fm.fields[M.KEY] or ""
-	end
-	return raw
-end
-
---- The frontmatter line for a value, quoted when a strict YAML reader needs it.
-M.format_line = function(value)
-	return M.KEY .. ": " .. (frontmatter.needs_quote(value) and frontmatter.quote(value) or value)
-end
-
---- Where the line for `value` goes: { first, last, lines } in nvim_buf_set_lines
---- terms (0-based, end exclusive). Replaces an existing line, else inserts
---- before the closing fence, else adds a frontmatter. PURE.
-M.placement = function(lines, value)
-	local line = M.format_line(value)
-	local fm = frontmatter.parse(lines)
-	if fm and fm.lnum[M.KEY] then
-		return { first = fm.lnum[M.KEY] - 1, last = fm.lnum[M.KEY], lines = { line } }
-	elseif fm then
-		return { first = fm.close - 1, last = fm.close - 1, lines = { line } }
-	end
-	return { first = 0, last = 0, lines = { "---", line, "---" } }
-end
-
 --- <M-CR> in a markdown buffer.
 M.submit = function(buf)
 	if require("parley.agentic_document").submit(buf) then return end
@@ -62,36 +29,8 @@ M.submit = function(buf)
 		notify("save the file first: the agent reads it from disk", vim.log.levels.ERROR)
 		return
 	end
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local routing, routing_error = require('parley.skills.review.collaboration').resolve(lines)
-	local value = M.instruction_value(lines)
-	if value == nil then
-		if not routing then notify(routing_error, vim.log.levels.ERROR); return end
-		vim.ui.input({ prompt = M.KEY .. ": " }, function(answer)
-			if not answer or vim.trim(answer) == "" or not vim.api.nvim_buf_is_valid(buf) then
-				return
-			end
-			local p = M.placement(vim.api.nvim_buf_get_lines(buf, 0, -1, false), vim.trim(answer))
-			if not require("parley.buffer_edit").edit_user_lines("ReviewSend", buf, p.first, p.last, p.lines) then
-				return -- not written, so not sent (#265)
-			end
-			M.submit(buf)
-		end)
-		return
-	end
-	local expanded, err = instruction.expand(value, modes())
-	if not expanded or not routing then
-		local errors = {}
-		if err then errors[#errors + 1] = err end
-		if routing_error then errors[#errors + 1] = routing_error end
-		notify(table.concat(errors, '; '), vim.log.levels.ERROR)
-		return
-	end
-    local names = {}
-    for _, m in ipairs(expanded.modes) do
-        names[#names + 1] = m.name
-    end
-    require("parley.skills.review").run_via_invoke(buf, { modes = names, instruction = expanded.text })
+	notify("local review requested")
+	require("parley.skills.review").run_via_invoke(buf, {})
 end
 
 --------------------------------------------------------------------------------

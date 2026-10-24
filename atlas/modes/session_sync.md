@@ -30,7 +30,7 @@ couch-owner: ops:0
 | Key | Action |
 |---|---|
 | `<M-CR>` in a Couch pane | Save and register on first submit; confirm identity, release the operator lock and send `submitted: <absolute path>` on later submits. An unresolved pane agent or uncertain mutation keeps submission pending. |
-| `<M-CR>` outside a Couch pane | Existing [review behavior](review.md#altreturn-process-instruction-and-the-slot-send-316), including the typed legacy session-sync path. |
+| `<M-CR>` outside a Couch pane | Existing [review behavior](review.md#altreturn-pane-submission-and-local-review-322), including the typed legacy session-sync path. |
 
 **Private editor endpoints.** A confirmed registered parent or side document
 also supplies Namespace, stable ID and canonical File to the
