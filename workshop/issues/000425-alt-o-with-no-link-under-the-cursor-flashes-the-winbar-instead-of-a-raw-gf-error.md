@@ -79,3 +79,10 @@ The complete context/file_references run found one genuine compatibility failure
 Final verification after that fix: final-green.log exits0,77/0/0 (open_reference_spec, native no-target14 cases, arrival architecture guards). Other context tests had passed in navigation-green.log; shared-green.log exits0,64/0/0 (renderer32, lock-leave18, native no-target14). Clean process censuses. Final lint-final2.log exits0,854 files/0warnings/errors; git diff-check clean. All logs in /Volumes/TestScratch/parley425.YDVqCr. Native controls retain builtin notifications for no-target gestures and verify subsequent typing, source text/cursor, Normal/Insert mode, temporary/custom bar restoration, retained operator cell, real E37 open failure and direct smart-gf E447 behavior. The queued-navigation control fails without its identity guard and passes with it.
 
 Required recorded suite and close review remain pending. Operator smoke should press Alt+o on a plain word and blank line (Normal and Insert), with a normal state-owned bar and in an untracked/breadcrumb-disabled buffer: brief cue, no prompt, bar returns; then open a real path. Ask the hub to sequence the live check before touching :0.
+
+
+## Revisions
+
+### 2026-10-23 — Close round 1, preserve no-op position and leave feedback
+
+The recorded suite on4a0a48cf passed (attempt b55f8e0de7d3b4b2ffd06a83b4efba87,7m27s), but close returned REWORK. BR-1 exposes stopinsert moving the insertion position left; cover nonzero positions, EOL and UTF-8 byte boundaries with absent/custom bars, restoring the captured position only on no-target return. BR-2 exposes source-only coalescing between two distinct pulse purposes; cover queued/active notice crossed with buffer/WinLeave departure, and let leave feedback supersede a quiet notice while retaining duplicate-event coalescing. BR-3 requires the README no-target explanation, alongside the atlas. These preserve the existing gesture and reminder contracts, with no additional owner/timer or durable state. New binary pre-close selection will run on the pushed fixes before re-close.
