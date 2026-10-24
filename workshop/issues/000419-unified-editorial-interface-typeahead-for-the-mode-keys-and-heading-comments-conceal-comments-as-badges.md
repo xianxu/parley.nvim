@@ -299,3 +299,8 @@ BR-1 final149/149 across7specs pass on EACH supported runtime (79evidence,6nativ
 BR-2 established attention rewrites and BR-3 filesystem integration classification are qualified as recorded above. README/atlas/plan describe the narrow local exception and event split. Next: commit/push this final correction, queue sdlc local-check run --pre-close on its exact head, then full re-close with normal measurement and all three BR dispositions. Do not land before fresh suite and review pass. Staged/live checkout remainsa4cebca0; hub owns its fast-forward after landing. #441 remains separate/unclaimed.
 
 Combined final correction lint:870files,0warnings/errors; git diff --check clean.
+
+
+### 2026-10-24 11:30 — close round2 REWORK / BR-4 approved
+
+Round2 independently verified BR-1/2/3 addressed (reverting executable fixes makes the regression tests fail). New BR-4 reports section-ownership-through-operations: to_end searches from a tag-widened source start and can consume a following section or invert at a preceding sibling. TL de5bf27d approves separate semantic heading/source extent and the full operation matrix plus native deletion/undo. The obsolete queued lease-3800866215 was cancelled normally before admission; no result claimed. Add REDs, fix the shared range owner, qualify both runtimes, then commit/push and queue a fresh suite before re-close. Live stage remains unchanged; #441 stays separate.

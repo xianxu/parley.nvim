@@ -97,3 +97,99 @@ Add `## Revisions` entries that:
 - Distinguish new side-document discovery from established-entry rewrites, including parent removal from the finder.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"606f5fc3-dd7f-4a21-a54c-773bff826083","repository":"github.com/xianxu/parley.nvim","issue_id":"000419","recipe":"milestone-review","round":1,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/8be23f625f3c5a55","reviewed_head":"27c670ca388c57ef20614adfed96242b34d894c2","slot":"parley.nvim:3","requested_at":"2026-10-24T17:48:29.372022Z"},"phase":"finished","pid":28154,"started_at":"2026-10-24T17:48:29.514339Z","finished_at":"2026-10-24T17:53:23.814925Z","session_id":"01a16f07-4537-7913-a8d1-1d3f31d50d67","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-24T11:28:29-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 419 — unified-editorial-interface: typeahead for the mode keys and heading comments; conceal comments as badges |
+| repo | parley.nvim |
+| issue file | workshop/issues/000419-unified-editorial-interface-typeahead-for-the-mode-keys-and-heading-comments-conceal-comments-as-badges.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | d1bb4ba89c0466ae17c02520afdbbfd705ff0537..d94a67415dfad7e2ea5319353574bdffe6f81bd1 |
+| command | sdlc close --issue 419 |
+| reviewer | codex (openai; author openai) |
+| isolation | fenced |
+| timestamp | 2026-10-24T11:28:29-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+All three prior findings are addressed with verified evidence. The pinned bundle, local admission, and attention regressions check out. One new blocking regression remains: deleting to the end of a tagged section can also delete the following section.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Production evidence/admission tests pass on both supported runtimes. Restoring pre-fix modules causes 71 evidence failures and six dispatch failures.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The parent-removal sequence passes on both runtimes; restoring pre-fix attention.lua makes that exact regression fail.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Plan line 52 now classifies brief.list/load/context as INTEGRATION, matching brief.lua filesystem reads. The Revisions entry explains the correction; filesystem tests moved to integration and pass.
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: section-ownership-through-operations
+    title: |
+      Tagged section deletion can consume the following section
+    detail: |
+      lua/parley/entity_range.lua:380 searches backward from found.first, which now points to the attached tag rather than its heading. For {"@@chat@@", "# First", "content", "# Second", "keep me"}, range(nil, lines, 2, {scope="to_end"}) returns first=1,last=5 instead of last=3. DeleteToEnd and daE therefore include the unrelated second section. With a preceding sibling, the same lookup instead returns nil. Preserve the semantic heading anchor independently of the widened source extent, and cover tag/heading cursor positions, preceding/following siblings, and native deletion/undo. ARCH-PURPOSE.
+```
+
+1. **Strengths**
+
+   - Verified the manifest and all 83 packaged non-adapter members byte-for-byte against the pinned upstream commit.
+   - Legacy-map regressions exercise production protection and visible refusal.
+   - Attention tests distinguish established rewrites from new, retired, saved, and already-answered siblings.
+   - README and atlas document the new interface and local question limitation.
+
+2. **Critical findings**
+
+   - The section-range defect above blocks shipping. Separate the heading’s semantic position from the attached tag’s source position.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - `make test-spec SPEC=modes/review` passed on Neovim 0.12.5.
+   - Focused head checks: 165 passed on 0.12.5; 135 passed on 0.11.7.
+   - Both new section-range probes failed on 0.11.7; direct production probes reproduced the defect on 0.12.5.
+   - Reverting prior fixes produced the expected regression failures. Disposable copy removed; reviewed checkout unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared policy and edit matching.
+   - **ARCH-PURE — pass:** corrected loader classification; deterministic policy/proposal cores.
+   - **ARCH-PURPOSE — flag:** section ownership does not survive `to_end`.
+   - **ARCH-MOCK — pass:** stateful Couch fixtures exercise production seams.
+   - **ARCH-CONSTRAINTS — pass:** snapshot limits and counted-growth controls.
+   - **ARCH-SECURE — pass:** unread-map uncertainty refuses local mutation visibly.
+   - **ARCH-ORDER — pass:** established rewrite admission has sequence coverage.
+   - **ARCH-FUNERAL — pass:** no new persistent runtime owner.
+   - **ARCH-EVOLVE — pass:** historical presentation remains separate from current keys; no new round rewrite path.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry requiring semantic heading anchors to remain independent of attached source extents, with a section-operation matrix covering `entity`/`to_end`, tag/heading cursor positions, sibling boundaries, and native deletion/undo.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"cdd95b36-6d1c-4bff-a097-d428e29ab3ff","repository":"github.com/xianxu/parley.nvim","issue_id":"000419","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Volumes/TestScratch/review-checkouts/5b4ce681b4bef229","reviewed_head":"d94a67415dfad7e2ea5319353574bdffe6f81bd1","slot":"parley.nvim:3","requested_at":"2026-10-24T18:22:50.33022Z"},"phase":"finished","pid":74973,"started_at":"2026-10-24T18:22:50.498377Z","finished_at":"2026-10-24T18:28:07.917416Z","session_id":"01a16f26-b989-7641-ac38-9639eaa4b16d","outcome":"returned"}] -->
