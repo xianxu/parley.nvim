@@ -5,9 +5,9 @@ deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-23
-estimate_hours:
+estimate_hours: 4.77
 collaboration-mode: collaboration
-card_mirror: '2325c3a3f62f8f396340bacbd91f4f98784a7745' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a68015d9c2c21712da05eeb95e6fd56f496bb351' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T11:08:07-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: operator}
 ---
 
 # unified-editorial-interface: typeahead for the mode keys and heading comments; conceal comments as badges
@@ -142,3 +143,28 @@ Inventory corrected two earlier assumptions: Parley has no executable side-doc a
 ### 2026-10-23 17:35 — approved plan; first plan-quality findings
 
 Authenticated TL ad007bf0 approved the parser/proposal seams and joint operator acceptance with pair#838 at the end. First change-code review returned PQ-1 (named function test strategies) and PQ-2 (render parse envelope), both Important. No runtime code written. Verified current highlighter caps rows/bytes but does not bound a new whole-document parser; accepted the finding. TL 862a7213 approved optional tint only through 64 KiB AND 2,048 lines, p95 under 10 ms on both runtimes; larger docs stay editable/submittable with no tint and a short notice. Explicit guarded local actions retain 1 MiB admission and visible refusal above. Durable plan records the refinement and function-level verification strategies. Exact next step: rerun change-code, then derive the estimate only after plan-quality accepts.
+
+
+## Estimate
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only. Calibration is reported stale by sdlc, so this is provisional ship-time, not a claim about operator attention.
+
+Five focused Lua/Neovim primitives: chat structure/policy, guarded local proposal, tag/heading UI, side-document readers/inheritance, and historical round display. Each uses the table midpoint (design 2.0 h, implementation 1.0 h); thorough-spec discount makes design 0.4 h and v3.1 makes implementation 0.4 h. Existing bundled Markdown parser halves only the structure primitive's design to 0.2 h (library-availability check). Familiar stack multiplier 1.0. Bundle migration is a cross-cutting refactor (design midpoint 0.6 ×0.2, implementation midpoint 0.35 ×0.4); docs and one review use their table midpoints similarly. One parser/provider API conformance discovery allowance uses implementation midpoint 0.45 ×0.4. No second writer, new service or speculative general YAML budget. Thorough-plan design buffer 15%.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.20 impl=0.40
+item: lua-neovim design=0.40 impl=0.40
+item: lua-neovim design=0.40 impl=0.40
+item: lua-neovim design=0.40 impl=0.40
+item: lua-neovim design=0.40 impl=0.40
+item: cross-cutting-refactor design=0.12 impl=0.14
+item: atlas-docs design=0.025 impl=0.05
+item: milestone-review design=0.02 impl=0.14
+item: real-api-discovery design=0 impl=0.18
+design-buffer: 0.15
+total: 4.77
+```
+
+Design subtotal 1.965 ×1.15 + implementation subtotal 2.51 = 4.76975 h, rounded to 4.77 h. No cross-repo vendor overhead: only Parley's code changes; landed source pins supply contracts. This forecasts the approved scope, without adopting the earlier overlapping claim window as an actual.
