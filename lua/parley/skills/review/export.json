@@ -1,98 +1,417 @@
 {
   "schema": "ariadne/universal-review-export",
-  "version": 2,
+  "version": 4,
   "members": [
     {
       "role": "round",
       "path": "round.md",
-      "bytes": 6150,
-      "sha256": "64fa0fd9fbb0f21a7de8327b03bb7d29584205eb071201e4b22ff4cac8836ed4"
+      "bytes": 5073,
+      "sha256": "dc320a784caa329e7dfee5f37ea057d4583fdb641aa315d5e92f0f83340c37c9"
     },
     {
       "role": "grammar",
       "path": "review-convention.md",
       "source": "construct/local/fix/review-convention.md",
-      "bytes": 8774,
-      "sha256": "56ba73da56b8968d56f8335c024c19038a709363aa8be42778be9af7572918ef"
+      "bytes": 9952,
+      "sha256": "2e09e11ec149e91169ff7caa2d468728d4c950508898c9ca756a75b1af3821ce"
     },
     {
       "role": "collaboration-modes",
       "path": "collaboration-modes.md",
-      "bytes": 26647,
-      "sha256": "acc57418a1a07bdacb4de35287d916549a11eda93b09e980059c42210b67ce1a"
+      "bytes": 30341,
+      "sha256": "846f6484aad5b310f062dc796c9b7aaafe0976810a3fe3ab31650f0bf63e7d54"
     },
     {
       "role": "adapter",
       "name": "file-edit",
       "path": "adapters/file-edit.md",
-      "bytes": 5394,
-      "sha256": "9499d6017ae7c932313f0e3b793730e24244e31ca1524e80c1f288e9bed7dd2b"
+      "bytes": 10497,
+      "sha256": "d6ad8c8db78af9e6f83161e02c4753d2d6ae4967344ae55be3b51e2e2c64e7b1"
     },
     {
-      "role": "mode",
-      "name": "developmental",
-      "path": "modes/developmental.md",
-      "order": 1,
-      "scope": "whole-doc",
-      "deletions": "apply-with-gutter-why",
-      "frontier": "off",
-      "bytes": 531,
-      "sha256": "50ddea58a807bd44507265597f8e5a32ce6d3ee42edba81c08d4ad8bc5b9b4e3"
-    },
-    {
-      "role": "mode",
-      "name": "line-editing",
-      "path": "modes/line-editing.md",
-      "order": 2,
-      "scope": "whole-doc",
-      "deletions": "propose-strike",
-      "frontier": "on",
-      "bytes": 476,
-      "sha256": "ae596e467b3bf8eca06355e3fba14144dfdd84e7d2695a80e24bc513ddaf41cc"
-    },
-    {
-      "role": "mode",
+      "role": "brief",
       "name": "copy-editing",
-      "path": "modes/copy-editing.md",
-      "order": 3,
-      "scope": "whole-doc",
-      "deletions": "propose-strike",
-      "frontier": "on",
-      "bytes": 531,
-      "sha256": "c5de437dbe5f7c228dc458cbc57a95e3afb5d75ac4f24cba4754e70432262b3f"
+      "path": "briefs/copy-editing.md",
+      "bytes": 473,
+      "sha256": "853e52be9c68ad8a88013b94ea3c862b8b40ef84323b7db72be4d2f45bc084c7"
     },
     {
-      "role": "mode",
-      "name": "proofreading",
-      "path": "modes/proofreading.md",
-      "order": 4,
-      "scope": "whole-doc",
-      "deletions": "apply",
-      "frontier": "on",
-      "bytes": 464,
-      "sha256": "b19efa549e31c47d0c4d39612e2b4b28979476ee21996d8930a579e00e87ad3f"
+      "role": "brief",
+      "name": "developmental",
+      "path": "briefs/developmental.md",
+      "bytes": 509,
+      "sha256": "4d777505c14b0716b9cfd018b153755c03ca42b4e8e207190ca12869cd6153c9"
     },
     {
-      "role": "mode",
+      "role": "brief",
       "name": "fact-check",
-      "path": "modes/fact-check.md",
-      "order": 5,
-      "scope": "whole-doc",
-      "deletions": "propose-strike",
-      "frontier": "on",
-      "bytes": 510,
-      "sha256": "c3fbc512061b607a6bd776d9396c8143d5bd72ba005f71012f32387ae55f060b"
+      "path": "briefs/fact-check.md",
+      "bytes": 460,
+      "sha256": "3bf41c61af56baddc3eb0f7cd30e7fbac1c1529a1cd1efdfe24bb7f3720bb4cb"
     },
     {
-      "role": "mode",
-      "name": "free-form",
-      "path": "modes/free-form.md",
-      "order": 6,
-      "scope": "whole-doc",
-      "deletions": "propose-strike",
-      "frontier": "off",
-      "bytes": 500,
-      "sha256": "1dd5a41723a959bbea5701edfaffa9bd246d3782f9f32f5d3724fe481d19faed"
+      "role": "brief",
+      "name": "line-editing",
+      "path": "briefs/line-editing.md",
+      "bytes": 332,
+      "sha256": "54a7ec5c261740f3623a858f10d5856c5391ba0397c352068713b06b8706903c"
+    },
+    {
+      "role": "brief",
+      "name": "proofreading",
+      "path": "briefs/proofreading.md",
+      "bytes": 412,
+      "sha256": "c38549e8210462d0c5bc0845b3debfb4933d38e45b7976de7ac04c1ced7c1c70"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-command",
+      "path": "examples/ask-command/after/design.md",
+      "bytes": 106,
+      "sha256": "8238eb4b484886bd6df74af73a278f80e449a5971ad73d20b3620156a5f80994"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-command",
+      "path": "examples/ask-command/before/design.md",
+      "bytes": 103,
+      "sha256": "768f304db68ea72ff3f214a5be169f0121de7d5dc9e59ea2f4d3b4d3b860f80d"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-command",
+      "path": "examples/ask-command/case.md",
+      "bytes": 242,
+      "sha256": "75763d51e5f6a07a60d8f6591ad1a8dec4a5b3ce5a315e1947260625bbe4be42"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-command-unclear",
+      "path": "examples/ask-command-unclear/after/design.md",
+      "bytes": 211,
+      "sha256": "daad684cf7a8a39d3736e18d371291f508f41b01e948841aa23f64e83ca6a530"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-command-unclear",
+      "path": "examples/ask-command-unclear/after/design.side/2026-10/2026-10-23-01-which-numbers.md",
+      "bytes": 261,
+      "sha256": "d08c1dfa1e1f518cf531e9a661b67768ba17ec3a4edd3ed735404e21240555dc"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-command-unclear",
+      "path": "examples/ask-command-unclear/before/design.md",
+      "bytes": 82,
+      "sha256": "56d6afaf624df730f8879fdbb00b3f1801909f50f0d952d2d478b203f1b639fb"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-command-unclear",
+      "path": "examples/ask-command-unclear/case.md",
+      "bytes": 340,
+      "sha256": "8ddd625e1b9a670439c799fee8ace3fc81b86dcb58e3fea5d71e36da0f7bf44a"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-question",
+      "path": "examples/ask-question/after/design.md",
+      "bytes": 210,
+      "sha256": "c8c2978c01bbf81c9118b58c6efc8fcf765b69247270deb2255fd5ec99557ce1"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-question",
+      "path": "examples/ask-question/after/design.side/2026-10/2026-10-23-01-lock-granularity.md",
+      "bytes": 294,
+      "sha256": "a1a60e3c618cd1d871c80ec3e2bf1945e3f38555073a6615b79e296679c2e9c2"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-question",
+      "path": "examples/ask-question/before/design.md",
+      "bytes": 93,
+      "sha256": "3a16fbf4faf72865960ec30adcd336b06a765fc0244902c2f883f5383591aebe"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-question",
+      "path": "examples/ask-question/case.md",
+      "bytes": 303,
+      "sha256": "3f2ebe566c57b27946a1e2281f28bdb95cc6c07c359e994e38b1a34749ecf26d"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-unsure",
+      "path": "examples/ask-unsure/after/design.md",
+      "bytes": 203,
+      "sha256": "0437d51349b9e9b677708669251dd4deccd27d9b1e78811b45814acd5710e22f"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-unsure",
+      "path": "examples/ask-unsure/after/design.side/2026-10/2026-10-23-01-retry-story.md",
+      "bytes": 279,
+      "sha256": "a5fd967b4ce34b252e5ab590677724d7018dc77d51bffcfcb87895a9b8a95587"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-unsure",
+      "path": "examples/ask-unsure/before/design.md",
+      "bytes": 88,
+      "sha256": "935495eacc92e6315d2d5e5512b7948c3261d4ffac2288cb066d414b36f61cb4"
+    },
+    {
+      "role": "fixture",
+      "name": "ask-unsure",
+      "path": "examples/ask-unsure/case.md",
+      "bytes": 323,
+      "sha256": "5ed9e707c32dded1abc99f097398f6b26d7ca044712fd6fc48f64eac29d3a86a"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-answer-invalid",
+      "path": "examples/chat-answer-invalid/after/session.md",
+      "bytes": 234,
+      "sha256": "74e8fa68b525d781468a69e11a1875329e79fff32f200367e6d99cba10ed7228"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-answer-invalid",
+      "path": "examples/chat-answer-invalid/after/session.side/2026-10/2026-10-23-01-cap-five.md",
+      "bytes": 287,
+      "sha256": "b470c1192fc563d258d7750df4f0fe77e661ceabc5c3702dc26e078ae3a12e18"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-answer-invalid",
+      "path": "examples/chat-answer-invalid/before/session.md",
+      "bytes": 95,
+      "sha256": "bb0109c97d4b8049603f2ff4c259629d89c768581d0befc0ad88a5efbe08173d"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-answer-invalid",
+      "path": "examples/chat-answer-invalid/case.md",
+      "bytes": 498,
+      "sha256": "662af597e55e7b79441372cdb52e053dc53cffbc5e9e9138c4becb0c1883213f"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag",
+      "path": "examples/chat-tag/after/session.md",
+      "bytes": 745,
+      "sha256": "0f7a74985ebdd9fd78ee0813f81b5e98dc38bb3d7ee791be7d1a5d03eb885da9"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag",
+      "path": "examples/chat-tag/after/session.side/2026-10/2026-10-22-01-retry-backoff.md",
+      "bytes": 387,
+      "sha256": "87daf6604a9422550dfa89e3253f029bed55a83c26cfe361685b02e8e594013a"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag",
+      "path": "examples/chat-tag/after/session.side/2026-10/2026-10-23-01-s4-cost.md",
+      "bytes": 239,
+      "sha256": "da44431fd183f60db7200d96809a1d795497ee3edf84acb3bb81668ada8dc9d2"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag",
+      "path": "examples/chat-tag/after/session.side/2026-10/2026-10-23-02-cache-flag.md",
+      "bytes": 313,
+      "sha256": "f443801ccf6ada1d903495e175db8bd1ea761e35b5adc6f98edccc90929b0112"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag",
+      "path": "examples/chat-tag/after/session.side/2026-10/2026-10-23-03-cap-configurable.md",
+      "bytes": 270,
+      "sha256": "e0a24345655830d699be273693f74c01afce71a56a0e4a29dad027f49e7b961e"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag",
+      "path": "examples/chat-tag/before/session.md",
+      "bytes": 320,
+      "sha256": "1f0ab579fa8d1236999b6914549aae2ab2d9e8e6a34070ac834e4bed3dd7afe2"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag",
+      "path": "examples/chat-tag/before/session.side/2026-10/2026-10-22-01-retry-backoff.md",
+      "bytes": 283,
+      "sha256": "d1ccded988bf97b97df33ceeea2812ed07407bf217eb9e23cfaa735607d84f77"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag",
+      "path": "examples/chat-tag/case.md",
+      "bytes": 1089,
+      "sha256": "f425b9df5397109c9b43b9a2ed64319c51419a060a04a7d2d7a2806cb84dd498"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag-misplaced",
+      "path": "examples/chat-tag-misplaced/after/session.md",
+      "bytes": 74,
+      "sha256": "0d74c09b339fc5948c8af4322f1dcbd287127fad1583f6e2e8464e01d7d4030f"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag-misplaced",
+      "path": "examples/chat-tag-misplaced/before/session.md",
+      "bytes": 74,
+      "sha256": "0d74c09b339fc5948c8af4322f1dcbd287127fad1583f6e2e8464e01d7d4030f"
+    },
+    {
+      "role": "fixture",
+      "name": "chat-tag-misplaced",
+      "path": "examples/chat-tag-misplaced/case.md",
+      "bytes": 410,
+      "sha256": "f7c1dd93e29f1f6f8a5b64a5929c0c87e0f82c7c873d98d568a05d9c4d233b4a"
+    },
+    {
+      "role": "fixture",
+      "name": "frontmatter-unread-tag",
+      "path": "examples/frontmatter-unread-tag/after/note.md",
+      "bytes": 117,
+      "sha256": "e57558d21b387c29be6e13ad02a3adb163d5ef0c4a36c5489db9b2a15272f77c"
+    },
+    {
+      "role": "fixture",
+      "name": "frontmatter-unread-tag",
+      "path": "examples/frontmatter-unread-tag/before/note.md",
+      "bytes": 114,
+      "sha256": "9a8f5fe02bd20848b9986450217fe4ed6bdba4e5ced379411e46ab89133d7eac"
+    },
+    {
+      "role": "fixture",
+      "name": "frontmatter-unread-tag",
+      "path": "examples/frontmatter-unread-tag/case.md",
+      "bytes": 632,
+      "sha256": "dbc616a00c83b3c6491c7f6d5dffabadd1f04ac37e0c278a5ce9a2f5c49d0255"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-comment",
+      "path": "examples/legacy-chat-comment/after/design.md",
+      "bytes": 354,
+      "sha256": "3cf8a2ec0a5f2277219ba5bcdce79bef41b9914c05069b1b68cfb550fe04d240"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-comment",
+      "path": "examples/legacy-chat-comment/after/design.side/2026-10/2026-10-23-01-retries.md",
+      "bytes": 256,
+      "sha256": "3e9eacb3007a3971ebf7d63df57d4482356079ec6ade9471dc3f77e1f4f6df3b"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-comment",
+      "path": "examples/legacy-chat-comment/before/design.md",
+      "bytes": 228,
+      "sha256": "c39d241adff3adfe78782cea3173f31fd8851c27e484e4439c124beb47746318"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-comment",
+      "path": "examples/legacy-chat-comment/case.md",
+      "bytes": 685,
+      "sha256": "3cecf380588adf696e549a711da6cbded2b25e53a7cc47a32ba8288d984140cd"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-map",
+      "path": "examples/legacy-chat-map/after/status.md",
+      "bytes": 272,
+      "sha256": "4407ba1f7ccab56e72f1a05603be1af685b1e9668736ec350399048a7ed62c89"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-map",
+      "path": "examples/legacy-chat-map/after/status.side/2026-10/2026-10-23-01-why-now.md",
+      "bytes": 185,
+      "sha256": "9760935e59f6cb173b414b207057a40bb83ce898ce909848c10facfc29cbb52b"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-map",
+      "path": "examples/legacy-chat-map/before/status.md",
+      "bytes": 146,
+      "sha256": "a776a5ce39b2c536adcd67a75188b53b2755f94a2c19a6e9f1527e1a1810941a"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-map",
+      "path": "examples/legacy-chat-map/case.md",
+      "bytes": 551,
+      "sha256": "99aeaabca65ccceb99708e1ae88d033b7502a01af53c96fb10bbad402a0fbacf"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-scalar",
+      "path": "examples/legacy-chat-scalar/after/status.md",
+      "bytes": 325,
+      "sha256": "2d2e6799b8fa142118f8f5b5d02c8d7f4ba74ecc2af1a1c498bdb6cea1ae9fc6"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-scalar",
+      "path": "examples/legacy-chat-scalar/after/status.side/2026-10/2026-10-23-01-why-now.md",
+      "bytes": 173,
+      "sha256": "7f7acc57e8702bac3a342813c0a9a530ea1945f20893cc3d1438b305ee400f75"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-scalar",
+      "path": "examples/legacy-chat-scalar/after/status.side/2026-10/2026-10-23-02-owner.md",
+      "bytes": 169,
+      "sha256": "174857b998b5111030633ef73a1015b6667478dfd5ccc80db2615befc8dada52"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-scalar",
+      "path": "examples/legacy-chat-scalar/before/status.md",
+      "bytes": 90,
+      "sha256": "8e0b9cda768b265b327ca6965e352662ae86a364c1713807b51d36cf8009b105"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-chat-scalar",
+      "path": "examples/legacy-chat-scalar/case.md",
+      "bytes": 510,
+      "sha256": "d2051675c6385cd87b8ba74e5a147e2d07cbc32c811b1ab5e231b94933b90aa6"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-keys-ignored",
+      "path": "examples/legacy-keys-ignored/after/note.md",
+      "bytes": 377,
+      "sha256": "a7767f8dc5939f5ed70e1abe03690f59aebeaaf085ea61e5d99dd7146ddb18dd"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-keys-ignored",
+      "path": "examples/legacy-keys-ignored/after/note.side/2026-10/2026-10-23-01-why-cap.md",
+      "bytes": 208,
+      "sha256": "85b038e8a22bf13e050e79ff1e4d13c09e38f8c12b28df1fd1cbd03ecc564b70"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-keys-ignored",
+      "path": "examples/legacy-keys-ignored/before/note.md",
+      "bytes": 271,
+      "sha256": "beb6241a7e76cb88722fc390e6c7af99748e1077b48237acaca3f4ec307ad8b7"
+    },
+    {
+      "role": "fixture",
+      "name": "legacy-keys-ignored",
+      "path": "examples/legacy-keys-ignored/case.md",
+      "bytes": 659,
+      "sha256": "cd2db06d3bb23d9a51d11b1a631a7944a1916b36a5a35dd9685adda1075d5755"
     },
     {
       "role": "fixture",
@@ -205,6 +524,69 @@
       "path": "examples/move-rename/case.md",
       "bytes": 670,
       "sha256": "5795c10c41d81aa3f391263b7f611d7522c20d787dc12c1e743e499afb33c437"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-document",
+      "path": "examples/scope-document/after/guide.md",
+      "bytes": 62,
+      "sha256": "f8beff08c6830000c6c3bd6211f98b29e9e85c2f08ffae31ce6eef1f49d8a439"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-document",
+      "path": "examples/scope-document/before/guide.md",
+      "bytes": 92,
+      "sha256": "fc77a9e0db08da5c7f5a47020f51d47a11cebd76c24c53b91c9afaadb3a18030"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-document",
+      "path": "examples/scope-document/case.md",
+      "bytes": 223,
+      "sha256": "4b53a1919ca8a182831913ced0321b5b1da0333719e5de71a7d4fb7761fc4795"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-paragraph",
+      "path": "examples/scope-paragraph/after/guide.md",
+      "bytes": 124,
+      "sha256": "c5072cb6cc90be45ee58584368df7825dbd288fad05fa92efdd3c304358d173e"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-paragraph",
+      "path": "examples/scope-paragraph/before/guide.md",
+      "bytes": 168,
+      "sha256": "bea73a210054c97fd46d6ee4784166ad526bdfd8040c00a281a9d7e6d49d2f28"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-paragraph",
+      "path": "examples/scope-paragraph/case.md",
+      "bytes": 260,
+      "sha256": "2199eee1d8af0ab2a80e10dd5ffda2b86a9f9237143f3d03eeb69944438f6390"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-section",
+      "path": "examples/scope-section/after/guide.md",
+      "bytes": 100,
+      "sha256": "c756e6440ff85077d78c4bf036fb16c8e4693000e784da4457e3e66a067239b6"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-section",
+      "path": "examples/scope-section/before/guide.md",
+      "bytes": 129,
+      "sha256": "ebb4205d5274d60401e8a23722075a7ec9cea66247cb69f7525ab02ed3d250be"
+    },
+    {
+      "role": "fixture",
+      "name": "scope-section",
+      "path": "examples/scope-section/case.md",
+      "bytes": 299,
+      "sha256": "2e730faf3129f810cd684b6c2b6fa742b720e781331870b350347fe04d374e30"
     }
   ]
 }

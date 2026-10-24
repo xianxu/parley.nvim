@@ -63,6 +63,11 @@ usual.
   along. The dialect is the repo's one ATX grammar
   (`lua/parley/markdown_heading.lua`): column-zero, one to three hashes, then a
   space. `#### Four` is body text, and a cursor on it takes the paragraph.
+  A valid attached `@@chat@@` tag moves with its heading. The source range
+  begins at the tag, while the semantic heading stays the anchor for inner
+  ranges and section-end lookup. In plain Markdown, `aE` and DeleteToEnd stop
+  at that section's boundary, before the next sibling's tag or heading; they
+  do not widen to a preceding sibling or the end of the document.
 - **Paragraph**: the blank-delimited run, `dap`-style — but the walk also stops
   at headings and at structural markers (`💬 🤖 📝 🧠 🔧 📎 🌿 🔒`) with no blank
   line between, which `dap` would swallow. In a transcript, strict `dap` parity
@@ -135,4 +140,5 @@ rules above. See [opening references](../context/file_references.md).
 - `tests/unit/entity_range_spec.lua`, `tests/unit/markdown_heading_spec.lua`,
   `tests/unit/markdown_heading_conformance_spec.lua`,
   `tests/integration/entity_textobj_spec.lua`,
+  `tests/integration/entity_tag_delete_spec.lua`,
   `tests/integration/entity_delete_parity_spec.lua`.

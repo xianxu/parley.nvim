@@ -345,8 +345,15 @@ function M.capture(definitions,opts)
     end
     policy.read_roots=roots
     local context={root_policy=policy,cwd=policy.write_root}
-    for _,key in ipairs({'buf','chat_roots','help_root','help_catalog','max_file_bytes','max_bytes','deferred_refresh_buf'})do
+    for _,key in ipairs({'buf','chat_roots','help_root','help_catalog','max_file_bytes','max_bytes','deferred_refresh_buf','expected_file'})do
         context[key]=vim.deepcopy(opts[key])
+    end
+    if context.expected_file~=nil then
+        local expected=context.expected_file
+        if type(expected)~='table' or type(expected.path)~='string' or type(expected.content)~='string'
+            or #expected.content>(opts.max_file_bytes or 1048576) then return nil,'invalid expected source bytes' end
+        expected.path=M.canonical_path(expected.path)
+        if not expected.path then return nil,'invalid expected source path' end
     end
     if context.help_root then context.help_root=M.canonical_path(context.help_root);if not context.help_root then return nil,'invalid help root'end end
     if context.chat_roots then

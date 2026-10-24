@@ -9,7 +9,7 @@ function M.load()
     local manifest = vim.json.decode(read(root .. '/export.json'))
     local groups = {}
     for _, member in ipairs(manifest.members) do
-        if member.role == 'fixture' then
+        if member.role == 'fixture' and member.name:match('^move%-') then
             local group = groups[member.name] or { name = member.name, before = {}, after = {} }
             groups[member.name] = group
             local prefix = 'examples/' .. member.name .. '/'

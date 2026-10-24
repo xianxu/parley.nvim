@@ -29,6 +29,13 @@ local function file_body(name,input,context,refresh)
         end
     else prior=await('read',path)end
     local content=prior.data or ''
+    -- Guarded review proves protected spans against one invocation snapshot.
+    -- Bind that proof to the bytes read by this existing write owner; its
+    -- revision CAS still covers any subsequent read-to-write change.
+    local expected=context.expected_file
+    if name=='propose_edits' and expected and (path~=expected.path or content~=expected.content) then
+        return result(name,'local review source bytes changed or are not UTF-8 Unix text; left unchanged',true)
+    end
     if name=='read_file'then
         local text,err,metadata=require('parley.tools.file_transform').numbered_read(input,content)
         local value=result(name,text or err,text==nil)

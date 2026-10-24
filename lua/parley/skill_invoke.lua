@@ -89,7 +89,7 @@ end
 --- @param manifest table SkillManifest
 --- @param args table|nil completable-arg values
 --- @param opts table|nil { manual=boolean?, no_reload=boolean?, document=string?,
----   detached_progress=boolean?, validate_edits=fun(snapshot, edits):string?,
+---   detached_progress=boolean?, validate_edits=fun(snapshot, edits, input):(string?, table?),
 ---   on_terminal=fun(result)?, on_done=fun(result)? }
 function M.invoke(buf, manifest, args, opts)
     opts = opts or {}
@@ -400,6 +400,7 @@ function M.invoke(buf, manifest, args, opts)
     local tool_error
     tool_producer,tool_error=require('parley.tools.producer').new({buf=buf,deferred_refresh_buf=buf,registry=tools_registry,
         allowed_tools=inv.tools,root_policy=root_policy,
+        expected_file=opts.validate_edits and {path=artifact_path,content=original .. (vim.bo[buf].endofline and "\n" or "")} or nil,
         page_limit=p.config.tool_result_page_lines,
         help_root=vim.fn.fnamemodify(debug.getinfo(1,'S').source:sub(2):match('^(.*)/lua/parley/skill_invoke%.lua$'),':p')})
     if not tool_producer then finish({ok=false,msg=tool_error},true);return end
@@ -459,10 +460,48 @@ function M.invoke(buf, manifest, args, opts)
                     assert(#calls<=32,'skill tool call capacity')
                     local seen={}
                     local proposal_count = 0
+                    local review_summary
                     for _,call in ipairs(calls)do
                         assert(require('parley.tools.types').validate_call(call),'invalid skill tool call')
                         assert(not seen[call.id],'duplicate skill tool call');seen[call.id]=true
                         if call.name == 'propose_edits' then proposal_count = proposal_count + 1 end
+                    end
+                    -- Validate the complete guarded response before any producer can
+                    -- start. Refusal and successful no-op never reload the source.
+                    if opts.validate_edits then
+                        local function reject(reason)
+                            -- The review owner reports the returned refusal through its
+                            -- bounded notice surface; full text here is diagnostic only.
+                            p.logger.debug('skill ' .. tostring(manifest.name) .. ': ' .. tostring(reason))
+                            finish({ok=false,msg=reason,calls=calls,results={},original=original,applied=0},true)
+                        end
+                        if proposal_count ~= 1 then
+                            reject('guarded local review requires one proposal batch'); return
+                        end
+                        if not require('parley.buffer_edit').resolve_user(source_capture) then
+                            reject('local review source changed before proposal admission'); return
+                        end
+                        local allowed = {}
+                        for _, name in ipairs(inv.tools or {}) do allowed[name] = true end
+                        for _, call in ipairs(calls) do
+                            if not allowed[call.name] then reject('undeclared local review tool'); return end
+                            if call.name == 'propose_edits' then
+                                call.input = call.input or {}
+                                call.input.file_path = artifact_path
+                                if type(call.input.edits) == 'string' then
+                                    local ok, decoded = pcall(vim.json.decode, call.input.edits)
+                                    if ok and type(decoded) == 'table' then call.input.edits = decoded end
+                                end
+                                local denied
+                                denied, review_summary = opts.validate_edits(original, call.input.edits, call.input)
+                                if denied then reject(denied); return end
+                            end
+                        end
+                        if review_summary and review_summary.noop then
+                            finish({ok=true,applied=0,calls=calls,results={},original=original,
+                                new_content=original,decorations={},review=review_summary},true)
+                            return
+                        end
                     end
                     local function finish_tools()
                         if read_state.logical or _gen[buf]~=gen then return end
@@ -472,6 +511,11 @@ function M.invoke(buf, manifest, args, opts)
                                 else applied=applied+1 end
                             elseif results[i].is_error then errors[#errors+1]=results[i].content end
                         end
+                    if opts.validate_edits and applied == 0 and #errors > 0 then
+                        finish({ok=false,msg=table.concat(errors,'\n'),calls=calls,results=results,
+                            original=original,applied=0,reconciliation_required=true,external_path=artifact_path},true)
+                        return
+                    end
                     if not vim.api.nvim_buf_is_valid(buf) then
                         finish({ ok = false, msg = "buffer invalid" }, false)
                         return
@@ -515,6 +559,7 @@ function M.invoke(buf, manifest, args, opts)
                         original = original,
                         new_content = new_content,
                         decorations = decorations,
+                        review = review_summary,
                     }, true)
                     end
                     if opts.no_reload then deliver_completion();return end
@@ -579,16 +624,6 @@ function M.invoke(buf, manifest, args, opts)
                                 end
                             end
                         end
-                        local denied
-                        if call.name == 'propose_edits' and opts.validate_edits then
-                            denied = proposal_count > 1 and 'guarded local review requires one proposal batch'
-                                or opts.validate_edits(original, call.input.edits)
-                        end
-                        if denied then
-                            results[i] = { is_error = true, content = denied, name = call.name }
-                            remaining = remaining - 1
-                            joined()
-                        else
                         local item={}
                         tool_producer.start(call,{epoch='skill:'..tostring(buf),generation=gen,round='1',attempt=qid},{
                             outcome=function(kind,result)
@@ -601,7 +636,6 @@ function M.invoke(buf, manifest, args, opts)
                                 if item.kind~='known' then uncertain=true end
                                 joined()
                             end})
-                        end
                         if read_state.logical then break end
                     end
                 end
