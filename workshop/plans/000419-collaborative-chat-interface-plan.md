@@ -142,7 +142,7 @@ Pinned exported fixtures remain executable oracles; tests drive the actual funct
 - [x] Extend pure validator to v4 while retaining prior manifest tests. Include `briefs` in owned output safety scanning, explicitly remove obsolete generated mode files, regenerate and verify zero drift. Preserve local Lua and local adapter.
 - [x] Change runtime source/manifest to flagless brief bodies and current-only marker instructions. Remove review mode args, instruction context and no-marker mode bypass; local adapter text states the TL's question exception. Keep generic provider selection unchanged.
 - [x] Remove retired completion from `review_send.lua`, `frontmatter_enum.lua` and obsolete attachment callbacks in `init.lua`; remove mode keys from new templates in `defaults.lua`. Sweep all remaining writers/readers and update tests, not existing operator metadata.
-- [ ] Run `make test-spec SPEC=modes/review`, `make test-spec SPEC=ui/frontmatter_typeahead`, `make test-spec SPEC=notes/templates`; commit with Agent and Co-Authored-By trailers.
+- [x] Run `make test-spec SPEC=modes/review`, `make test-spec SPEC=ui/frontmatter_typeahead`, `make test-spec SPEC=notes/templates`; commit with Agent and Co-Authored-By trailers.
 
 ### 2. Build one chat snapshot and guarded local proposal
 
@@ -153,7 +153,7 @@ Pinned exported fixtures remain executable oracles; tests drive the actual funct
 - [x] Require exhaustive review_asks classifications on the single review proposal. Validate marker identities and protect questions, operator chat-item text, tag+heading and metadata before the existing write tool. Extend validate_edits hook with full input, not another dispatcher. All-question no-op bypasses disk writes/backups and reports the exact limitation notice.
 - [x] Implement the stateful proposal/admission verification strategy; rejected preflight preserves source and starts no effects.
 - [x] Exercise controlled invocation event sequences against the existing lifetime owner; assert deferred questions cannot cause automatic repeat.
-- [ ] Count work at N/2N and mutate tag detection, question protection and classification coverage guards: each appropriate test must fail. Run mapped review and skill-system tests on each runtime; commit.
+- [x] Count work at N/2N and mutate tag detection, question protection and classification coverage guards: each appropriate test must fail. Run mapped review and skill-system tests on each runtime; commit.
 
 ### 3. Preserve heading attachment and ordinary tag text
 
@@ -163,7 +163,7 @@ Pinned exported fixtures remain executable oracles; tests drive the actual funct
 - [x] Derive tag association from the shared snapshot/structure; adjust selected section start and prior section end consistently. Inner text objects keep the heading/tag. Update generic tag/ref/outline consumers to avoid stripping or opening `chat` as a file for valid review tags; ordinary labels/file tags remain unchanged.
 - [x] Leave standalone review tags as ordinary source text in the current bounded markdown/chat renderer. Add no semantic render parse, highlight group, conceal, badge or typeahead. Ordinary non-review tags retain styling.
 - [x] Verify native operation parity/source conservation and counted viewport reads, proving no render-time policy parse.
-- [ ] Run `make test-spec SPEC=chat/entity_delete`, `SPEC=context/file_references`, `SPEC=ui/outline`, `SPEC=ui/highlights` sequentially on each runtime. Commit.
+- [x] Run `make test-spec SPEC=chat/entity_delete`, `SPEC=context/file_references`, `SPEC=ui/outline`, `SPEC=ui/highlights` sequentially on each runtime. Commit.
 
 ### 4. Make monthly side-document readers and ownership agree
 
@@ -172,7 +172,7 @@ Pinned exported fixtures remain executable oracles; tests drive the actual funct
 - [x] Write failing path/discovery/inheritance tests from the generated-graph and stateful-fake strategies above.
 - [x] Add pure owning-root/actual-parent relation and use it in attention discovery/save detection and inheritance. Deduplicate roots, scan one monthly level, map attachment to actual parent rather than top root. No parent proof is inferred from pathname membership alone.
 - [x] Reuse existing navigation and recursive move journal; add month/grandchild variants to exported move-orphan/move-rename qualification. Assert backlinks, relative links, discussions index and unknown metadata remain intact, and old flat/qa follow-up links stay unchanged.
-- [ ] Use filesystem-backed fake Couch through production request/inherit owner; retry and uncertain outcomes remain existing model transitions. Run mapped `ui/attention_finder`, `modes/session_sync`, `ui/breadcrumb`, and relevant move tests sequentially on both runtimes; commit.
+- [x] Use filesystem-backed fake Couch through production request/inherit owner; retry and uncertain outcomes remain existing model transitions. Run mapped `ui/attention_finder`, `modes/session_sync`, `ui/breadcrumb`, and relevant move tests sequentially on both runtimes; commit.
 
 ### 5. Keep historical round display compatible; acceptance and close
 
@@ -180,10 +180,10 @@ Pinned exported fixtures remain executable oracles; tests drive the actual funct
 
 - [x] Pin #823's landed fixture and implement the historical projection/refresh strategy above; current document keys never reinterpret stored presentation.
 - [x] Add strict known-field/type controls at the read boundary while retaining opaque members. Avoid any serialization unless existing feature requires it; if it does, add independent raw unknown-value round-trip controls.
-- [ ] Update atlas/help to current policy and explicit local question limitation, monthly links and legacy notices. Map every new test to the owning executable spec; run those actual mapped commands and architecture guards.
-- [ ] Verify both supported runtime binaries using the harness's `PARLEY_TEST_NVIM` selector and mapped commands. Record failures individually; do not rerun unrelated full suites to hide them.
-- [ ] Commit/push candidate with `sdlc pr`, run `sdlc local-check run --pre-close` on pushed head. Ask hub for stage/live approval only after candidate is concrete. Do not touch :0 beforehand.
-- [ ] Live steps: (1) valid/misplaced tag displays and heading move/undo keep attachment; (2) inside Couch question becomes monthly linked side doc and follow-up/side-child navigation retains owner; (3) outside Couch mixed question/command applies only command and visibly leaves question. Include legacy document + history rendering control. Hub owns operator acceptance.
+- [x] Update atlas/help to current policy and explicit local question limitation, monthly links and legacy notices. Map every new test to the owning executable spec; run those actual mapped commands and architecture guards.
+- [x] Verify both supported runtime binaries using the harness's `PARLEY_TEST_NVIM` selector and mapped commands. Record failures individually; do not rerun unrelated full suites to hide them.
+- [x] Commit/push candidate with `sdlc pr`, run `sdlc local-check run --pre-close` on pushed head. Ask hub for stage/live approval only after candidate is concrete. Do not touch :0 beforehand.
+- [x] Live steps: (1) valid/misplaced tag displays and heading move/undo keep attachment; (2) inside Couch question becomes monthly linked side doc and follow-up/side-child navigation retains owner; (3) outside Couch mixed question/command applies only command and visibly leaves question. Include legacy document + history rendering control. Hub owns operator acceptance.
 - [ ] `sdlc close --issue 419 --verified '<returned evidence>'` owns fresh review, atlas/project gates and measured actuals. Do not adopt known-overlapping claim time without checking attribution (#580); ask hub if it still includes #418/#322. No typed hours.
 - [ ] Fix blocking findings, fresh check on changed code, then `sdlc merge --yes`; preserve authoritative integrated-head suite result. Clear stage after landing and report one outcome to hub with Git-returned hash/PR.
 
@@ -245,3 +245,13 @@ The two fixture cases and answer-target regressions pass23tests on each supporte
 ### 2026-10-23 22:03 — recorded suite and staging checkpoint
 
 Full pre-close PASSED on54e8cbe5037a0244dcf761693564c6f330b8bca9 with landed #421:6m13s execution after714s queue,1038spec-file PASS lines across both supported runtimes,4clean censuses and lint868clean. Both architecture and integration phases include the previous failing files. Saved suite log SHA256baaadd3c635c7e7021f02c02f77f17da9598b31691e7c15a932d951ce98c6596. Retain this code-head evidence; this checkpoint changes only issue/plan documentation. TL46f01dc5 approves staging, with joint acceptance waiting for pair#838's stage. No post-pass code/main integration, close or merge.
+
+
+### 2026-10-24 10:47 — operator acceptance and close allocation
+
+Inside Couch operator acceptance PASSED for tags, side docs and answer links (TL ee5f49e0). Standalone failed before proposal validation: upstream HTTP400 rejects the pre-existing forced tool_choice for claude-sonnet-5-5. TL b532446a explicitly allocates that defect to unclaimed #441 and authorizes #419 to close/merge on the passing runtime suite plus inside-Couch acceptance. No compatibility fix or state/guard relaxation here; local behavior remains covered by tests. The final live-retry responsibility for this external blocker belongs to #441. Hub owns live checkout fast-forward after landing.
+
+The 2026-10-24 #591 fleet notice supersedes prior --no-actual guidance for resting-branch attribution: measure normally; use the separate #593 exception only for a returned snapshot-limit refusal with its window/error evidence.
+
+
+Qualification reconciliation: the final recorded full suite executes every mapped review, template, entity/reference/outline/highlight, attention/session/move and skill-system file on each runtime. Earlier focused harness runs, named in the issue Log, supplied RED/GREEN and adversarial controls before that full run. Task qualification boxes now reflect those returned results; the live row is complete under the explicit #441 allocation above, not a claim that the blocked standalone attempt passed. Close/merge rows stay pending until their gates finish.

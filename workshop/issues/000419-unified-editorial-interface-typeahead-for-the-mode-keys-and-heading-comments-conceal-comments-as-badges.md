@@ -85,7 +85,7 @@ additive span contract.
 - Outside Couch, commands apply through the existing write owner; questions remain unchanged with the exact limitation notice above. Mixed question/command batches preserve questions, and missing/malformed classification cannot cause a write. No local side docs are created.
 - Monthly side docs, actual parents, same-root grandchildren, old flat files and existing linked qa files retain correct navigation/ownership and attention. Recursive document moves preserve links, backlinks and index entries using the existing transaction owner.
 - New round edits highlight; stored mixed/legacy rounds retain per-span > round > highlight fallback with strict validation and unknown-field preservation where rewritten.
-- Both supported Neovim runtimes pass mapped unit/native/conformance tests, counted N/2N policy-growth controls and a fresh recorded suite. Hub-arranged live acceptance verifies tag display/moves, Couch question-to-link behavior, monthly link navigation and the local question limitation.
+- Both supported Neovim runtimes pass mapped unit/native/conformance tests, counted N/2N policy-growth controls and a fresh recorded suite. Hub-arranged live acceptance verifies tag display/moves, Couch question-to-link behavior and monthly link navigation. The local question limitation is verified by the supported-runtime tests; the operator retry is blocked by the pre-existing forced-tool HTTP400 tracked separately as #441 and explicitly excluded from #419 by TL b532446a.
 
 <details>
 <summary>Superseded original acceptance — historical evidence</summary>
@@ -101,7 +101,9 @@ additive span contract.
 
 - [x] Approve the durable plan in `workshop/plans/000419-collaborative-chat-interface-plan.md` with the hub.
 - [x] Implement pinned policy/bundle, single-buffer admission, tag/heading ownership, side-doc readers and historical round compatibility using existing effect owners.
-- [ ] Verify both runtimes, obtain live acceptance, close on the recorded suite and land.
+- [x] Verify both runtimes on the recorded suite and obtain inside-Couch live acceptance; TL b532446a accepts the local tests and allocates the pre-existing standalone failure to #441.
+
+Next workflow gates: close review, then landing; hub owns live checkout fast-forward.
 
 ## Log
 
@@ -250,3 +252,17 @@ Authenticated TL7c3a15c5 confirms parley.nvim#421 / PR346 landed and directs the
 The retained pre-close run lease-1700210998 / attempt1059bfecbbef70a9a1abb81ab05f3333 PASSED on pushed54e8cbe5037a0244dcf761693564c6f330b8bca9, exit0 in6m13s after714s queue. Both Neovim0.12.5 and0.11.7 completed all phases;1038PASS spec-file lines, no failure lines,4clean process censuses. Lint868files,0warnings/errors. The prior failing purity/template/endpoint files pass on both runtimes. Saved log: common Git directory sdlc/local-checks/54e8cbe5037a0244dcf761693564c6f330b8bca9/suite.log, SHA256baaadd3c635c7e7021f02c02f77f17da9598b31691e7c15a932d951ce98c6596. Status recorded as sdlc-local/suite. No code changes or newer-main chasing after this pass.
 
 TL46f01dc5 approves sdlc stage --build on parley.nvim:0 and the docs-only correction of the active Spec's stale #576 pin to #581. Stage this checkpoint; joint operator acceptance waits for pair#838's stage and will be scheduled by the hub. Do not close or merge before the live result. Preserve the --no-actual exception for contaminated #418/#322 claim attribution under ariadne#580.
+
+
+### 2026-10-24 10:47 — live outcome and standalone failure classified
+
+Stage remainsa4cebca03e3c4fab4fe763f943f007d1b16eddd6 on parley.nvim:0. TL ee5f49e0 relays operator inside-Couch PASS for tags, side docs and answer links ("works really well inside couch!"). Outside-Couch mixed question/command produced the generic unchanged/transport-error captions. Read the exact screenshot and local diagnostic records without changing the stage or credentials. Both10:40:15/10:40:24 proxy requests reached upstream and returned HTTP400 invalid_request_error: `tool_choice: type "tool" and "any" are not supported for this model.` Captured model claude-sonnet-5-5, tool_choice type=tool/name=propose_edits, no thinking member; this construction is unchanged from main. The driver's transport error callback precedes its response validator, so #419's question-deferral code did not run.
+
+TL b532446a accepts that pre-existing failure separately and directs #419 close/merge on inside-Couch PASS plus the recorded both-runtime suite. Filed #441 UNCLAIMED with the sanitized request/error, both exact proxy log paths, auto tool-choice direction preserving mandatory proposal validation, and actionable upstream-error caption requirement. No fix is included in #419. This revises only acceptance attribution; local behavior remains guarded and covered by the tests. Hub owns the live checkout's fast-forward after landing.
+
+Actual policy: TL8f67dd47 revoked the former resting-branch refusal exception after ariadne#591; measure normally, no typed hours. Only a returned #593 snapshot refusal qualifies for its separate evidence-based --no-actual authorization. Earlier plan/log exception instructions are historical.
+
+
+### 2026-10-24 — Revisions: accept the owned local behavior independently of #441
+
+TL b532446a excludes the independently demonstrated main/CLIProxy forced-tool failure from this issue's live acceptance. Keep the implementation and local question contract unchanged; rely on its passing both-runtime guards plus inside-Couch operator PASS, with the real standalone retry owned by unclaimed #441.
