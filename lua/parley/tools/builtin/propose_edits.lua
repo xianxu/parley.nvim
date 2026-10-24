@@ -22,6 +22,20 @@ local definition = {
         type = "object",
         properties = {
             file_path = { type = "string", description = "Absolute path to the file to edit." },
+            review_asks = {
+                type = 'array',
+                description = 'Local review only: classify every ready marker from the snapshot exactly once; leave questions unchanged.',
+                items = {
+                    type = 'object',
+                    properties = {
+                        line = {type='integer',minimum=0,description='Zero-based source line.'},
+                        col = {type='integer',minimum=0,description='Zero-based byte column.'},
+                        raw = {type='string',description='Exact complete ready marker bytes.'},
+                        kind = {type='string',enum={'command','question'}},
+                    },
+                    required = {'line','col','raw','kind'},
+                },
+            },
             edits = {
                 type = "array",
                 description = "The edits to apply.",

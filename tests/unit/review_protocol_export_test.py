@@ -299,7 +299,7 @@ class ExportTest(unittest.TestCase):
     def test_manifest_rejects_seeded_type_and_contract_mutations(self):
         self.api.validate_manifest(self.manifest)
         mutations = []
-        for key, bad in [('schema', 'other'), ('version', True), ('version', 4), ('members', {})]:
+        for key, bad in [('schema', 'other'), ('version', True), ('version', 5), ('members', {})]:
             mutant = copy.deepcopy(self.manifest)
             mutant[key] = bad
             mutations.append(mutant)
@@ -545,15 +545,108 @@ class ExportTest(unittest.TestCase):
             self.assertNotEqual(0, self.cli(source, output).returncode)
             self.assertEqual(before, self.tree(output))
 
+    def as_v4(self):
+        self.manifest['version'] = 4
+        self.add_collaboration_modes()
+        old = [m for m in self.manifest['members'] if m['role'] == 'mode']
+        for member in old:
+            self.content.pop(member['path'])
+            self.manifest['members'].remove(member)
+        for name in NAMES[:-1]:
+            path = 'briefs/' + name + '.md'
+            data = ('---\nname: ' + name + '\n---\nBrief body.\n').encode()
+            self.content[path] = data
+            self.manifest['members'].append(dict(role='brief', name=name, path=path,
+                bytes=len(data), sha256=hashlib.sha256(data).hexdigest()))
+
+    def test_v4_briefs_have_no_flags_and_only_name_frontmatter(self):
+        self.as_v4()
+        snapshot = self.api.render_snapshot(self.manifest, self.content)
+        self.assertIn(b'version 4;', snapshot['SKILL.md'])
+        self.assertFalse(any(p.startswith('modes/') for p in snapshot))
+        for key in ('scope', 'frontier', 'deletions', 'order'):
+            mutant = copy.deepcopy(self.manifest)
+            mutant['members'][-1][key] = 'off'
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.api.validate_manifest(mutant)
+        for change in ({'name': '../bad'}, {'name': 'duplicate', 'path': 'briefs/wrong.md'},
+                       {'role': 'mode'}, {'path': 'modes/proofreading.md'}):
+            mutant = copy.deepcopy(self.manifest)
+            mutant['members'][-1].update(change)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.api.validate_manifest(mutant)
+        mutant = copy.deepcopy(self.manifest)
+        mutant['members'].append(copy.deepcopy(mutant['members'][-1]))
+        with self.assertRaises(ValueError):
+            self.api.validate_manifest(mutant)
+        path = self.manifest['members'][-1]['path']
+        for header in ('name: wrong', 'name: proofreading\norder: 1',
+                       'name: proofreading\nscope: whole-doc',
+                       'name: proofreading\nname: proofreading', 'garbage'):
+            data = ('---\n' + header + '\n---\nBody.\n').encode()
+            self.content[path] = data
+            self.manifest['members'][-1].update(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+            with self.subTest(header=header), self.assertRaises(ValueError):
+                self.api.render_snapshot(self.manifest, self.content)
+
+    def test_v4_brief_preflight_owns_stale_files_and_preserves_local_files(self):
+        self.as_v4()
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
+            base = Path(tmp).resolve()
+            source = self.make_source(base)
+            output = base / 'bundle'
+            self.assertEqual(0, self.cli(source, output).returncode)
+            (output / 'local-adapter.md').write_text('local')
+            (output / 'brief.lua').write_text('local lua')
+            stale = output / 'briefs/stale.md'
+            stale.write_text('stale')
+            before = self.tree(output)
+            result = self.cli(source, output)
+            self.assertIn('extra: briefs/stale.md', result.stderr)
+            self.assertEqual(before, self.tree(output))
+            stale.unlink()
+            victim = base / 'victim'
+            victim.write_text('untouched')
+            (output / 'briefs/proofreading.md').unlink()
+            (output / 'briefs/proofreading.md').symlink_to(victim)
+            result = self.cli(source, output)
+            self.assertIn('unsafe output symlink', result.stderr)
+            self.assertEqual('untouched', victim.read_text())
+
+    def test_v4_invalid_brief_refuses_before_output_io(self):
+        self.as_v4()
+        path = self.manifest['members'][-1]['path']
+        data = b'---\nname: proofreading\nfrontier: on\n---\nBody.\n'
+        self.content[path] = data
+        self.manifest['members'][-1].update(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
+            base = Path(tmp).resolve()
+            source = self.make_source(base)
+            output = base / 'bundle'
+            result = self.cli(source, output)
+            self.assertIn('brief frontmatter', result.stderr)
+            self.assertFalse(output.exists())
+
     def test_packaged_snapshot_needs_no_source_checkout(self):
         output = ROOT / 'lua/parley/skills/review'
-        manifest = json.loads((output / 'export.json').read_bytes())
+        # Immutable provenance: ariadne 5a17f789619d3dcaafec62ae51b350833836a3e7.
+        # Extracted with git show; grammar symlink ../fix/review-convention.md
+        # resolves to that commit's construct/local/fix/review-convention.md.
+        exported = (output / 'export.json').read_bytes()
+        self.assertEqual('85e60265e25341b7351ddabdadd288d9fc209a254a70249b8aacf18bf410eee0',
+                         hashlib.sha256(exported).hexdigest())
+        manifest = json.loads(exported)
         self.api.validate_manifest(manifest)
         self.assertEqual(['collaboration-modes.md'],
                          [m['path'] for m in manifest['members'] if m['role'] == 'collaboration-modes'])
-        self.assertEqual(2, manifest['version'])
+        self.assertEqual(4, manifest['version'])
+        self.assertEqual(84, len(manifest['members']))
+        self.assertEqual(5, sum(m['role'] == 'brief' for m in manifest['members']))
+        self.assertEqual(75, sum(m['role'] == 'fixture' for m in manifest['members']))
         cases = {m['name'] for m in manifest['members'] if m['role'] == 'fixture'}
-        self.assertEqual({'move-rename', 'move-orphan'}, cases)
+        self.assertEqual(17, len(cases))
+        self.assertTrue({'move-rename', 'move-orphan', 'chat-answer-invalid', 'frontmatter-unread-tag'}.issubset(cases))
+        self.assertFalse((output / 'modes').exists())
         for case in cases:
             paths = {m['path'] for m in manifest['members'] if m['role'] == 'fixture' and m['name'] == case}
             self.assertIn(f'examples/{case}/case.md', paths)

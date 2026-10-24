@@ -330,10 +330,24 @@ missing backlinks are not invented. Escaping symlinks, malformed/ambiguous
 relevant data and changed preimages refuse before overwrite. Side scans stop
 at 4096 entries / 512 Markdown files.
 
-**Side docs inherit the parent's owner (#378).** Alt+o from a registered parent
-onto a file directly in its `.side/` folder (the mover's rule; no frontmatter
-needed) registers an absent child to the parent's effective owner, never to the
-pane's actor, and sends nothing. The model confirms both halves with Couch
+### Side documents and owner inheritance (#378, #419)
+
+Alt+o from a registered parent can offer its owner to an absent side child;
+`side_document_path` checks the actual attachment before the existing model
+confirms it. New monthly files live under `<name>.side/YYYY-MM/`; a side
+child's own discussion stays in that owning root, and its `parent:` resolves
+relative to its actual directory to the immediate parent buffer, not the top
+root document. A filename or basename match proves no ownership. Symlink
+escapes and a contradictory/malformed parent header offer no inheritance.
+
+Historical flat and nested direct `.side/` children remain readable. A
+headerless child directly in the actual parent's own side folder retains the
+old compatibility fallback; an explicit header must agree with that parent.
+Older `qa/` links remain ordinary navigation, without inferred ownership.
+No local side-doc allocator or writer is added. An inherited child takes the
+actual parent's effective owner, never the pane's actor, and sends nothing.
+
+The model confirms both halves with Couch
 first: the child is absent, and the parent still holds the registration the
 parent buffer showed. A registered child keeps its owner; if another actor
 registers the child first, the child adopts that registration. Anything
@@ -399,25 +413,34 @@ remains the single edit-turn, watch, baseline/undo, ping and rendering engine.
 Dispatch and keys live in `setup_markdown_keymaps` (`lua/parley/init.lua`). The maintainer real/fake registry
 probe is documented in [TOOLING](../../TOOLING.md).
 
-### The agent's round and `presentation:` (#383)
+### Historical round presentation (#419)
 
-Couch keeps the change an agent's last write made, as its round (pair#661).
-Spans hold 0-based `[line, byte column]` positions in the written file, the
-old and new text, and an optional `explain`. A document's `presentation:`
-frontmatter key (`direct` | `highlight` | `propose`; missing or unknown means
-`highlight`, as Couch reads it) says how parley shows the round. The pure
-`presentation.lua` reads the key and places the spans. It places a span where
-Couch says only when the buffer's hash is the round's `result_hash` and the
-text is there. Otherwise it re-finds the span by its new text, nearest its old
-position. Each placed span carries a kind from `presentation.kind`: `add` when
-its old text is empty, `change` otherwise. A deletion (empty new text) leaves
-no trace, so it yields nothing (#387). A span that can't be placed is dropped, never clamped. At most
-`MAX_SPANS` (200) spans are placed.
+Couch keeps the agent's last write as a round (#383, pair#661). Its spans
+carry 0-based `[line, byte column]` coordinates, old/new text and optional
+explanations. Presentation is historical data: a span's stored `presentation`
+overrides its round's stored value; only an absent value falls back, ultimately
+to `highlight`. Present malformed types or unknown presentation values refuse
+visibly and clear stale round decorations. Opaque fields are left untouched;
+this reader adds no sidecar or review-record writer.
+
+`direct` has no tint. `highlight` draws edited spans. Under `propose`, existing
+proposal markers remain in the document and no extra tint is added. Current
+frontmatter presentation keys cannot hide or restyle stored history. New local
+review edits use highlight; the Pair#823 fixture copied from landed Git
+`aba41239d6473e2da5d3f0ce00e82129a47a2ba3` exercises older mixed presentation
+only, not new authoring policy.
+
+The pure `presentation.decorations` keeps the existing placement rule: use a
+span's coordinates only when the result hash and text agree; otherwise re-find
+its new text nearest the old position. Stale valid coordinates can re-anchor;
+malformed coordinate types refuse. A span whose new text is gone is dropped,
+never clamped. `presentation.kind` distinguishes adds from changes; deletions
+leave no painted span. At most 200 spans are examined for decoration.
 
 `edit_round.lua` is the shell around it. `refresh(buf)` asks Couch (`round PATH
 --json`, through `document_registry`'s bounded client and its own reply
-classifier) and draws under `highlight`. Under `direct` nothing is drawn, and
-under `propose` the proposal markers are already in the text. A larger rewrite
+classifier) and draws each span according to that stored history. It never
+consults the current document's retired presentation key. A larger rewrite
 arrives as a `→ [proposal](…)` side-doc link, followed and inherited like any
 side doc. A generation per buffer drops a reply that a later refresh or clear
 overtook. A round with more than 200 spans says so once, as a WARN notice

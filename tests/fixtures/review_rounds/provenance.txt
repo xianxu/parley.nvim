@@ -1,0 +1,4 @@
+Legacy codec compatibility fixture; not current authoring policy.
+Source: Pair #823, landed Git aba41239d6473e2da5d3f0ce00e82129a47a2ba3
+Path: cmd/internal/sessionsync/testdata/editorial-rounds/presentation.json
+Copied byte-for-byte from the pinned Git object. Retains historical modes and opaque future fields.

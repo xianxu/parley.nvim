@@ -114,25 +114,34 @@ See [the open-descriptor watchdog](atlas/infra/fd_watchdog.md).
 In a Couch pane, **Alt+Return** sends only `submitted: ABSOLUTE_PATH` through
 the registered document flow. The agent's shared `xx-universal-review` skill
 reads the file and changes since its last read.
-Outside Couch, the same shortcut requests Parley's local review without prompting
-for or inserting a standing instruction. Ready robot comments use the bundled
-canonical round, marker grammar, collaboration modes (when exported) and review
-modes with its local editing tool.
-Local review answers discussion (the default) and collaboration in place.
-It leaves chat sections untouched and reports that the hub agent answers chat.
-Unknown collaboration modes or conflicting heading assignments stop the round.
-Side documents, chat answer files and changes since the last read remain with
-the agent-side skill in Couch.
+Outside Couch, the same shortcut requests local review without a standing
+instruction or mode popup. The current robot ask selects the work: commands can
+edit this file; questions stay unchanged with a notice that Couch review answers
+them in a side document. Pure chat items launch no local generation. Put a
+standalone `@@chat@@` immediately above a heading to make its section chat;
+robot asks inside it still work while the surrounding items remain yours.
+The tag stays visible as ordinary source, without a badge or chat-body tint.
+Legacy document keys remain in place and produce compatibility notices instead
+of selecting modes. Full notices stay in `:messages`; their short notification
+keeps native typing available. If an old section map cannot be read, local review
+leaves the file unchanged and asks you to use Couch review or replace the map
+with `@@chat@@` tags.
 
-When the agent answers, Parley shows what its write changed the way the
-document's `presentation:` frontmatter asks. Under `highlight` (the default),
-each changed span is highlighted, and its diagnostic gives the agent's reason
-(or "changed by the agent"). The highlights follow your edits and clear on your
-next confirmed Alt+Return. Under `propose`, the agent writes per-line
-accept/reject markers instead, and a rewrite too large for them arrives as a
-`→ [proposal](…)` side-doc link that Alt+o follows. Under `direct`, nothing is
-drawn. A round past 200 changes highlights the first 200 and says so. This
-needs a Couch with the `round` verb (pair#661). An older one shows nothing.
+Couch review owns side documents, answer files, follow-ups and folds. New links
+use `<name>.side/YYYY-MM/YYYY-MM-DD-NN-slug.md`; child discussions stay in that
+owning side root and name their actual parent. Parley follows these links and
+confirms inherited ownership through Couch. Flat/nested side files and older
+`qa/` links remain readable; Parley adds no local side-document writer.
+
+New review edits use highlights. The agent's stored round controls how its last
+write is shown: per-span
+presentation overrides round presentation, then missing history defaults to
+highlight. Current frontmatter cannot restyle that history. Stored direct spans
+have no tint; stored proposal markers remain in the text; highlighted spans move
+with edits and clear on the next confirmed submit. Malformed stored metadata
+refuses visibly. A round examines at most 200 spans. Historical mixed-mode
+fixtures describe old output, not new authoring policy.
+
 Added text gets a faint green background, changed text a faint blue one. Both
 are tinted from your theme's own background, so they stay quiet in any color
 scheme, and a deletion leaves no mark. To restyle them, set

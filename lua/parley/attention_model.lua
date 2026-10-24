@@ -199,13 +199,17 @@ end
 -- as entries and retired paths together), newest kept.
 local function prune_saved(state)
     local folders = {}
+    local side = require("parley.side_document_path")
     for path in pairs(state.entries) do
-        local folder = require("parley.document_move_plan").side_path(path)
+        local folder = side.root(path)
         if folder then folders[folder] = true end
+        -- Existing nested direct folders remain readable; no writer is added.
+        folders[require("parley.document_move_plan").side_path(path)] = true
     end
     local kept = {}
     for path, mtime in pairs(state.saved) do
-        if state.entries[path] or state.retired[path] or folders[path:match("^(.*)/[^/]*$") or ""] then
+        if state.entries[path] or state.retired[path] or folders[side.member(path) or ""]
+            or folders[path:match("^(.*)/[^/]*$") or ""] then
             kept[#kept + 1] = { path = path, mtime = mtime }
         end
     end

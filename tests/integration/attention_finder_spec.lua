@@ -731,7 +731,7 @@ describe("attention finder: side docs the agent wrote", function()
     it("finds a side doc's own side docs on the next open", function()
         local a = submitted("a.md", "m1")
         local doc = side(a, "01.md", DOC, 2000)
-        local nested = side(doc, "02.md", DOC, 2001)
+        local nested = side(doc, "02.md", { "---", "type: side-doc", "parent: ../01.md", "---" }, 2001)
         now = 2100
         open({ picker = fake_picker() })
         assert.is_nil(Store.load().entries[nested])
@@ -778,6 +778,162 @@ describe("attention finder: side docs the agent wrote", function()
         Attention.clock = clock
         pcall(vim.api.nvim_del_augroup_by_name, "ParleyAttentionViews")
         vim.cmd("silent! %bwipeout!")
+    end)
+
+    it("discovers monthly descendants with their actual parent and records operator saves (#419)", function()
+        local a = submitted("a.md", "m1")
+        local folder = root .. "/a.side/2026-10"
+        vim.fn.mkdir(folder, "p")
+        local first, second = folder .. "/first.md", folder .. "/second.md"
+        vim.fn.writefile({ "---", "type: side-doc", "parent: ../../a.md", "---" }, first)
+        vim.fn.writefile({ "---", "type: side-doc", "parent: first.md", "---" }, second)
+        assert(vim.uv.fs_utime(first, 2000, 2000)); assert(vim.uv.fs_utime(second, 2001, 2001))
+        now = 2100
+        open({ picker = fake_picker() })
+        assert.is_truthy(Store.load().entries[first], "monthly file not discovered")
+        assert.equals(a, Store.load().entries[first].parent)
+        assert.is_nil(Store.load().entries[second], "unknown parent must not be invented")
+        open({ picker = fake_picker() })
+        assert.equals(first, Store.load().entries[second].parent)
+        apply({ type = "opened", path = second })
+        vim.cmd("edit " .. vim.fn.fnameescape(second))
+        Attention.saved(vim.api.nvim_get_current_buf())
+        await(function() return Store.load().saved[second] ~= nil end)
+        assert.equals("2001.0", Store.load().saved[second])
+        vim.cmd("enew")
+    end)
+
+    it("keeps established descendant rewrites after parent removal without admitting unproven siblings (#419 BR-2)", function()
+        local a = submitted("a.md", "m1")
+        local folder = root .. "/a.side/2026-10"
+        vim.fn.mkdir(folder, "p")
+        local function write(name, parent, at)
+            local path = folder .. "/" .. name
+            vim.fn.writefile({ "---", "type: side-doc", "parent: " .. parent, "---" }, path)
+            assert((vim.uv or vim.loop).fs_utime(path, at, at))
+            return path
+        end
+        local first = write("first.md", "../../a.md", 2000)
+        local second = write("second.md", "first.md", 2001)
+        local retired = write("retired.md", "first.md", 2001)
+        local saved_side = write("saved.md", "first.md", 2001)
+        local answered_side = write("answered.md", "first.md", 2001)
+        now = 2100
+        open({ picker = fake_picker() })
+        open({ picker = fake_picker() })
+        assert.equals(first, Store.load().entries[second].parent)
+        now = 2200
+        apply({ type = "opened", path = second })
+        apply({ type = "opened", path = saved_side })
+        apply({ type = "clear", paths = { first, retired } })
+        assert.is_nil(Store.load().entries[first])
+        assert.is_truthy(Store.load().entries[a])
+        -- Each event class shares the remaining root scan, but only an
+        -- established seen entry can rewrite without fresh parent admission.
+        write("second.md", "first.md", 3000)
+        write("retired.md", "first.md", 3000)
+        write("saved.md", "first.md", 3000)
+        write("answered.md", "first.md", 3000)
+        apply({ type = "saved", path = saved_side, mtime = "3000.0" })
+        local unproven = write("new-unproven.md", "first.md", 3000)
+        local proven = write("new-proven.md", "../../a.md", 3000)
+        assert.same({
+            { type = "discovered", path = proven, parent = a, at = 3000 },
+            { type = "rewritten", path = second, at = 3000 },
+        }, Attention.discover(Store.load()))
+        now = 3100
+        open({ picker = fake_picker() })
+        local state = Store.load()
+        assert.equals("answered", Model.state_of(state.entries[second]))
+        assert.equals(3000, state.entries[second].answered_at)
+        assert.equals(first, state.entries[second].parent)
+        assert.is_nil(state.entries[first])
+        assert.is_nil(state.entries[retired])
+        assert.is_truthy(state.retired[retired])
+        assert.is_nil(state.entries[unproven])
+        assert.equals(a, state.entries[proven].parent)
+        assert.equals("seen", Model.state_of(state.entries[saved_side]))
+        assert.equals(2001, state.entries[answered_side].answered_at)
+    end)
+
+    it("scans shared roots once and visits only one month level with N/2N growth (#419)", function()
+        local a = submitted("a.md", "m1")
+        local folder = root .. "/a.side"
+        vim.fn.mkdir(folder, "p")
+        local state = Store.load()
+        for _, n in ipairs({ 4, 8 }) do
+            for i = 1, n do
+                local month = folder .. ("/2026-%02d"):format(i)
+                vim.fn.mkdir(month .. "/deep", "p")
+                local path = month .. "/entry.md"
+                vim.fn.writefile({ "---", "type: side-doc", "parent: ../../a.md", "---" }, path)
+                assert(vim.uv.fs_utime(path, 2000, 2000))
+                state.entries[path] = { path = path, parent = a, kind = "side", pending = {},
+                    submitted_at = 2000, answered_at = 2000, recorded_at = 2000 }
+            end
+            local scan, visits = vim.uv.fs_scandir, {}
+            vim.uv.fs_scandir = function(path)
+                visits[path] = (visits[path] or 0) + 1
+                return scan(path)
+            end
+            local ok, events = pcall(Attention.discover, state)
+            vim.uv.fs_scandir = scan
+            assert.is_true(ok, tostring(events))
+            assert.equals(n + 1, vim.tbl_count(visits))
+            assert.equals(1, visits[folder])
+            for i = 1, n do assert.equals(1, visits[folder .. ("/2026-%02d"):format(i)]) end
+            for path, count in pairs(visits) do
+                assert.equals(1, count, path)
+                assert.is_nil(path:match("/deep$"))
+            end
+        end
+    end)
+
+    it("reads only mtime-selected headers and keeps the forty-line bound (#419)", function()
+        local a = submitted("a.md", "m1")
+        local old = side(a, "old.md", DOC, 900)
+        local fresh = side(a, "fresh.md", DOC, 2000)
+        local long = { "---", "type: side-doc", "parent: ../a.md" }
+        for _ = 1, 40 do long[#long + 1] = "# filler" end
+        long[#long + 1] = "---"
+        local too_long = side(a, "long.md", long, 2000)
+        local readfile, reads = vim.fn.readfile, {}
+        vim.fn.readfile = function(path, flags, limit)
+            reads[path] = limit
+            return readfile(path, flags, limit)
+        end
+        local ok, events = pcall(Attention.discover, Store.load())
+        vim.fn.readfile = readfile
+        assert.is_true(ok, tostring(events))
+        assert.is_nil(reads[old])
+        assert.equals(40, reads[fresh])
+        assert.equals(40, reads[too_long])
+        assert.equals(1, #events)
+        assert.equals(fresh, events[1].path)
+    end)
+
+    it("ignores invalid layouts, symlink months and unavailable scans without losing records (#419)", function()
+        local a = submitted("a.md", "m1")
+        local folder = root .. "/a.side"
+        vim.fn.mkdir(folder .. "/2026-13", "p")
+        vim.fn.mkdir(folder .. "/2026-10/deep", "p")
+        for _, suffix in ipairs({ "2026-13/invalid.md", "2026-10/deep/invalid.md", "2026-10/missing.md" }) do
+            vim.fn.writefile({ "---", "type: side-doc", "---" }, folder .. "/" .. suffix)
+        end
+        local foreign = root .. "/foreign"
+        vim.fn.mkdir(foreign, "p")
+        vim.fn.writefile({ "---", "type: side-doc", "parent: ../../a.md", "---" }, foreign .. "/escape.md")
+        assert(vim.uv.fs_symlink(foreign, folder .. "/2026-11"))
+        local before = Store.load()
+        assert.same({}, Attention.discover(before))
+        local scan = vim.uv.fs_scandir
+        vim.uv.fs_scandir = function() return nil, "unavailable" end
+        local ok, events = pcall(Attention.discover, before)
+        vim.uv.fs_scandir = scan
+        assert.is_true(ok, tostring(events))
+        assert.same({}, events)
+        assert.same(before, Store.load())
+        assert.is_truthy(Store.load().entries[a])
     end)
 
     it("reads the side-doc type from frontmatter only", function()

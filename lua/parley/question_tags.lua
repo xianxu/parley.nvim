@@ -1,6 +1,26 @@
--- Pure ownership and outline projections for question prefaces.
+-- Source-row ownership and outline projections for question prefaces.
+-- Review tag association uses the native Markdown snapshot; its row set can
+-- be supplied by an operation that already owns those facts.
 local M = {}
 local structure = require("parley.highlight_structure")
+
+-- Association belongs to the native Markdown snapshot and review policy. A
+-- caller with the operation's facts can share them; generic local tags retain
+-- their existing transcript fence rules below.
+function M.review_tags(lines, facts)
+    local candidate = false
+    for _, line in ipairs(lines) do
+        if line:match("^%s*@@chat@@%s*$") then candidate = true; break end
+    end
+    if not candidate then return {} end
+    local err
+    if not facts then facts, err = require("parley.skills.review.chat_structure").snapshot(lines) end
+    if not facts then return {}, err end
+    local scan = require("parley.skills.review.chat_policy").scan(lines, facts)
+    local tags = {}
+    for _, row in ipairs(scan.tags) do tags[row] = true end
+    return tags
+end
 
 function M.parse_tag(line)
     return type(line) == "string" and line:match("^@@(.+)@@$") or nil
@@ -43,10 +63,16 @@ end
 
 function M.local_rows(lines, config)
     local excluded, memo = {}, fenced_rows(lines, config)
+    local review, review_error = M.review_tags(lines)
     for row, line in ipairs(lines) do
-        if not memo[row] and M.is_local_tag(line) then excluded[row] = true end
+        -- Unavailable structure cannot prove that a chat marker is disposable
+        -- local metadata. Keep its source in context while explicit structural
+        -- owners receive the error and refuse to detach it from a heading.
+        local uncertain_chat = review_error and line:match("^%s*@@chat@@%s*$")
+        if not uncertain_chat and not review[row] and not memo[row] and M.is_local_tag(line) then excluded[row] = true end
     end
-    return excluded
+    if review_error then return excluded, nil, review_error end
+    return excluded, review
 end
 
 function M.project(parts, source_rows, excluded)
@@ -107,8 +133,9 @@ function M.outline_label(label, config)
     return config.chat_user_prefix .. " " .. label
 end
 
-function M.apply_outline(items, lines, config, header_end)
+function M.apply_outline(items, lines, config, header_end, review_tags)
     local attached = M.associations(lines, config, header_end)
+    local review = review_tags or M.review_tags(lines)
     local used_tags = {}
     for _, item in ipairs(items) do
         local preface = item.type == "question" and attached[item.value.lnum]
@@ -118,9 +145,12 @@ function M.apply_outline(items, lines, config, header_end)
     for _, item in ipairs(items) do
         local label = item.type == "annotation" and M.parse_tag(lines[item.value.lnum])
         local preface = item.type == "question" and attached[item.value.lnum]
-        local hidden_tag = label and (label == "_" or used_tags[item.value.lnum])
+        local hidden_tag = review[item.value.lnum] or label and (label == "_" or used_tags[item.value.lnum])
         if not hidden_tag and not (preface and preface.label == "_") then
             local copy = copy_item(item)
+            if item.type == "heading" and review[item.value.lnum - 1] then
+                copy.value.tag_lnum = item.value.lnum - 1
+            end
             if preface then
                 copy.display = (item.display:match("^%s*") or "") .. M.outline_label(preface.label, config)
                 copy.value.tag_lnum = preface.line_start

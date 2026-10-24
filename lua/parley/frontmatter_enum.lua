@@ -32,9 +32,6 @@ local function real(path)
     return vim.fn.resolve(vim.fn.fnamemodify(path, ":p")):gsub("/$", "")
 end
 
-M.declare("collaboration-mode", {
-    values = function() return require("parley.skills.review.collaboration").modes end,
-})
 M.declare("status", {
     values = function() return require("parley.issues").status_values() end,
     applies = function(path)
