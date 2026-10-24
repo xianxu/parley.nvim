@@ -7,7 +7,7 @@ created: 2026-10-23
 updated: 2026-10-24
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'b313279d08fc1700512592f645a91ede1a850f48' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '96c47625b3c49cc9b5e4e41032b65c9d198b55a2' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T23:11:45-07:00
 claimant:
     operator: Xian Xu
@@ -18,7 +18,7 @@ claimant:
     repository: github.com/xianxu/parley.nvim
 flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits bounds operator calls and full reads across 8 confirmed turns (#408)]
 flow: {kind: quick, provenance: inferred, spec: "4e477201", done: "74febb49"}
-actual_hours: 1.51
+actual_hours: 1.90
 ---
 
 # Native eight-turn clean release intermittently retains its lock
