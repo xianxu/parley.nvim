@@ -1516,6 +1516,7 @@ atlas:
       - tests/unit/remote_runtime_record_spec.lua
       - tests/integration/remote_process_spec.lua
       - tests/integration/remote_runtime_spec.lua
+      - tests/arch/deadline_timer_spec.lua
       - tests/integration/remote_runtime_fixture_spec.lua
       - tests/integration/embedded_nvim_spec.lua
       - tests/integration/editor_endpoint_registry_spec.lua

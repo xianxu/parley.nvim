@@ -51,6 +51,14 @@ Design (test-only; product deadlines unchanged):
 - [x] await_start and case 2 acquire with timeout_ms=arrival.MS where the deadline is not under test.
 - [x] Negative controls: listen reusing the startup deadline for s2, and listen ignoring the startup deadline, each fail their row.
 - [x] Both nvim versions; 20 reps under capped load; then the suite.
+- [x] #430 (revision): gate both absolute-deadline cases on the fake's held publication; controls S (slow startup) and J (no join).
+- [x] Root cause (revision 2): deadline timers through helper.start_deadline; blocked-loop regressions; arch lint; controls R1, R2.
+- [ ] 20 reps under capped load (endpoint, remote_process, remote_runtime, lint); remote_session mapping; one suite.
+
+## Revisions
+
+- 2026-10-23, TL-approved scope revision: fold #430 into #421. Three recorded suites on this branch failed only on #430's cases (a fixed 200 ms absolute deadline racing real Python startup and publication), and parley cannot resume past a registered Lua flake (#415). Same family, same technique. Delta: hold the absolute-deadline timer in editor_endpoint_registry_spec and fire it only after the fake has published and holds its acknowledgment (a new PATH.held marker from fake_couch_editor.py) and the deadline has really passed. This covers both #430 cases (line 199, and the :204 teardown). Negative controls, 20 reps under load, one suite; close #430 with #421 and unregister its cases.
+- 2026-10-23, TL-approved: the registered pair's root cause is a product bug, superseding the Spec's "stall, cause not established". remote_runtime's transaction armed its hrtime deadline with raw timer:start, and libuv measures that from the loop's cached clock. After synchronous work (case 1 seeds 256 directories; case 2 follows case 1's synchronous delete of them), a loaded disk leaves that clock stale by more than the budget, so the deadline fired at once. Delta: remote_runtime.lua and remote_process.lua (the only other hrtime-deadline timer) arm through helper.start_deadline (#382), with one blocked-loop regression per site and a tests/arch lint (deadline_timer_spec) refusing a raw deadline-timer start. Deadline values are unchanged. UI debounce and periodic timers stay as they are; a stale clock only makes one of their ticks early.
 
 ## Log
 
@@ -65,3 +73,9 @@ Design (test-only; product deadlines unchanged):
 - Verified: remote_runtime_spec 44/0/0 on nvim 0.12.5 and clean on 0.11.7; 20/20 under capped load (3 CPU spinners plus an fsync dd loop, 1500 s cap, trap cleanup). Before the fix the same load failed the fresh-budget case 1 in 10.
 
 - Recorded suite on a462c2c2 (attempt 44226e05): every spec ran; remote_runtime_spec passed; the one failure was the registered #430 flake (editor_endpoint_registry_spec, 'joins an admitted absolute deadline while retaining a possibly published binding'). Resume refused it as unattributable (parley declares no Lua flake runner; #415), so the head advances with this Log entry and the suite reruns.
+- Correction to the first 2026-10-23 entry: the "whole-process stall" explanation was wrong. With editor_endpoint_registry_spec mapped first, the 256-owner case failed 5 of 20 under capped load (0 of 30 with remote_runtime_spec alone). One timed failure returned runtime deadline 0.35 ms after acquire, against a 15 s budget: the timer had fired from libuv's stale cached clock (see Revisions). The registered pair is unregistered at close because the root cause is fixed.
+- #430 fold: fake_couch_editor.py writes PATH.held (published, acknowledgment held); both absolute-deadline cases hold the deadline timer through the helper.start_deadline seam and fire it only once .held exists and the deadline has really passed. Controls in the clone: S (fake sleeps 0.5 s before its PID write): the old spec reproduces both registered shapes (line 199 failure plus the describe-level teardown error), the new spec passes 12/12. J (expiry finishes without joining the child): both cases fail, plus the fixed-deadline join case.
+- Root-cause controls: R1 (remote_runtime back to raw timer:start): its blocked-loop case and the lint fail, nothing else. R2 (remote_process likewise): its blocked-loop case and the lint fail, nothing else.
+- Verified idle on nvim 0.12.5 and 0.11.7: deadline_timer_spec 1/0/0, editor_endpoint_registry_spec 12/0/0, remote_process_spec 20/0/0, remote_runtime_spec 45/0/0.
+
+- First 20-rep load run of the four specs after the root-cause fix: 19/20; the failure was my fresh-budget case at STARTUP_MS=1000. Its acquire plus s1's full publication (about six real fsyncs) overran 1 s under the fsync load. Wrong-budget detection there does not depend on the budget's size, so that case now acquires with 3*STARTUP_MS; C2 still fails it. The shared-deadline cases keep 1 s, which keeps C1 deterministic against a later listener's fixed 2 s; they reach their hold after two to four fsyncs.

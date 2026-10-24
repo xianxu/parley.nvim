@@ -140,7 +140,8 @@ function M.observe(pids, callback, options)
     end
     if invalid then finish('unknown', 'invalid pid batch'); return operation end
     timer = uv.new_timer()
-    timer:start(math.max(1, math.ceil(deadline - now_ms())), 0, vim.schedule_wrap(function()
+    -- Refresh the loop clock first: the deadline is hrtime (#382, #421).
+    require('parley.helper').start_deadline(timer, math.max(1, math.ceil(deadline - now_ms())), vim.schedule_wrap(function()
         stop('unknown', 'deadline')
     end))
     local inspect = {}

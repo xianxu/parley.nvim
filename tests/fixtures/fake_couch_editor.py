@@ -208,6 +208,9 @@ def main():
     # cancellation/deadline joins this same process if a gate stays closed.
     gate = os.environ.get("FAKE_COUCH_EDITOR_REPLY_GATE")
     if operation == "register" and gate:
+        # PATH.held: published, acknowledgment held, so a spec can expire a
+        # deadline in exactly that phase instead of racing startup (#421).
+        Path(gate + ".held").write_text(str(os.getpid()) + "\n")
         while not Path(gate).exists():
             time.sleep(0.01)
     if mode == "uncertain" and operation != "lookup":

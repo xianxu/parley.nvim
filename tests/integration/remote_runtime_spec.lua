@@ -417,6 +417,14 @@ describe('private editor RPC runtime ownership', function()
         for index=1,256 do if uv.fs_lstat(parent..'/e-'..index) then retained=retained+1 end end
         assert.equals(1,retained)
     end)
+    it('measures its acquisition deadline from now even after the loop was blocked',function()
+        -- The registered #421 failure: synchronous seeding left libuv's cached
+        -- clock behind the budget, so the deadline timer fired at once.
+        local stop=uv.hrtime()+1200*1e6
+        while uv.hrtime()<stop do end
+        local result=await_start({timeout_ms=1000})
+        assert.equals('ready',result.kind,vim.inspect(result))
+    end)
     it('retains a directory whose inode changes after inspection begins',function()
         local parent=root..'/runtime'
         local directory=seed_owner(parent,'e-changing',900001)
@@ -437,8 +445,8 @@ describe('private editor RPC runtime ownership', function()
     -- The startup budget under test. It is 1 s shorter than a later listener's
     -- fixed 2 s budget, so a listener on the wrong budget visibly outlives it.
     local STARTUP_MS=1000
-    local function startup_acquire()
-        local result=await_start({timeout_ms=STARTUP_MS})
+    local function startup_acquire(ms)
+        local result=await_start({timeout_ms=ms or STARTUP_MS})
         assert.equals('ready',result.kind,vim.inspect(result))
         return result.runtime
     end
@@ -492,7 +500,9 @@ describe('private editor RPC runtime ownership', function()
         end)
     end
     it('gives later listeners a fresh operation budget after the first durable publication',function()
-        local resource=startup_acquire()
+        -- Its first publication runs on real fsyncs inside the startup budget;
+        -- the property holds for any budget, so give that publication room.
+        local resource=startup_acquire(3*STARTUP_MS)
         local startup=resource.startup_deadline
         assert.equals('listening',listen(resource,'s1').kind)
         -- The second listener starts after the startup budget has run out.
