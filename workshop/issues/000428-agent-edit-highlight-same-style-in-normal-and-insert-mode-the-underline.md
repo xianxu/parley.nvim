@@ -50,6 +50,8 @@ separate and stay).
 
 ## Log
 
+
+- 2026-10-24: closed — Cause captured before code: native probe shows stable ParleyEditChange bg plus DiagnosticUnderlineInfo in Normal, only bg after Insert-mode round rederive; InsertLeave restores diagnostic layer. Red effective-cell matrix0/6/0 before fix; namespace-only underline=false makes style consistent without changing global/update timing or payloads. Final focused67/0/0 across render, round/hooks, diagnostic display, highlight groups and arrival guards; installed-runtime native matrix7/0/0. Actual composed cells compared in Normal/Insert/Replace/Visual/Visual-line with add/change, round/skill/footnote, custom tint and explicit custom underline; references and foreign diagnostics keep their styles, semantic messages/sign marks and pre-existing global/foreign settings retained. Logs /Volumes/TestScratch/parley428.qkdGOp; lint858 clean, diff-check clean. README/atlas updated. Recorded --pre-close suite PENDING on pushed e6e2a208d14027b4eb52c5056d2b916a5228a27c; must pass before merge. Live check awaits hub sequence, no stage touched.; review verdict: SHIP
 ### 2026-10-23
 
 
