@@ -5,7 +5,7 @@ created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 github_issue:
-flake_tests: [lua:tests/integration/editor_endpoint_registry_spec.lua#editor endpoint registry process boundary keeps the absolute-deadline observer until its native exit delivery joins]
+flake_tests: 
 started: 2026-10-23T18:08:23-07:00
 claimant:
     operator: Xian Xu
