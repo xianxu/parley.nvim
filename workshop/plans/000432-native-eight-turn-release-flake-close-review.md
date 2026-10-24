@@ -183,3 +183,68 @@ dispose:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"040e6e99-9c98-453e-a07c-6537d41271bd","repository":"github.com/xianxu/parley.nvim","issue_id":"000432","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/b0e10f7cd672843b","reviewed_head":"604649db4857d4827ad09eb73327935bcd62058a","slot":"parley.nvim:1","requested_at":"2026-10-24T15:20:31.764395Z"},"phase":"finished","pid":7105,"started_at":"2026-10-24T15:20:31.96489Z","finished_at":"2026-10-24T15:24:31.232105Z","session_id":"84efcb66-e779-4beb-8387-1e6ac754ae72","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-24T09:18:32-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 432 — Native eight-turn clean release intermittently retains its lock |
+| repo | parley.nvim |
+| issue file | workshop/issues/000432-native-eight-turn-release-flake.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 7ec2bfe8a3228fc9f9e34b1f8a20c7b954ec3198..4cba6ab06aa4a2115c9490f99b7a46fe6b876852 |
+| command | sdlc close --issue 432 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | fenced |
+| timestamp | 2026-10-24T09:18:32-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Still reviewing; running the arrival-budget arch check against the head next.
+
+Locating the harness target that runs the arch spec.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Summary.** I recommend SHIP. Nothing changed in the product code in this window. The only code change is commit `4cba6ab0`, which edits two lines in `tests/integration/session_sync_native_spec.lua`. It replaces the literal `15000` positive-wait bound in the two retry-bound regression tests (lines 757 and 772) with `arrival.MS`. The merge suite caught these literals: `tests/arch/arrival_budget_spec.lua` refuses any literal positive-wait bound that has no `-- bound:` reason. `arrival.MS` resolves to `require("parley.config").agentic_submit_timeout_ms`, which is 15000 (`lua/parley/config.lua:507`), so the tests check exactly what they checked before. Only the bound's source changed. I ran `make test-spec SPEC=infra/test_harness` on the head and `arrival_budget_spec` passed (2/2). The merge `708679d9` brought in main's changes, which the window excludes. No conflict resolutions are listed for review, and none of the merged paths overlap the #432 test file. Every prior finding was already disposed. The interdiff does not change `## Spec`, `## Revisions` or `## Done when`: the issue-file diff only adds the close log line, the status and `actual_hours`.
+
+1. **Strengths**
+   - The fix uses the suite's single arrival budget instead of adding `-- bound:` exemptions. That fits the rule, because these waits are positive arrival waits and their bound is not the property under test.
+   - The absence waits next to them (`vim.wait(1500) -- absence: ...`) correctly keep their short literals, as the arrival helper's rule allows.
+   - The predicates stay local (`calls(...)`) rather than RPC calls, so `vim.wait` can still time out (comment at line 756).
+
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none.
+5. **Test coverage notes:** The two BR-1 regression tests (persistent slow release, and a fresh release superseding older retries) still assert exact call counts, one WARN, and that the lock is kept. Only their arrival timeout source changed, and its value is the same 15 s, which is enough for the ~7 s+ retry chain. `arrival_budget_spec` passed on the head.
+6. **Architectural notes:**
+   - **ARCH-DRY: pass.** The change removes two hand-coded copies of the budget in favour of the one source.
+   - **ARCH-PURE: pass.** Test-only change; no product logic is involved.
+   - **ARCH-PURPOSE: pass.** I checked the class the merge suite flagged. A grep finds no other literal positive-wait bounds in this spec, and the arch spec, which scans the whole suite, passes.
+   - **ARCH-EVOLVE: pass.** No persisted formats are touched.
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Disposed earlier; the interdiff keeps both retry-bound regressions intact and only sources their arrival bound from arrival.MS (same 15000 ms value).
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Disposed earlier; the interdiff does not change the atlas wording.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Disposed earlier; the interdiff does not change Done-when or the qualification record.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"431930d6-e3b0-440e-a958-0065f1e6c89b","repository":"github.com/xianxu/parley.nvim","issue_id":"000432","recipe":"fix-review","round":3,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/c89e35c50d5ec03d","reviewed_head":"4cba6ab06aa4a2115c9490f99b7a46fe6b876852","slot":"parley.nvim:1","requested_at":"2026-10-24T16:16:23.571785Z"},"phase":"finished","pid":86077,"started_at":"2026-10-24T16:16:23.665161Z","finished_at":"2026-10-24T16:18:31.740544Z","session_id":"5ec241a5-0b5b-4ad5-b96b-6f6249b333ba","outcome":"returned"}] -->
