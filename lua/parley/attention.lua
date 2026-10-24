@@ -197,16 +197,22 @@ function M.discover(state)
     -- mtime selection remains cheap. Read only selected headers, then repeat
     -- that rule with the proven actual parent, never the provisional one.
     for _, event in ipairs(Model.scan(state, files)) do
-        local ok, head = pcall(vim.fn.readfile, event.path, "", SIDE_HEAD_LINES)
-        if ok and M.is_side_doc(head) then
-            local candidate = by_path[event.path]
-            local parent = side.parent(event.path, head)
-            if parent and state.entries[parent] and side.relation(event.path, parent, head) then
-                local real_child, real_parent = uv.fs_realpath(event.path), uv.fs_realpath(parent)
-                if real_child and real_parent and side.relation(real_child, real_parent, head) then
-                    candidate.parent = parent
-                    local selected = Model.scan(state, { candidate })
-                    if selected[1] then events[#events + 1] = selected[1] end
+        if event.type == "rewritten" then
+            -- The model already established this entry. Its actual parent may
+            -- have left the finder; that does not revoke later write events.
+            events[#events + 1] = event
+        else
+            local ok, head = pcall(vim.fn.readfile, event.path, "", SIDE_HEAD_LINES)
+            if ok and M.is_side_doc(head) then
+                local candidate = by_path[event.path]
+                local parent = side.parent(event.path, head)
+                if parent and state.entries[parent] and side.relation(event.path, parent, head) then
+                    local real_child, real_parent = uv.fs_realpath(event.path), uv.fs_realpath(parent)
+                    if real_child and real_parent and side.relation(real_child, real_parent, head) then
+                        candidate.parent = parent
+                        local selected = Model.scan(state, { candidate })
+                        if selected[1] then events[#events + 1] = selected[1] end
+                    end
                 end
             end
         end

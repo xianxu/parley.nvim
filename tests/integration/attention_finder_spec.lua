@@ -803,6 +803,59 @@ describe("attention finder: side docs the agent wrote", function()
         vim.cmd("enew")
     end)
 
+    it("keeps established descendant rewrites after parent removal without admitting unproven siblings (#419 BR-2)", function()
+        local a = submitted("a.md", "m1")
+        local folder = root .. "/a.side/2026-10"
+        vim.fn.mkdir(folder, "p")
+        local function write(name, parent, at)
+            local path = folder .. "/" .. name
+            vim.fn.writefile({ "---", "type: side-doc", "parent: " .. parent, "---" }, path)
+            assert((vim.uv or vim.loop).fs_utime(path, at, at))
+            return path
+        end
+        local first = write("first.md", "../../a.md", 2000)
+        local second = write("second.md", "first.md", 2001)
+        local retired = write("retired.md", "first.md", 2001)
+        local saved_side = write("saved.md", "first.md", 2001)
+        local answered_side = write("answered.md", "first.md", 2001)
+        now = 2100
+        open({ picker = fake_picker() })
+        open({ picker = fake_picker() })
+        assert.equals(first, Store.load().entries[second].parent)
+        now = 2200
+        apply({ type = "opened", path = second })
+        apply({ type = "opened", path = saved_side })
+        apply({ type = "clear", paths = { first, retired } })
+        assert.is_nil(Store.load().entries[first])
+        assert.is_truthy(Store.load().entries[a])
+        -- Each event class shares the remaining root scan, but only an
+        -- established seen entry can rewrite without fresh parent admission.
+        write("second.md", "first.md", 3000)
+        write("retired.md", "first.md", 3000)
+        write("saved.md", "first.md", 3000)
+        write("answered.md", "first.md", 3000)
+        apply({ type = "saved", path = saved_side, mtime = "3000.0" })
+        local unproven = write("new-unproven.md", "first.md", 3000)
+        local proven = write("new-proven.md", "../../a.md", 3000)
+        assert.same({
+            { type = "discovered", path = proven, parent = a, at = 3000 },
+            { type = "rewritten", path = second, at = 3000 },
+        }, Attention.discover(Store.load()))
+        now = 3100
+        open({ picker = fake_picker() })
+        local state = Store.load()
+        assert.equals("answered", Model.state_of(state.entries[second]))
+        assert.equals(3000, state.entries[second].answered_at)
+        assert.equals(first, state.entries[second].parent)
+        assert.is_nil(state.entries[first])
+        assert.is_nil(state.entries[retired])
+        assert.is_truthy(state.retired[retired])
+        assert.is_nil(state.entries[unproven])
+        assert.equals(a, state.entries[proven].parent)
+        assert.equals("seen", Model.state_of(state.entries[saved_side]))
+        assert.equals(2001, state.entries[answered_side].answered_at)
+    end)
+
     it("scans shared roots once and visits only one month level with N/2N growth (#419)", function()
         local a = submitted("a.md", "m1")
         local folder = root .. "/a.side"

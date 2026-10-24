@@ -283,3 +283,10 @@ TLb34bb4e7 explicitly approves local mutation refusal when an explicitly declare
 
 
 The supported BR-1 matrix returned RED on each runtime:5passed/52failed/0errors, with strict legacy22passing. All four unsupported nested-node orderings also reproduced unread notice plus unsafe local acceptance; they need the newly approved local refusal. BR-2 mapped functional tests pass314each plus the corrected traceability guard28each, with all final censuses clean. The only transient mapped-batch failure was the concurrently introduced unmapped BR-1 spec, now registered in modes/review and rechecked; no product flake inferred.
+
+
+### 2026-10-24 11:02 — BR-2 and BR-3 qualification
+
+BR-2: root inspected the two-file fix and verified retained logs. Each mapped attention run had341passes/1failure/0errors solely because the concurrently added BR-1 spec was initially unmapped;314functional tests, including finder42 and model45, passed on each runtime. After mapping it under modes/review, single-source guard28/28 passes on each runtime; every final census is clean. New and retired attachment proofs remain unchanged; established rewritten events no longer depend on parent's current finder membership. Atlas records the event distinction.
+
+BR-3: moved existing eight filesystem-backed brief tests into integration, updated traceability/Core concepts/test strategy and kept runtime loader behavior unchanged. Preferred mapped review run and compatibility focused brief8/8 pass, both with clean census. No extra adapter/cache introduced. BR-1 evidence/admission correction remains in progress under the approved bounded rule; no fresh full-suite claim yet.
