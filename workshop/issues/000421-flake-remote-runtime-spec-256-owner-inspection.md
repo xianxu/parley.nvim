@@ -53,7 +53,8 @@ Design (test-only; product deadlines unchanged):
 - [x] Both nvim versions; 20 reps under capped load; then the suite.
 - [x] #430 (revision): gate both absolute-deadline cases on the fake's held publication; controls S (slow startup) and J (no join).
 - [x] Root cause (revision 2): deadline timers through helper.start_deadline; blocked-loop regressions; arch lint; controls R1, R2.
-- [ ] 20 reps under capped load (endpoint, remote_process, remote_runtime, lint); remote_session mapping; one suite.
+- [x] 20 reps under capped load (endpoint, remote_process, remote_runtime, lint); remote_session mapping.
+- [ ] One suite.
 
 ## Revisions
 
@@ -81,3 +82,4 @@ Design (test-only; product deadlines unchanged):
 - First 20-rep load run of the four specs after the root-cause fix: 19/20; the failure was my fresh-budget case at STARTUP_MS=1000. Its acquire plus s1's full publication (about six real fsyncs) overran 1 s under the fsync load. Wrong-budget detection there does not depend on the budget's size, so that case now acquires with 3*STARTUP_MS; C2 still fails it. The shared-deadline cases keep 1 s, which keeps C1 deterministic against a later listener's fixed 2 s; they reach their hold after two to four fsyncs.
 - Second 20-rep load run: 19/20. The failure was a third race in the same fake: 'joins a canceled running request' polls registry.json.editor-pid until it is readable, then reads it, but write_text creates the file before writing it, so the PID read back nil. fake_couch_editor.py now writes editor-pid, editor-argv and .held through a per-process temp file and os.replace. A first version shared one temp name, and the four concurrent children in occupy_slots then crashed on each other's replace (8 failures in the remote_session mapping); per-process names fixed that. The launches log stays append-only: short single writes read whole.
 - remote_session mapping (all reply-gate users): 278/0/0 on nvim 0.12.5 and 0.11.7.
+- Third 20-rep load run on the final code (deadline_timer, editor_endpoint_registry, remote_process, remote_runtime specs; 3 CPU spinners plus an fsync dd loop, 2400 s cap, trap cleanup): 20/20.
