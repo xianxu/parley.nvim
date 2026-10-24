@@ -89,7 +89,7 @@ end
 --- @param manifest table SkillManifest
 --- @param args table|nil completable-arg values
 --- @param opts table|nil { manual=boolean?, no_reload=boolean?, document=string?,
----   detached_progress=boolean?, validate_edits=fun(snapshot, edits):string?,
+---   detached_progress=boolean?, validate_edits=fun(snapshot, edits, input):(string?, table?),
 ---   on_terminal=fun(result)?, on_done=fun(result)? }
 function M.invoke(buf, manifest, args, opts)
     opts = opts or {}
@@ -400,6 +400,7 @@ function M.invoke(buf, manifest, args, opts)
     local tool_error
     tool_producer,tool_error=require('parley.tools.producer').new({buf=buf,deferred_refresh_buf=buf,registry=tools_registry,
         allowed_tools=inv.tools,root_policy=root_policy,
+        expected_file=opts.validate_edits and {path=artifact_path,content=original .. (vim.bo[buf].endofline and "\n" or "")} or nil,
         page_limit=p.config.tool_result_page_lines,
         help_root=vim.fn.fnamemodify(debug.getinfo(1,'S').source:sub(2):match('^(.*)/lua/parley/skill_invoke%.lua$'),':p')})
     if not tool_producer then finish({ok=false,msg=tool_error},true);return end
@@ -469,7 +470,9 @@ function M.invoke(buf, manifest, args, opts)
                     -- start. Refusal and successful no-op never reload the source.
                     if opts.validate_edits then
                         local function reject(reason)
-                            p.logger.warning('skill ' .. tostring(manifest.name) .. ': ' .. tostring(reason))
+                            -- The review owner reports the returned refusal through its
+                            -- bounded notice surface; full text here is diagnostic only.
+                            p.logger.debug('skill ' .. tostring(manifest.name) .. ': ' .. tostring(reason))
                             finish({ok=false,msg=reason,calls=calls,results={},original=original,applied=0},true)
                         end
                         if proposal_count ~= 1 then
@@ -508,6 +511,11 @@ function M.invoke(buf, manifest, args, opts)
                                 else applied=applied+1 end
                             elseif results[i].is_error then errors[#errors+1]=results[i].content end
                         end
+                    if opts.validate_edits and applied == 0 and #errors > 0 then
+                        finish({ok=false,msg=table.concat(errors,'\n'),calls=calls,results=results,
+                            original=original,applied=0,reconciliation_required=true,external_path=artifact_path},true)
+                        return
+                    end
                     if not vim.api.nvim_buf_is_valid(buf) then
                         finish({ ok = false, msg = "buffer invalid" }, false)
                         return

@@ -27,7 +27,7 @@ end
 
 -- Coordinates are untrusted known fields. Stale valid coordinates may be
 -- re-anchored; malformed coordinates must not fabricate historical placement.
-local function position(value)
+local function valid_position(value)
     if type(value) ~= "table" or rawget(value, 3) ~= nil then return false end
     for i = 1, 2 do
         local n = rawget(value, i)
@@ -119,7 +119,7 @@ function M.decorations(round, lines, current_hash)
         if err then return nil, err end
         if type(span.old) ~= "string" or type(span.new) ~= "string" then return nil, "invalid span old/new" end
         if span.explain ~= nil and type(span.explain) ~= "string" then return nil, "invalid span explain" end
-        if not position(span.start) or not position(span["end"]) then return nil, "invalid span coordinates" end
+        if not valid_position(span.start) or not valid_position(span["end"]) then return nil, "invalid span coordinates" end
         local kind = M.kind(span.old, span.new)
         if effective == "highlight" and kind ~= "delete" then
             local from = offset_of(span.start, lines, starts)

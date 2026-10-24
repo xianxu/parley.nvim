@@ -140,6 +140,24 @@ describe('asynchronous builtins',function()
         assert.is_false(result.result.is_error);assert.equals('after',state.files['/root/file'].bytes)
         assert.equals('before',state.files['/root/file.parley-backup.1'].bytes)
     end)
+    it('binds a captured proposal preimage before backup and ignores model-supplied proof',function()
+        local runtime,state=require('tests.helpers.fake_tool_filesystem').new()
+        state.put('/root','','directory');state.put('/root/file','foreign before')
+        local fs=require('parley.tools.filesystem').new({runtime=runtime,schedule=state.schedule})
+        local result
+        require('parley.tools.builtin.propose_edits').execute_async({file_path='/root/file',
+            expected_file={path='/root/file',content='foreign before'},
+            edits={{old_string='before',new_string='after',explain='change'}}},
+            {filesystem=fs,operation_id='preimage',expected_file={path='/root/file',content='before'}},
+            function(value)result=value end)
+        wait(function()state.drain();return result~=nil end)
+        assert.is_true(result.result.is_error)
+        assert.equals('not_applied',result.effect)
+        assert.equals('foreign before',state.files['/root/file'].bytes)
+        assert.is_nil(state.files['/root/file.parley-backup.1'])
+        for _,call in ipairs(state.calls)do assert.is_not.equals('write',call.name)end
+    end)
+
     it('refuses an overlapping edit batch before any backup or write (#369)',function()
         local runtime,state=require('tests.helpers.fake_tool_filesystem').new()
         state.put('/root','','directory');state.put('/root/file','alpha\n# Chat\nsecret')
