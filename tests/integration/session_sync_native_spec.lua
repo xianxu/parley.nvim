@@ -382,6 +382,34 @@ describe("session-sync native edits", function()
             end
         ]],verb)
     end
+    -- #432: the next release outlives its 500 ms budget by a second, before
+    -- or after its effects; the kill reports it unavailable. Later calls run
+    -- normally. The trace counts operator calls by verb.
+    local function slow_next_release(where)
+        local trace=root.."/operator-trace"
+        exec([[
+            local where,trace=...
+            vim.env.FAKE_COUCH_OPERATOR_TRACE=trace
+            local couch=require("parley.couch");local original=couch.operator_lock
+            couch.operator_lock=function(v,...)
+                if v~="release" or _G.release_slowed then return original(v,...) end
+                _G.release_slowed=true
+                local knob=where=="before" and "FAKE_COUCH_OPERATOR_PRE_DELAY" or "FAKE_COUCH_OPERATOR_DELAY"
+                vim.env.FAKE_COUCH_OPERATOR_OPS="operator-release";vim.env[knob]="1"
+                local result=original(v,...)
+                vim.env.FAKE_COUCH_OPERATOR_OPS=nil;vim.env[knob]=nil
+                _G.slowed_release=result.kind
+                return result
+            end
+        ]],where,trace)
+        return function(verb)
+            local count=0
+            for _,line in ipairs(vim.uv.fs_stat(trace) and vim.fn.readfile(trace) or {}) do
+                if vim.json.decode(line).op=="operator-"..verb then count=count+1 end
+            end
+            return count
+        end
+    end
     -- Installed after attachment: this observer runs after the production
     -- InsertEnter handler, rather than treating mode i as admission completion.
     local function observe_insert_admission()
@@ -663,6 +691,51 @@ describe("session-sync native edits", function()
             assert.is_true(reads>=2*pairs and reads<=8*pairs,"unexpected full-buffer work: "..reads)
         end)
     end
+
+    local function turn_of_lock()
+        return table.concat(vim.fn.readfile(file..".lock"),"\n"):match("turn: ([0-9a-f]+)")
+    end
+
+    it("retries a clean release killed before its effects (#432)",function()
+        open(false,false,true,true)
+        for turn=1,4 do
+            if turn==3 then slow_next_release("before") end
+            keys("i");wait_for("return vim.fn.mode()=='i'")
+            assert.is_true(exists())
+            keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+            assert.is_true(vim.wait(arrival.MS,function() return not exists() end),"turn "..turn.." kept its lock")
+        end
+        assert.equals("unavailable",exec("return _G.slowed_release"))
+    end)
+
+    it("retries a clean release whose reply was lost, so the next turn is new (#432)",function()
+        open(false,false,true,true)
+        local calls=slow_next_release("after")
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        local first=turn_of_lock()
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        assert.is_true(vim.wait(arrival.MS,function() return calls("release")>=2 end),"the unconfirmed release was not retried")
+        assert.equals("unavailable",exec("return _G.slowed_release"))
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        assert.is_true(exists())
+        assert.are_not.equal(first,turn_of_lock(),"the next turn reused the unconfirmed turn")
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        assert.is_true(vim.wait(arrival.MS,function() return not exists() end))
+    end)
+
+    it("drops a release retry once a new turn acquires (#432)",function()
+        open(false,false,true,true)
+        local calls=slow_next_release("before")
+        keys("i");wait_for("return vim.fn.mode()=='i'")
+        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
+        wait_for("return _G.slowed_release=='unavailable'")
+        keys("iX<Esc>")
+        wait_for("return vim.fn.mode()=='n' and vim.api.nvim_buf_get_lines(0,7,8,false)[1]=='Xfirst bullet'")
+        local releases=calls("release")
+        vim.wait(2000) -- absence: past the first retry, 1 s after the kill; a dropped retry schedules no other
+        assert.is_true(exists(),"a retry released the new turn's lock")
+        assert.equals(releases,calls("release"),"a superseded retry still ran")
+    end)
 
     it("submit refuses replacement legacy protection on a registered turn (#408)",function()
         open(false,false,true,true)
