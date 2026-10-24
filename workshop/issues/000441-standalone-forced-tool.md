@@ -1,12 +1,20 @@
 ---
 id: 000441
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
-card_mirror: 'bb113d58d2082c4ad5dd6e65300ce6309829f838' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8dd91460720557bba3f55c4104849ab9403a8834' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-24T14:26:28-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Standalone review: forced tool choice rejected by claude-sonnet-5-5; expose upstream failure reason
@@ -52,8 +60,14 @@ Production seams: skill_invoke's payload tool-choice construction and on_error c
 
 ## Plan
 
-- [ ]
+- [ ] Replay the sanitized captured 400 through the normal invocation seam, red first; pin automatic review payloads for Anthropic and OpenAI wires, retaining named forcing for other skills.
+- [ ] Replace review's named forcing with automatic choice, encoded by the existing provider-wire owner. Preserve the local proposal validator and all edit authority; no-proposal, malformed and missing classifications refuse before any write/backup/reload.
+- [ ] Format a bounded safe reason from the structured transport failure at the skill boundary; expose it in review's bounded caption and message history without dumping response/request envelopes, headers or credentials. Keep cancellation/stale-generation guards and notification bounds.
+- [ ] Cover mixed command/question success, missing/invalid proposals, captured HTTP 400, other HTTP/transport failures and sensitive-envelope exclusion; run focused tests serially on both runtimes, then queued pre-close, close and hub-coordinated operator retry.
+
 
 ## Log
 
 2026-10-24: filed unclaimed at TL b532446a's direction. No implementation or live configuration changes made while diagnosing #419. Inside-Couch #419 acceptance passes; this upstream rejection is excluded from #419's landing contract by that same instruction.
+
+2026-10-24: Claimed and ran start-plan after verifying #428 landed and archived. Root cause confirmed in source: review manifest forces propose_edits, skill_invoke encodes that name in the selected wire and overwrites payload.tool_choice; its on_error retains the structured failure but replaces the visible message with the constant transport error. Existing proposal-count and collaboration validation already run before effects. ARCH-DRY: tool-choice shapes remain in the existing wire registry; ARCH-PURE: safe error formatting is a pure boundary helper, not a second transport/parser. No retry loop, durable state, concurrency or per-keystroke work is added. Alternatives rejected: model-specific forcing exceptions drift with model support; allowing missing proposals would weaken write authority. Actions remain submit/retry: success applies validated commands and defers questions; rejected/unknown transport completion leaves source unchanged with the reason and manual retry. No new persisted format or artifact family. Plan sent to hub before code.
