@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits bounds operator calls and full reads across 8 confirmed turns (#408)]
+flow: {kind: quick, provenance: inferred, spec: "4e477201", done: "74febb49"}
 ---
 
 # Native eight-turn clean release intermittently retains its lock
