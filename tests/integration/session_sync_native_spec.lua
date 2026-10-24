@@ -1741,12 +1741,34 @@ describe("session-sync native edits", function()
         end)
     end
 
-    -- Control for the empty-notice assertion below: against a Couch from before
-    -- pair#437, an unregistered open's lookup fails and its notice is captured.
+    -- #427: an unregistered open's remote-view lookup has finished (its callback
+    -- returned) before a case asserts on notices, rather than racing it.
+    local function open_after_lookup()
+        exec([[
+            local registry = require("parley.document_registry"); local request = registry.request
+            registry.request = function(operation, args, witness, callback, ...)
+                if operation ~= "lookup" then return request(operation, args, witness, callback, ...) end
+                return request(operation, args, witness, function(...)
+                    callback(...); _G.lookup_done = true
+                end, ...)
+            end
+        ]])
+        open(false)
+        wait_for("return _G.lookup_done == true")
+    end
+
+    -- The undo/redo cases below assert no notices; on the default fake the
+    -- unregistered open's lookup finds nothing registered and posts none.
+    it("a finished remote-view lookup on the default fake posts no notice (#427)", function()
+        open_after_lookup()
+        assert.same({}, exec("return notifications"))
+    end)
+
+    -- Control: against a Couch from before pair#437 the same lookup fails, and its
+    -- notice reaches the captured list.
     it("an unavailable remote-view lookup reaches the captured notices (#427)", function()
         exec('vim.env.FAKE_COUCH_LOOKUP = "legacy"')
-        open(false)
-        wait_for("return #notifications > 0")
+        open_after_lookup()
         assert.same({ "Remote view unavailable; reopen the file to retry" }, exec("return notifications"))
     end)
 
