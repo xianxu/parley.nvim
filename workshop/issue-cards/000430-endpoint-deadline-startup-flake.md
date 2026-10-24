@@ -5,7 +5,7 @@ created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 github_issue:
-flake_tests: [lua:tests/integration/editor_endpoint_registry_spec.lua#editor endpoint registry process boundary joins an admitted absolute deadline while retaining a possibly published binding]
+flake_tests: [lua:tests/integration/editor_endpoint_registry_spec.lua#editor endpoint registry process boundary joins an admitted absolute deadline while retaining a possibly published binding, lua:tests/integration/editor_endpoint_registry_spec.lua#editor endpoint registry process boundary keeps the absolute-deadline observer until its native exit delivery joins]
 ---
 
 # Endpoint deadline test races Python startup and registry publication
