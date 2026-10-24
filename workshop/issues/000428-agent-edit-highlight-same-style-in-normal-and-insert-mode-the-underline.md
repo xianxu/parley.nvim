@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "06db3071", done: "cc0eabff"}
 ---
 
 # Agent-edit highlight: same style in normal and insert mode (the underline disappears in insert)
