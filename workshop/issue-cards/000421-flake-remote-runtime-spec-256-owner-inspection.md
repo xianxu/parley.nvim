@@ -1,6 +1,6 @@
 ---
 id: 000421
-status: working
+status: codecomplete
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.99
+tracker:
+    version: 1
+    completion:
+        token: close-78a02ac5d934
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 5cdcfa828869c68e4fc4aec0094f9f8a9ba0dd39
+        evidence_commit: f2789c57fa176b321dfcc192555206d057aabe1b
 ---
 
 # flake: lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership keeps inspection bounded when all 256 marked directory owners differ from this editor, lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership retains a directory whose inode changes after inspection begins
