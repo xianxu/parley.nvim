@@ -25,7 +25,7 @@ flow: {kind: full, provenance: operator}
 
 ## Spec
 
-**Active contract, 2026-10-23:** one collaborative behavior, `@@chat@@` sections, and highlight for new edits. The operator pivot and TL allocation supersede the historical three-axis interface below. Source contract and exported fixtures are pinned to landed ariadne#576, Git `354e5fac5c96e0b2c26350ee712eb835746a6d67` (PR420). Preserve legacy metadata; create no mode keys or standing instruction. Remove existing mode/selector completion as well as omitting new typeahead.
+**Active contract, 2026-10-23:** one collaborative behavior, `@@chat@@` sections, and highlight for new edits. The operator pivot and TL allocation supersede the historical three-axis interface below. Source contract and exported fixtures are pinned to landed ariadne#581, Git `5a17f789619d3dcaafec62ae51b350833836a3e7` (PR423). Preserve legacy metadata; create no mode keys or standing instruction. Remove existing mode/selector completion as well as omitting new typeahead.
 
 Share one snapshot-derived chat projection between admission/protection, tag recognition and heading attachment. A standalone tag directly above a parsed ATX heading, outside code, is chat; boundaries, legacy scalar/maps/comments, nested item grammar and exact notices follow the pinned source. Malformed or retired mode metadata emits notices and never refuses an otherwise valid round. Legacy map entry matching is explicitly ASCII-only (TL 2a6920bd); a non-ASCII name is unmatched with `legacy chat map entry not matched; use @@chat@@`, never guessed. Tagged Unicode headings remain supported. Keep `@@chat@@` visible as ordinary text, with no tint or conceal (TL b8c4f2df); ordinary tags and references retain their behavior.
 
@@ -99,8 +99,8 @@ additive span contract.
 
 ## Plan
 
-- [ ] Approve the durable plan in `workshop/plans/000419-collaborative-chat-interface-plan.md` with the hub.
-- [ ] Implement pinned policy/bundle, single-buffer admission, tag/heading ownership, side-doc readers and historical round compatibility using existing effect owners.
+- [x] Approve the durable plan in `workshop/plans/000419-collaborative-chat-interface-plan.md` with the hub.
+- [x] Implement pinned policy/bundle, single-buffer admission, tag/heading ownership, side-doc readers and historical round compatibility using existing effect owners.
 - [ ] Verify both runtimes, obtain live acceptance, close on the recorded suite and land.
 
 ## Log
@@ -243,3 +243,10 @@ Next: commit/push the pin and checks; wait for parley.nvim#421 to LAND before th
 ### 2026-10-23 21:43 — landed deadline fix integrated; fresh pre-close
 
 Authenticated TL7c3a15c5 confirms parley.nvim#421 / PR346 landed and directs the fresh pre-close run, followed by joint acceptance with pair#838. GitHub reports merge0620eaedf13f2c73853010c1a64a6175d7c60515; verified it is an ancestor of fetched origin/main d1bb4ba89c0466ae17c02520afdbbfd705ff0537. Integrated that landed main with no conflicts, preserving the qualified #581 pin. No unlanded branch consumed. Push this checkpoint, then run sdlc local-check run --pre-close on its exact head and retain that runner; do not stage or close before its result and the joint live check.
+
+
+### 2026-10-23 22:03 — fresh recorded suite passed; joint acceptance pending
+
+The retained pre-close run lease-1700210998 / attempt1059bfecbbef70a9a1abb81ab05f3333 PASSED on pushed54e8cbe5037a0244dcf761693564c6f330b8bca9, exit0 in6m13s after714s queue. Both Neovim0.12.5 and0.11.7 completed all phases;1038PASS spec-file lines, no failure lines,4clean process censuses. Lint868files,0warnings/errors. The prior failing purity/template/endpoint files pass on both runtimes. Saved log: common Git directory sdlc/local-checks/54e8cbe5037a0244dcf761693564c6f330b8bca9/suite.log, SHA256baaadd3c635c7e7021f02c02f77f17da9598b31691e7c15a932d951ce98c6596. Status recorded as sdlc-local/suite. No code changes or newer-main chasing after this pass.
+
+TL46f01dc5 approves sdlc stage --build on parley.nvim:0 and the docs-only correction of the active Spec's stale #576 pin to #581. Stage this checkpoint; joint operator acceptance waits for pair#838's stage and will be scheduled by the hub. Do not close or merge before the live result. Preserve the --no-actual exception for contaminated #418/#322 claim attribution under ariadne#580.
