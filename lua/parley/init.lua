@@ -5127,12 +5127,15 @@ M.cmd.OpenFileUnderCursor = function()
 		return current and current.buf == origin.buf and current.win == origin.win
 			and current.tick == origin.tick and current.generation == origin.generation
 	end
-	local function restore_insert()
+	local function restore_insert(position)
 		if in_insert_mode then
 			local landed_buf, landed_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
 			vim.schedule(function()
 				if reference_generation == generation and vim.api.nvim_get_current_buf() == landed_buf
-					and vim.api.nvim_get_current_win() == landed_win then vim.cmd("startinsert") end
+					and vim.api.nvim_get_current_win() == landed_win then
+                    if position then vim.api.nvim_win_set_cursor(landed_win, position) end
+                    vim.cmd(position and position[2] >= #current_line and "startinsert!" or "startinsert")
+                end
 			end)
 		end
 	end
@@ -5149,7 +5152,7 @@ M.cmd.OpenFileUnderCursor = function()
             follow = function(open) return history.follow(follow_origin, open) end,
             on_no_file = not item and function()
                 require("parley.document_band").flash_notice(win, "No file to open")
-                restore_insert()
+                restore_insert(cursor)
             end or nil})
 		if item then restore_cursor() end
 		if not ok then error(err) end

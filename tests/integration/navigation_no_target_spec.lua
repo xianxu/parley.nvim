@@ -38,9 +38,9 @@ describe("Alt+o with no target", function()
         if child then child:stop() end
         if root then vim.fn.delete(root, "rf") end
     end)
-    local function press(insert)
+    local function press(insert, at_end)
         if insert then
-            child:input("i")
+            child:input(at_end and "A" or "i")
             await(function() return child:request("nvim_get_mode").mode == "i" end)
         end
         child:input("<M-o>")
@@ -159,5 +159,30 @@ describe("Alt+o with no target", function()
         await(function() return exec("return vim.wo.winbar == ...", original) end)
         exec("owner.clear()")
     end)
+
+    for _, original in ipairs({ "", "operator custom bar" }) do
+        for _, case in ipairs({
+            { text = "error", col = 1 }, { text = "error", col = 2 },
+            { text = "error", col = 4 }, { text = "error", col = 5 },
+            { text = "café字", col = 5 }, { text = "café字", col = 8 },
+        }) do
+            it("preserves insertion byte " .. case.col .. " in " .. case.text
+                .. " with " .. (original == "" and "no bar" or "a custom bar"), function()
+                exec([[
+                    local text, col, original = ...
+                    vim.api.nvim_buf_set_lines(0, 0, -1, false, { text })
+                    vim.bo.modified = false
+                    vim.api.nvim_win_set_cursor(0, { 1, col })
+                    vim.wo.winbar = original
+                ]], case.text, case.col, original)
+                press(true, case.col == #case.text)
+                await(function() return child:request("nvim_get_mode").mode == "i" end)
+                assert.same({ 1, case.col }, exec("return vim.api.nvim_win_get_cursor(0)"))
+                child:input("Z")
+                local expected = case.text:sub(1, case.col) .. "Z" .. case.text:sub(case.col + 1)
+                await(function() return exec("return vim.api.nvim_get_current_line() == ...", expected) end)
+            end)
+        end
+    end
 
 end)

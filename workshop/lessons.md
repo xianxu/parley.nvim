@@ -1032,3 +1032,7 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 
 
 - #425: no-target handling belongs at the native fallback and must retain its caller context. Catch only the native absence codes for a gesture without an explicit selected reference; keep selected-target errors and source-cursor restoration under independent regression coverage. Test temporary bars with breadcrumbs explicitly disabled rather than overwriting a live renderer-owned bar and assuming it still owns those options.
+
+- #425 BR-1: restoring Insert mode after stopinsert does not preserve the insertion position. No-op gestures must retain the byte cursor and distinguish insertion before a character from insertion at EOL; test nonzero positions, multibyte boundaries and the next typed character.
+- #425 BR-2: a shared finite-feedback lease must coalesce equivalent purposes, not merely equal source buffers. Enumerate both arrival orders and queued/active phases; important leave feedback supersedes quiet feedback and cannot be displaced by it.
+- #425 BR-3: a changed user gesture needs its README explanation as well as its atlas map. Verify the concrete user-facing section at close.

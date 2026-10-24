@@ -262,6 +262,10 @@ that strips other non-ASCII symbols may therefore miss.
 Several references show a picker; cancel leaves the source alone. A reference
 directly under the cursor takes priority. With no reference in the entity,
 Parley uses its existing artifact resolver and Vim file navigation.
+When there is no filename or target to open, Alt+o briefly flashes “No file to
+open” in the winbar without an error or message prompt. The prior bar returns;
+if there was no bar, the temporary one disappears. Your editing position stays
+put. Explicit target failures still report their diagnostic.
 Markdown link labels can wrap across lines within a paragraph; Alt+o on either
 line opens the link, and the entity picker retains it as one reference.
 

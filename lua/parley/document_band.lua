@@ -230,9 +230,11 @@ end
 
 -- The lease coalesces native events and owns one finite window pulse.
 local function start_pulse(win, source, active, label, message, leaving)
-    if pulses[win] and pulses[win].source == source then return end
-    if pulses[win] then pulses[win].cancel() end
-    local pulse = { source = source }
+    local purpose, previous = leaving and "leave" or "notice", pulses[win]
+    if previous and ((previous.source == source and previous.purpose == purpose)
+        or (previous.purpose == "leave" and not leaving)) then return end
+    if previous then previous.cancel() end
+    local pulse = { source = source, purpose = purpose }
     function pulse.cancel()
         if pulses[win] ~= pulse then return end
         if pulse.timer then pulse.timer:stop(); pulse.timer:close() end
