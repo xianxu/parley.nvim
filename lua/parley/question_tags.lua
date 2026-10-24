@@ -22,18 +22,6 @@ function M.review_tags(lines, facts)
     return tags
 end
 
--- Explicit outline actions admit the structural snapshot's 1 MiB limit
--- before reading native source. Rendering never calls this seam.
-function M.review_tags_for_buffer(buf, reader)
-    local count = vim.api.nvim_buf_line_count(buf)
-    local bytes = vim.api.nvim_buf_get_offset(buf, count)
-    if bytes < 0 or bytes > 1024 * 1024 then
-        return {}, "chat structure exceeds the 1 MiB local snapshot limit"
-    end
-    reader = reader or require("parley.line_reader").for_buffer(buf)
-    return M.review_tags(reader:lines(0, count, false))
-end
-
 function M.parse_tag(line)
     return type(line) == "string" and line:match("^@@(.+)@@$") or nil
 end

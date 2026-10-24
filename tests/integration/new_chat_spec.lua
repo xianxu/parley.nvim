@@ -45,7 +45,7 @@ describe("ChatNew", function()
         cleanup()
     end)
     for _, template_name in ipairs({ "short_chat_template", "chat_template" }) do
-        it("declares collaboration in new root and child chats using " .. template_name, function()
+        it("keeps new root and child chats mode-free using " .. template_name, function()
             parley.config.chat_template = require("parley.defaults")[template_name]
             local root = parley.new_chat()
             local root_path = vim.api.nvim_buf_get_name(root)
@@ -54,7 +54,10 @@ describe("ChatNew", function()
             for _, path in ipairs({ root_path, child_path }) do
                 local fm = require("parley.frontmatter").parse(vim.fn.readfile(path))
                 assert.is_not_nil(fm)
-                assert.equals("collaboration", fm.fields["collaboration-mode"])
+                for _, key in ipairs({ "collaboration-mode", "presentation", "presentation-mode",
+                    "process-instruction", "processing-instruction", "processing-mode" }) do
+                    assert.is_nil(fm.fields[key], key .. " must not be written")
+                end
             end
         end)
     end

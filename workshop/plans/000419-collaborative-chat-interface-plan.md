@@ -57,7 +57,7 @@
 | Bounded review notices: `show` | `lua/parley/review_notice.lua` | new | existing message history and notifier |
 | Review proposal schema | `lua/parley/tools/builtin/propose_edits.lua` | modified | optional review classification metadata; same write tool |
 | Packaged protocol synchronizer | `scripts/sync-review-protocol.py` | modified | pinned Git source, digest/path checks, owned output |
-| Tag recognition / consumers: `review_tags`, `review_tags_for_buffer`, `apply_outline` | `highlighter.lua`, `question_tags.lua`, `reference_candidates.lua`, `outline.lua`, `document/lexical.lua` under `lua/parley/` | modified | existing document/viewport lifecycle |
+| Tag recognition / consumers: `review_tags`, `apply_outline` | `highlighter.lua`, `question_tags.lua`, `reference_candidates.lua`, `outline.lua`, `document/lexical.lua` under `lua/parley/` | modified | existing document/viewport lifecycle |
 | Section operations | `lua/parley/entity_range.lua`, `entity_textobj.lua` | modified | existing native edits/moves |
 | Side-doc discovery/inheritance | `lua/parley/attention.lua`, `agentic_document.lua` | modified | directory scans, actual-parent header, existing Couch model |
 | Existing recursive mover | `lua/parley/document_move.lua`, `document_move_plan.lua` | modified if tests expose gap | existing journal/reconciliation |
@@ -228,3 +228,8 @@ TL59404f19 authorizes precise --no-actual at close:9.24h preview includes a357-m
 ### 2026-10-23 19:27 — pre-close command selection (TLc64d51ab)
 
 Use sdlc local-check run --pre-close before close/boarding; trusted main selects the affected check for train-enabled repositories with a declared graph, otherwise suite. This repository correctly selected the full suite on the current pushed draft. Keep lease-1002561823; a later #581 code/fixture repin still needs fresh proof.
+
+
+### 2026-10-23 19:41 — full-suite consumer and purity corrections
+
+The early pre-close suite found remaining ChatNew root/child assertions for the retired collaboration key, and the pure-module guard caught the buffer-only outline adapter in question_tags. Sweep remaining mode-key assertions, preserving deliberate legacy reader fixtures; new roots/children assert absence of all retired keys. Move the buffer adapter into its sole existing IO caller, outline, rather than weakening the purity guard. Its helper becomes private; the public question_tags.review_tags_for_buffer is removed. No product behavior change or new owner. The separate endpoint teardown timeout is not attributed to #430; wait for the complete failure set before a retry.

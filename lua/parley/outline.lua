@@ -10,6 +10,18 @@ local is_editing_window = require("parley.helper").is_editing_window
 
 local Document = require("parley.document")
 local Reader = require("parley.line_reader")
+-- Explicit outline actions admit the structural snapshot's 1 MiB limit
+-- before reading native source. Rendering never calls this seam.
+local function review_tag_rows(buf, reader)
+    local count = vim.api.nvim_buf_line_count(buf)
+    local bytes = vim.api.nvim_buf_get_offset(buf, count)
+    if bytes < 0 or bytes > 1024 * 1024 then
+        return {}, "chat structure exceeds the 1 MiB local snapshot limit"
+    end
+    reader = reader or Reader.for_buffer(buf)
+    return question_tags.review_tags(reader:lines(0, count, false))
+end
+
 local cursors = setmetatable({}, {__mode="k"})
 local function document(buf,config)
   return Document.get(buf) or Document.attach(buf,{patterns=highlight_structure.patterns(config)})
@@ -248,7 +260,7 @@ function M._build_picker_items(bufnr, config, opts)
     end
     if not state.review_checked and candidate:match("^%s*@@chat@@") then
       state.review_checked=true
-      state.review_tags=question_tags.review_tags_for_buffer(bufnr)
+      state.review_tags=review_tag_rows(bufnr)
     end
     if token.kind=="user" then
       item.type="question";item.display="  "..text
