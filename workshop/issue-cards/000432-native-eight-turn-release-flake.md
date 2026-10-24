@@ -1,6 +1,6 @@
 ---
 id: 000432
-status: codecomplete
+status: done
 created: 2026-10-23
 updated: 2026-10-24
 estimate_hours:
@@ -22,6 +22,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 4cba6ab06aa4a2115c9490f99b7a46fe6b876852
         evidence_commit: 98bd29500c89133cb40a2cb5d74179edd01418c2
+        landed_commit: 1f0ecbf966f5a97cf9e205bc475559a6001d30de
 ---
 
 # Native eight-turn clean release intermittently retains its lock
