@@ -1,12 +1,21 @@
 ---
 id: 000437
-status: open
+status: wontfix
 deps: []
 github_issue:
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-24
 estimate_hours:
-card_mirror: '598c2153f932b42ec8aab491b8c1fe102bf24ca6' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '875a7fac9c251415b4f5a454b3bcb3b1e678b9ee' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-23T23:12:46-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flake_tests: [lua:tests/integration/lock_leave_reminder_spec.lua#lock leave reminder cancels on window close and ignores a late tick]
 ---
 
 # Lock leave reminder window-close case gets no pulse when the first-edit operator acquire fails
@@ -33,3 +42,5 @@ Both end in the same refused/unavailable acquire. Telling them apart is the firs
 
 ## Log
 
+
+- 2026-10-24: abandoned (wontfix): fixed in parley.nvim#431 (PR 348, merge 58228d3d): stale-clock vim.system kill of the operator acquire; regression in lock_leave_reminder_spec
