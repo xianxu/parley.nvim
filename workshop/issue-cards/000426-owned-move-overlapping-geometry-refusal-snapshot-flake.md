@@ -5,7 +5,7 @@ created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 github_issue:
-flake_tests: ["lua:tests/integration/agentic_document_owned_move_spec.lua#registered ordinary Markdown through Parley move doors refuses overlapping geometry before any effects: new-in-source-side children=true native=false modified=false", "lua:tests/integration/agentic_document_owned_move_spec.lua#registered ordinary Markdown through Parley move doors refuses overlapping geometry before any effects: new-in-source-side children=true native=true modified=false", "lua:tests/integration/agentic_document_owned_move_spec.lua#registered ordinary Markdown through Parley move doors refuses overlapping geometry before any effects: new-in-source-side children=true native=true modified=true"]
+flake_tests: ["lua:tests/integration/agentic_document_owned_move_spec.lua#registered ordinary Markdown through Parley move doors refuses overlapping geometry before any effects: new-in-source-side children=true native=false modified=false", "lua:tests/integration/agentic_document_owned_move_spec.lua#registered ordinary Markdown through Parley move doors refuses overlapping geometry before any effects: new-in-source-side children=true native=true modified=false", "lua:tests/integration/agentic_document_owned_move_spec.lua#registered ordinary Markdown through Parley move doors refuses overlapping geometry before any effects: new-in-source-side children=true native=true modified=true", "lua:tests/integration/agentic_document_owned_move_spec.lua#registered ordinary Markdown through Parley move doors refuses overlapping geometry before any effects: new-in-source-side children=true native=false modified=true"]
 ---
 
 # Owned-move overlapping-geometry refusal snapshot flake
