@@ -31,7 +31,7 @@ M.run = function(argv, cb, options)
 	end
 	local opts = vim.tbl_extend("force", { text = true, timeout = M.deadline_ms() }, options or {})
 	if opts.timeout == false then opts.timeout = nil end
-	local ok, child = pcall(vim.system, argv, opts, finish)
+	local ok, child = pcall(require("parley.helper").system, argv, opts, finish)
 	if not ok then finish({ code = -1, stderr = tostring(child) }); return nil end
 	return child
 end
@@ -107,7 +107,7 @@ M.operator_lock = function(verb, identity, token)
 	local argv = { "couch", "--session-sync", "operator-" .. verb, identity.File,
 		"--id", identity.ID, "--turn", token, "--json" }
 	local ok, result = pcall(function()
-		return vim.system(argv, { text = true, timeout = M.OPERATOR_LOCK_TIMEOUT_MS }):wait(M.OPERATOR_LOCK_TIMEOUT_MS)
+		return require("parley.helper").system(argv, { text = true, timeout = M.OPERATOR_LOCK_TIMEOUT_MS }):wait(M.OPERATOR_LOCK_TIMEOUT_MS)
 	end)
 	if not ok then return { kind = "refused", error = tostring(result) } end
 	return M.operator_result(result, verb, identity, token)

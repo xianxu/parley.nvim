@@ -284,4 +284,22 @@ describe("couch operator transaction", function()
         assert.is_true(elapsed < 1500, tostring(elapsed))
         assert.equals(124, child:wait().code)
     end)
+
+    it("measures its input budget from now even after the loop was blocked (#431)", function()
+        -- vim.system starts its kill timer from libuv's cached clock; a
+        -- blocked loop used to kill this 200 ms child at once.
+        local original, child = vim.system
+        vim.system = function(_, opts)
+            child = original({"sleep", "0.2"}, opts)
+            return child
+        end
+        require("tests.helpers.loop_clock").block(1200)
+        local started = vim.uv.hrtime()
+        local ok = pcall(couch.operator_lock, "acquire", identity, token)
+        local elapsed = (vim.uv.hrtime() - started) / 1e6
+        vim.system = original
+        assert.is_true(ok)
+        assert.equals(0, child:wait().code)
+        assert.is_true(elapsed >= 150, tostring(elapsed))
+    end)
 end)

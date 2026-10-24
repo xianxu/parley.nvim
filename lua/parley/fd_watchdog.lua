@@ -76,7 +76,7 @@ function M.count()
 end
 
 local function run(argv, done)
-    local ok, err = pcall(vim.system, argv, { text = true, timeout = M.DEADLINE_MS }, function(result)
+    local ok, err = pcall(require("parley.helper").system, argv, { text = true, timeout = M.DEADLINE_MS }, function(result)
         vim.schedule(function() done(result) end)
     end)
     if not ok then done({ code = -1, stderr = tostring(err) }) end

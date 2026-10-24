@@ -48,6 +48,16 @@ _H.defer_deadline = function(fn, ms)
 	return timer
 end
 
+--- vim.system with its `timeout` measured from now (#431). Neovim arms that
+--- kill timer with a raw timer:start right after the spawn, so after
+--- synchronous work a 500 ms timeout killed a 200 ms child within 2 ms
+--- (0.11.7 and 0.12.5). Refresh the clock first. Same arguments and result as
+--- vim.system, which is looked up per call so a spec may replace it.
+_H.system = function(argv, opts, on_exit)
+	(vim.uv or vim.loop).update_time()
+	return vim.system(argv, opts, on_exit)
+end
+
 -- Navigation belongs in editing windows, never overlays such as Screenkey.
 _H.is_editing_window = function(win)
     if not vim.api.nvim_win_is_valid(win) then return false end
