@@ -54,7 +54,7 @@ State design table. Actions: the automatic clean release (InsertLeave, or undo b
 - [x] Fake: promote FAKE_COUCH_OPERATOR_PRE_DELAY (seconds before effects, for the verbs in _OPS) into fake_couch_operator.py.
 - [x] Regression first: the 8-turn ordering with turn 3's release delayed past 500 ms before its effects, and the lock is gone within the arrival wait; a second case with the delay after the effects, where the next turn takes a fresh acquire. Both fail on main (the negative control).
 - [x] Fix (ARCH-ORDER: an unconfirmed outcome is not a failure): dispatch_admission reports whether a release_failed was unavailable (unknown) or refused. release_if_baseline schedules a bounded retry for unavailable only: helper.defer_deadline at 1, 2 and 4 s. Each try re-checks epoch and state, not inserting, content at the baseline, and the lock absent or ours, then re-dispatches the same token's release. One WARN once the tries run out. Release is idempotent per turn token, so a retry after a lost reply confirms already-released.
-- [ ] Both nvims, 20 reps under capped load; the suite; close, which unregisters the flake.
+- [x] Both nvims, 20 reps under capped load; the suite; close, which unregisters the flake.
 
 ## Log
 
