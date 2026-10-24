@@ -754,7 +754,7 @@ describe("session-sync native edits", function()
         keys("i");wait_for("return vim.fn.mode()=='i'")
         keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
         -- A local predicate: an RPC predicate keeps vim.wait from timing out.
-        assert.is_true(vim.wait(15000,function() return calls("release")>=4 end),"the retries never ran")
+        assert.is_true(vim.wait(arrival.MS,function() return calls("release")>=4 end),"the retries never ran")
         vim.wait(1500) -- absence: past the last kill; a second chain or a fifth try would land within it
         assert.equals(4,calls("release"),"one release and three retries")
         assert.equals(1,exhausted_warnings())
@@ -769,7 +769,7 @@ describe("session-sync native edits", function()
         wait_for("return _G.slowed_release=='unavailable'")
         -- Before the first chain's 1 s retry: a second release while still clean.
         assert.is_false(exec("return require('parley.session_sync').release_if_baseline(0)"))
-        assert.is_true(vim.wait(15000,function() return calls("release")>=5 end),"the retries never ran")
+        assert.is_true(vim.wait(arrival.MS,function() return calls("release")>=5 end),"the retries never ran")
         vim.wait(1500) -- absence: past the last kill; the superseded chain would finish within it
         assert.equals(5,calls("release"),"two releases and one chain of three retries")
         assert.equals(1,exhausted_warnings())
