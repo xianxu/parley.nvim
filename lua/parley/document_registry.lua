@@ -125,6 +125,10 @@ local function enqueue(argv, witness, callback, options, classify, invalid, join
         item.timer = uv.new_timer()
         require('parley.helper').start_deadline(item.timer, ms, vim.schedule_wrap(expire))
     end
+    local function arm_absolute_deadline()
+        item.timer = uv.new_timer()
+        require('parley.helper').start_absolute_deadline(item.timer, absolute_deadline, vim.schedule_wrap(expire))
+    end
     function item.start()
         if item.done then return end
         if absolute_expired() then expire(); return end
@@ -171,7 +175,7 @@ local function enqueue(argv, witness, callback, options, classify, invalid, join
     handles[item] = true
     if absolute_deadline ~= nil then
         if absolute_expired() then expire(); return item end
-        arm_deadline(math.max(1, math.ceil(absolute_deadline - uv.hrtime() / 1e6)))
+        arm_absolute_deadline()
     end
     queue[#queue + 1] = item
     pump()

@@ -30,6 +30,19 @@ describe('editor endpoint registry process boundary', function()
         return handle
     end
     local function release_gate(path) vim.fn.writefile({},path) end
+    -- Holds the absolute-deadline timer and returns its firing. A case fires it
+    -- once the fake has published and holds the acknowledgment, and the
+    -- deadline has really passed, so Python startup never races it (#421).
+    local function hold_deadline()
+        local held
+        require('parley.helper').start_deadline=function(_,_,callback) held=callback end
+        return function() assert(held,'absolute deadline was never armed');held() end
+    end
+    local function expire_after_publication(gate,deadline,fire)
+        assert(vim.wait(arrival.MS,function() return vim.fn.filereadable(gate..'.held')==1 end,10))
+        assert(vim.wait(arrival.MS,function() return uv.hrtime()/1e6>=deadline end,10))
+        fire()
+    end
     local function launches()
         local path=root..'/registry.json.editor-launches'
         return vim.fn.filereadable(path)==1 and #vim.fn.readfile(path) or 0
@@ -189,11 +202,13 @@ describe('editor endpoint registry process boundary', function()
     end)
     it('joins an admitted absolute deadline while retaining a possibly published binding',function()
         local gate=root..'/release';gates[#gates+1]=gate
-        timers[#timers+1]=vim.defer_fn(function() release_gate(gate) end,600)
+        local fire,deadline=hold_deadline(),uv.hrtime()/1e6+200
         local result
         async_editor('register',intent(),function(value) result=value end,
-            {absolute_deadline_ms=uv.hrtime()/1e6+200,env={FAKE_COUCH_EDITOR_REPLY_GATE=gate}})
+            {absolute_deadline_ms=deadline,env={FAKE_COUCH_EDITOR_REPLY_GATE=gate}})
+        expire_after_publication(gate,deadline,fire)
         assert(vim.wait(arrival.MS,function() return result~=nil end,10))
+        require('parley.helper').start_deadline=saved.deadline
         assert.equals('unavailable',result.kind,vim.inspect(result))
         assert.matches('deadline',result.error)
         local pid=tonumber(vim.fn.readfile(root..'/registry.json.editor-pid')[1])
@@ -207,9 +222,11 @@ describe('editor endpoint registry process boundary', function()
             return saved.run(argv,function(value) delivery=value;release=function() callback(value) end end,options)
         end
         local gate=root..'/release';gates[#gates+1]=gate
+        local fire,deadline=hold_deadline(),uv.hrtime()/1e6+200
         local result,calls=nil,0
         async_editor('register',intent(),function(value) result=value;calls=calls+1 end,
-            {absolute_deadline_ms=uv.hrtime()/1e6+200,timeout_ms=1000,env={FAKE_COUCH_EDITOR_REPLY_GATE=gate}})
+            {absolute_deadline_ms=deadline,timeout_ms=1000,env={FAKE_COUCH_EDITOR_REPLY_GATE=gate}})
+        expire_after_publication(gate,deadline,fire)
         assert(vim.wait(arrival.MS,function() return release~=nil end,10))
         assert.is_nil(result,'expiry reported before the owned native completion joined')
         local pid=tonumber(vim.fn.readfile(root..'/registry.json.editor-pid')[1])
