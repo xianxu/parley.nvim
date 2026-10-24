@@ -17,6 +17,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "736a12ff", done: "63bf4436"}
 ---
 
 # Native release-journal test intermittently loses its setup lock
