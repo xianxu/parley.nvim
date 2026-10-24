@@ -1,14 +1,22 @@
 ---
 id: 000430
-status: open
+status: wontfix
 deps: []
 github_issue:
 created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'e24e885ea20c571ec910e12dee8a00e6909096bc' # card fields mirrored from issue-cards; edit via sdlc
-flake_tests: [lua:tests/integration/editor_endpoint_registry_spec.lua#editor endpoint registry process boundary joins an admitted absolute deadline while retaining a possibly published binding, lua:tests/integration/editor_endpoint_registry_spec.lua#editor endpoint registry process boundary keeps the absolute-deadline observer until its native exit delivery joins]
+card_mirror: '40b1e60e19424949e5e2efa6dd53a96800d8025a' # card fields mirrored from issue-cards; edit via sdlc
+flake_tests: 
+started: 2026-10-23T18:08:23-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Endpoint deadline test races Python startup and registry publication
@@ -33,6 +41,8 @@ Make the admitted/post-publication deadline-join proof independent of startup sc
 
 ## Log
 
+
+- 2026-10-23: abandoned (wontfix): fixed in parley.nvim#421 (PR 346, merge 0620eaed)
 2026-10-23: discovered during #418 integration, which changes only collaboration root-scalar parsing. Failed integrated suite attempt a0a1e7f89500e2baed04027a72f259ee on 41f876336c7b7a464ec11f2ba984e249b3a8f993: compatibility Neovim0.11.7, editor endpoint registry process boundary joins an admitted absolute deadline while retaining a possibly published binding, line199 E484 missing registry.json.editor-pid. Preferred runtime passed this file on the same code. The rest of that full suite completed; it also has a separately unclassified session-sync native failure, so this issue does not explain the whole red suite.
 
 TL-authorized exact-case qualification on detached worktrees, original before_each/assertions/after_each, no source edits, artificial load or changed deadlines: pure main28526aa8eefe4da49b28bac04456f56e564ecaf2 has7 clean passes/3 failures (runs4,5,9 missing PID at line199); integrated41f876336c7b7a464ec11f2ba984e249b3a8f993 has9 clean passes/1 failure (run9: PID exists but lookup absent at line202). Both have0 teardown errors; every run selects exactly1 original case and has a clean final native census. Test/fixture/transport sources are unchanged across these heads.
