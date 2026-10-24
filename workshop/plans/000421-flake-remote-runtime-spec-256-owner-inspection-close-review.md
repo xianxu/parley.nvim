@@ -88,3 +88,90 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"70c4199e-de4f-4e81-8118-ba62da723ce1","repository":"github.com/xianxu/parley.nvim","issue_id":"000421","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/14125556c1561589","reviewed_head":"71c8a0b3afb8eaebbe60fa1752197f5dcc965dcd","slot":"parley.nvim:1","requested_at":"2026-10-24T03:26:52.989185Z"},"phase":"finished","pid":77409,"started_at":"2026-10-24T03:26:53.162809Z","finished_at":"2026-10-24T03:31:39.016955Z","session_id":"554b29a8-aebd-486a-9591-121de802d614","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-23T20:42:25-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 421 — flake: lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership keeps inspection bounded when all 256 marked directory owners differ from this editor, lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership retains a directory whose inode changes after inspection begins |
+| repo | parley.nvim |
+| issue file | workshop/issues/000421-flake-remote-runtime-spec-256-owner-inspection.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | cd5fc8bfd2f4f6cef5b22cc94ce912e48fa8c5a1..5cdcfa828869c68e4fc4aec0094f9f8a9ba0dd39 |
+| command | sdlc close --issue 421 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | fenced |
+| timestamp | 2026-10-23T20:42:25-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking whether #430's status and flake registrations live in the tracker JSON instead of the frontmatter.
+
+Verifying the spec's seam restore and running the affected specs.
+
+Test runner produced no output; checking why.
+
+All 278 mapped cases pass. Now running revert controls for the claimed fixes (lint coverage and blocked-loop regression).
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All three round-1 findings are fixed and I confirmed each one. The Done-when list now has a clause for each revision. The lint also flags `vim.defer_fn` and `timer_start` deadlines, plus a remaining time computed by hand and passed to `start_deadline`. All three absolute-deadline sites now share one helper, `helper.start_absolute_deadline`. I ran the remote_session mapping through the harness (`make test-spec SPEC=modes/remote_session`) and got 278 passes, 0 failures and 0 errors. I then tried two reverts in this disposable checkout and restored the files afterwards; `git status` is clean. First, I added a `vim.defer_fn(fn, deadline_ms)` and a `start_deadline(t, math.ceil(d), …)` to `oauth.lua`, and both lint rules failed. Second, I put `remote_runtime.lua` back on a raw `timer:start` with the remaining time computed by hand. Its blocked-loop case went red (44 pass, 1 fail) and so did the lint. One thing I could not check: `000430`'s frontmatter still says `status: open` and lists both cases in `flake_tests`. Those fields are copied from the issue-cards store, which this checkout doesn't contain. That is the one note below, and it does not block.
+
+1. **Strengths**
+   - `lua/parley/helper.lua:25-34`: `start_absolute_deadline` calls `_H.start_deadline` through the table, so the `hold_deadline` stub in `editor_endpoint_registry_spec.lua:36` still catches calls to it. It is one place for the "at least 1 ms" remaining-time calculation, which used to be written out at three sites.
+   - `tests/helpers/loop_clock.lua`: one shared busy-wait, and the two blocked-loop regression tests use it (`remote_process_spec.lua:118`, `remote_runtime_spec.lua:420`). The second revert above shows they catch a timer started from the stale clock.
+   - `tests/arch/deadline_timer_spec.lua:9-17`: the header now states exactly what the lint checks and what it misses (a deadline stored in a differently named variable, a call through an alias, a remaining time computed on an earlier line). That matches the patterns in `STARTS`.
+   - The deadline tests are causal now. A held fsync or held deadline is released only after the deadline under test has really passed (`remote_runtime_spec.lua:479-486`, `editor_endpoint_registry_spec.lua:41-45`). No fixed injected delay competes with real IO.
+   - `fake_couch_editor.py:182-187`: the fake writes through a temp file per process plus `os.replace`, which removes the race where a spec could read the polled file while it was still empty.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings**
+   - The issue Log says #430's two cases are unregistered and its status is set to working. At this head, `workshop/issues/000430-endpoint-deadline-startup-flake.md:3,11` still shows `status: open` and both entries in `flake_tests`. Its `card_mirror` hash is the same as at the base commit. The real card store (issue-cards / tracker) isn't in this checkout, so I can't tell whether the mirror is just stale or the tracker was never updated. The close gate will check this anyway through the new Done-when clause. Every instance of this kind in the window: only the #430 card.
+   - `atlas/modes/remote_session.md:88` says both timers start through `helper.start_deadline`. They now go through `start_absolute_deadline`, which calls `start_deadline`, so the sentence is still true. It just doesn't name the newer entry point.
+
+5. **Test coverage notes:** The blocked-loop regressions cover `remote_runtime` and `remote_process`. The `document_registry` absolute-deadline path has no blocked-loop test of its own. Its behaviour didn't change, though: it already went through `start_deadline`, and the round-1 fix only switched it to the new helper. The endpoint specs cover it through the held seam. The lint has two rules and both fail when the bad pattern is added (first revert above).
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** One helper computes the remaining time for an absolute deadline, and one test helper does the busy-wait. I found no duplicated blocks in the window. `chat_pending.lua:42` is a raw start, but it is a UI scheduler and out of scope as the lint header states.
+   - **ARCH-PURE: pass.** The changes are thin IO glue (starting timers). The helpers are small and replaceable, and the tests stub the `start_deadline` seam instead of mocking business logic.
+   - **ARCH-PURPOSE: pass.** The root cause is fixed in the product rather than hidden by a longer timeout. A grep of `lua/` for `:start(` and `start_deadline` call sites found no other hrtime deadline timer started raw. The class is enforced by the lint, with its blind spots stated.
+   - **ARCH-EVOLVE: pass, not applicable.** No persisted formats change. The fake's `.held` marker is test-only.
+
+7. **Plan revision recommendations:** none. Done-when now covers both revisions, and the Plan matches the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Done when now has the Revision 1 (#430 fold) and Revision 2 clauses (issue file, Done when section); whether the tracker card was updated is noted separately because the in-repo mirror is stale.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      STARTS now includes vim.defer_fn and timer_start; a revert control that added vim.defer_fn(fn, deadline_ms) to oauth.lua failed the lint.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      helper.start_absolute_deadline is used at remote_runtime:113, remote_process:144 and document_registry:130; the busy-wait is now tests/helpers/loop_clock.block; reverting remote_runtime to a raw timer:start failed its blocked-loop case and the lint.
+findings:
+  - id: new
+    severity: Minor
+    kind: unverifiable
+    family: log-claims-match-tracker-state
+    title: |
+      The #430 card mirror still shows status open with both flake_tests registered, but the Log says they were unregistered
+    detail: |
+      I read the head copy of workshop/issues/000430-endpoint-deadline-startup-flake.md (frontmatter lines 3 and 11). The card_mirror hash is unchanged since the base commit, and the issue-cards/tracker store is not in this checkout (issue-tracker.json points only at the migrate root 41de715a). Evidence that would settle it: the tracker card for #430 showing flake_tests removed and its status, or a refreshed mirror. Only instance in this window.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"f9b00369-9a8f-477b-86a9-e6d340218cbf","repository":"github.com/xianxu/parley.nvim","issue_id":"000421","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/3f930041cb365acd","reviewed_head":"5cdcfa828869c68e4fc4aec0094f9f8a9ba0dd39","slot":"parley.nvim:1","requested_at":"2026-10-24T03:37:42.384858Z"},"phase":"finished","pid":44378,"started_at":"2026-10-24T03:37:42.474786Z","finished_at":"2026-10-24T03:42:23.81854Z","session_id":"2c59b402-cf49-4de0-9689-be642dc39aac","outcome":"returned"}] -->
