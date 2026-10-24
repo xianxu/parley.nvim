@@ -170,6 +170,18 @@ describe("lock leave reminder", function()
         assert.is_true(timer.closed)
         assert.equals(1, red)
     end)
+    it("takes the turn and reminds when the loop was blocked before the edit (#437)", function()
+        -- The edit's operator acquire spawns the fake under vim.system's
+        -- 500 ms timeout; a stale loop clock used to kill it at once, so the
+        -- turn stayed free and no pulse came.
+        require("tests.helpers.loop_clock").block(1200)
+        edit(); swap(); local timer = pulse(); tick(timer)
+        vim.cmd("vsplit")
+        vim.api.nvim_win_close(win, true)
+        tick(timer)
+        assert.is_true(timer.closed)
+        assert.equals(1, red)
+    end)
     it("does not leave a copied pulse in a split opened during a red frame", function()
         edit(); swap(); local timer = pulse(); tick(timer)
         vim.cmd("vsplit")

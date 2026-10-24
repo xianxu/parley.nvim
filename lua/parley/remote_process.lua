@@ -28,7 +28,7 @@ function native.read(pids, callback, options)
         if on_joined then joiners[#joiners + 1] = on_joined end
         if child then pcall(child.kill, child, 9) end
     end
-    child = vim.system({ options.ps_binary or 'ps', '-p', table.concat(encoded, ','),
+    child = require('parley.helper').system({ options.ps_binary or 'ps', '-p', table.concat(encoded, ','),
         '-o', 'pid=', '-o', 'lstart=' }, { text = true, env = env,
         timeout = math.max(1, math.ceil(options.remaining_ms)) }, function(result)
         -- vim.system's exit callback follows process reaping and pipe closure.

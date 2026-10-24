@@ -851,6 +851,7 @@ atlas:
       - tests/unit/session_sync_spec.lua
       - tests/unit/operator_admission_spec.lua
       - tests/arch/operator_admission_owner_spec.lua
+      - tests/arch/deadline_timer_spec.lua
       - tests/unit/view_map_spec.lua
       - tests/integration/window_views_spec.lua
       - tests/unit/document_session_spec.lua

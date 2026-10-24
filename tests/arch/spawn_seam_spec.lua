@@ -31,8 +31,10 @@
 -- inherited `io_error` renamed before it is overwritten.
 local arch = require("tests.arch.arch_helper")
 
-local SPAWN = { "uv%.spawn[%s%(,]", "vim%.system%(", "jobstart%(", "vim%.fn%.system%(", "vim%.fn%.systemlist%(",
-    "io%.popen%(", "os%.execute%(", "termopen%(" }
+-- `helper.system` (#431) is vim.system with the loop clock refreshed, so a call
+-- through it is a spawn classified at its own call site like a direct one.
+local SPAWN = { "uv%.spawn[%s%(,]", "vim%.system%(", "%.helper[\"']%)%.system%(", "jobstart%(", "vim%.fn%.system%(",
+    "vim%.fn%.systemlist%(", "io%.popen%(", "os%.execute%(", "termopen%(" }
 local WAITS = { "vim%.fn%.system%(", "vim%.fn%.systemlist%(", "io%.popen%(", "os%.execute%(" }
 local SEAM = "lua/parley/tasker.lua"
 
@@ -63,6 +65,9 @@ local OUTSIDE = {
     ["lua/parley/document_lease.lua"] = { sync = 1 },
     ["lua/parley/remote_process.lua"] = { bounded = 1 }, -- #405: one joined, deadline-bounded ps batch
     ["lua/parley/couch.lua"] = { sync = 1 }, -- #408: 500 ms operator acquisition/release
+    ["lua/parley/helper.lua"] = { open = 1,
+        why = "helper.system (#431) forwards its caller's argv and options to vim.system after refreshing"
+            .. " the loop clock; each caller is counted and classified at its own call site" },
     ["lua/parley/init.lua"] = { sync = 1 },
     ["lua/parley/render_buffer.lua"] = { sync = 1 },
     ["lua/parley/log_emit.lua"] = { sync = 1 },
@@ -135,6 +140,10 @@ local function census()
                 local from, stop = text:find(pattern, init)
                 if not from then break end
                 init = stop
+                -- Through helper.system the call starts at `system(`: from the
+                -- require's quote, call_at would read the rest as a string.
+                local through = text:sub(from, stop):find("%)%.system%(")
+                if through then from = from + through + 1 end
                 local class = classify(file, text, from, text:sub(from, stop))
                 found[file] = found[file] or {}
                 found[file][class] = (found[file][class] or 0) + 1

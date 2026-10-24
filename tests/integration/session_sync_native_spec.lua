@@ -367,6 +367,21 @@ describe("session-sync native edits", function()
         assert.is_nil(vim.uv.fs_stat(sent_file),"stale release submitted a newer turn")
     end)
 
+    -- #431: synchronous work right before the next operator lock call (any
+    -- verb when nil) leaves the child's loop clock stale; vim.system's timeout
+    -- used to kill that call's fake at once.
+    local function stall_next_lock(verb)
+        exec([[
+            local verb=...
+            local couch=require("parley.couch");local original=couch.operator_lock
+            couch.operator_lock=function(v,...)
+                if (verb==nil or v==verb) and not _G.lock_stalled then
+                    _G.lock_stalled=true;require("tests.helpers.loop_clock").block(1200)
+                end
+                return original(v,...)
+            end
+        ]],verb)
+    end
     -- Installed after attachment: this observer runs after the production
     -- InsertEnter handler, rather than treating mode i as admission completion.
     local function observe_insert_admission()
@@ -991,6 +1006,15 @@ describe("session-sync native edits", function()
         assert.equals("operator band", exec("return vim.wo.winbar"))
         assert.is_true(exec("return require('parley.session_sync').identity(0) == nil"))
     end)
+    it("acquires before detach when the loop was blocked before the edit (#431)", function()
+        make_plain()
+        open(false, false, false, true)
+        stall_next_lock("acquire")
+        keys("dd")
+        locked()
+        assert.is_true(exec("return _G.lock_stalled==true"))
+    end)
+
     it("moves protection exclusively and keeps acquisition baseline through metadata handoff", function()
         make_plain()
         open(false, false, true, true)
@@ -1018,9 +1042,10 @@ describe("session-sync native edits", function()
         assert.is_true(vim.wait(arrival.MS, function() return not exists() end), "move must preserve acquisition baseline")
     end)
 
-    local function rewritten_move(held)
+    local function rewritten_move(held, stalled)
         make_plain()
         open(false, false, true, true)
+        if stalled then stall_next_lock("acquire") end
         return exec([[
             local destination, held = ...
             local ss = require("parley.session_sync")
@@ -1232,8 +1257,11 @@ describe("session-sync native edits", function()
 
     for _, point in ipairs({"before-cleanup", "after-old", "after-new"}) do
         for _, entry in ipairs({"before-restore", "after-restore", "outside-insert"}) do
-            it("retained release journal respects current intent at " .. point .. "/" .. entry .. " (#404)", function()
-                rewritten_move(false)
+          -- #431: the setup's acquire, after a blocked loop, at the failing ordering.
+          for _, stalled in ipairs(point == "after-new" and entry == "before-restore" and {false, true} or {false}) do
+            it("retained release journal respects current intent at " .. point .. "/" .. entry
+                .. (stalled and " after a blocked loop (#431)" or "") .. " (#404)", function()
+                rewritten_move(false, stalled)
                 local destination = root .. "/synchronized.md"
                 exec([[
                     local destination, point = ...
@@ -1299,6 +1327,7 @@ describe("session-sync native edits", function()
                 assert.is_nil(vim.uv.fs_stat(file .. ".lock"))
                 assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
             end)
+          end
         end
     end
 
@@ -1424,6 +1453,29 @@ describe("session-sync native edits", function()
             identity.File = destination
             assert(ss.finish_move(0, token, identity))
             assert(ss.release_if_baseline(0))
+        ]], destination)
+        assert.is_nil(vim.uv.fs_stat(file .. ".lock"))
+        assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
+    end)
+
+    it("releases synthetic move protection when the loop was blocked before the release (#433)", function()
+        make_plain()
+        open(false, false, true, true)
+        local destination = root .. "/synthetic-stalled.md"
+        stall_next_lock("release")
+        exec([[
+            local destination = ...
+            local ss = require("parley.session_sync")
+            local baseline = vim.fn.sha256(vim.json.encode(vim.api.nvim_buf_get_lines(0,0,-1,false)))
+            assert(ss.acquire_observed(0, { baseline=baseline, outstanding=true }))
+            local token = assert(ss.begin_move(0))
+            assert(ss.install_move_lock(0, token, destination))
+            vim.cmd("saveas " .. vim.fn.fnameescape(destination))
+            local identity = ss.identity(0)
+            identity.File = destination
+            assert(ss.finish_move(0, token, identity))
+            assert(ss.release_if_baseline(0))
+            assert(_G.lock_stalled)
         ]], destination)
         assert.is_nil(vim.uv.fs_stat(file .. ".lock"))
         assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))

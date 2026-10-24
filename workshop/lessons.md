@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-10-23 (#431 — a fix names its class, then finds every member)
+
+- After fixing a class, look for the same mechanism in code we don't own. #421 routed parley's deadline timers through helper.start_deadline, but vim.system arms its own timeout timer the same raw way, and the 500 ms operator lock lost its fake that way in four registered flakes. Standalone first: block the loop, spawn under a timeout, time it (killed after 0.9 ms). Then sweep every caller that passes the option, and lint for it.
+- Sweep a call-form lint against the existing census lints. Routing vim.system through a helper hid every spawn from tests/arch/spawn_seam_spec, whose census matched the literal `vim.system(`; a quiet coverage loss is worse than a red lint. Teach the census the new form instead.
+- A fold is a hypothesis per case. Give each case its own causal reproduction before claiming it. #432's stalled release removed the lock instead of retaining it, so it split back out rather than closing on a shared story.
+- Run the negative control and the fix A/B in one disposable clone, alternating, with only the file under test mapped. Two mapping runs sharing the machine produced unrelated failures that an alternating single-spec A/B ruled out.
 ## 2026-10-23 (#421 — an injected delay inside a fixed budget is a race with real IO)
 
 - "Only under load, no trace" is not a root cause. Before calling a failure a machine stall, time the failing call itself. A 15 s deadline that answers in 0.35 ms was never slow: its timer was armed from libuv's cached clock after synchronous work. Arm every deadline timer through helper.start_deadline; tests/arch/deadline_timer_spec enforces it.

@@ -168,7 +168,7 @@ end
 -- classify's "exit 124: …" names the tool and the budget.
 local function system_runner(tool)
     return function(argv, on_complete)
-        vim.system(argv, { text = true, timeout = M.TIMEOUT_MS }, function(res)
+        require("parley.helper").system(argv, { text = true, timeout = M.TIMEOUT_MS }, function(res)
             local stderr = res.stderr or ""
             if res.code == 124 and stderr == "" then
                 stderr = tool .. " timed out after " .. tostring(M.TIMEOUT_MS) .. " ms"

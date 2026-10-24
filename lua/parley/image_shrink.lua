@@ -132,7 +132,7 @@ M.default_deps = {
         return os.remove(path)
     end,
     system = function(argv, opts)
-        return vim.system(argv, opts):wait()
+        return require("parley.helper").system(argv, opts):wait()
     end,
 }
 
