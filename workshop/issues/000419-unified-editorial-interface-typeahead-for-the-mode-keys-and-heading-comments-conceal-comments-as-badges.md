@@ -1,13 +1,13 @@
 ---
 id: 000419
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '6efa349773751e86a7f6ebc8049e6dad8239cb1f' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2325c3a3f62f8f396340bacbd91f4f98784a7745' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T11:08:07-07:00
 claimant:
     operator: Xian Xu
@@ -23,6 +23,19 @@ claimant:
 ## Problem
 
 ## Spec
+
+**Active contract, 2026-10-23:** one collaborative behavior, `@@chat@@` sections, and highlight for new edits. The operator pivot and TL allocation supersede the historical three-axis interface below. Source contract and exported fixtures are pinned to landed ariadne#576, Git `354e5fac5c96e0b2c26350ee712eb835746a6d67` (PR420). Preserve legacy metadata; create no mode keys or standing instruction. Remove existing mode/selector completion as well as omitting new typeahead.
+
+Share one snapshot-derived chat projection between admission/protection, tag decoration and heading attachment. A standalone tag directly above a parsed ATX heading, outside code, is chat; boundaries, legacy scalar/maps/comments, nested item grammar and exact notices follow the pinned source. Malformed or retired mode metadata emits notices and never refuses an otherwise valid round. Keep `@@chat@@` visible with a light highlight; ordinary tags and references retain their behavior.
+
+**Local adapter boundary (authenticated TL 3d546ddc):** outside Couch, retain the existing single-buffer write owner. Commands apply in place. Question/unclear/unsure asks remain byte-identical and produce the visible notice `questions are answered in a side doc by Couch review; left unchanged`. Never answer a question in place or allocate a local side doc. Couch's agent review owns multi-document questions, chat answers, follow-ups, folds and index writes. This is an explicit supported limitation, not a deferred second writer.
+
+Import export v4 and its flagless briefs atomically with consumers. Side-document readers, owner inheritance, attention, navigation and the existing recursive move owner accept monthly and legacy flat layouts, actual-parent links and same-root grandchildren. No Lua side-doc allocator exists today; the imported agent instructions own the creation naming rule. Keep question/command classification in the agent, not a punctuation heuristic.
+
+**Historical wire compatibility (pair:3, 47e8cb67):** new Couch writes are highlight at round and span level; stored legacy per-span presentation retains its meaning, falling back to round presentation then highlight. Never let current document keys reinterpret old round data. Pin landed #823 compatibility fixtures separately from the v4 policy oracle; consume no unlanded #838 runtime or proposed Read.Editorial API.
+
+<details>
+<summary>Superseded original specification — historical evidence, not the active contract</summary>
 
 **Settled with the operator (10-22, design chat in brain `session.side/2026-10/2026-10-22-01-editorial-modes.md`):**
 - **Uniform names:** `collaboration-mode` (where an answer goes: discussion / collaboration / chat),
@@ -61,16 +74,33 @@ one and highlight in another), with the document-level value kept as the fallbac
 those spans; parley.nvim#418 covers only the whole-document canonical/legacy resolution. pair:9 shares the exact
 additive span contract.
 
+</details>
+
 ## Done when
+
+- The pinned v4 export, five flagless briefs and exported reference fixtures are packaged and verified; the old mode/standing-instruction pipeline and completion are retired. New templates write no mode keys. Existing metadata remains untouched.
+- The production chat projection matches pinned tag/legacy contexts and exact notices, including empty collaboration-mode and a leading thematic break. Duplicate normalized headings all match; nesting, code and literal exclusions are covered.
+- A valid tag remains visible and lightly highlighted and moves with its heading through native section operations. Moving/deleting the preceding section does not take it; ordinary tags/references and the established editing-heading dialect stay compatible.
+- Outside Couch, commands apply through the existing write owner; questions remain unchanged with the exact limitation notice above. Mixed question/command batches preserve questions, and missing/malformed classification cannot cause a write. No local side docs are created.
+- Monthly side docs, actual parents, same-root grandchildren, old flat files and existing linked qa files retain correct navigation/ownership and attention. Recursive document moves preserve links, backlinks and index entries using the existing transaction owner.
+- New round edits highlight; stored mixed/legacy rounds retain per-span > round > highlight fallback with strict validation and unknown-field preservation where rewritten.
+- Both supported Neovim runtimes pass mapped unit/native/conformance tests, counted N/2N growth controls and a fresh recorded suite. Hub-arranged live acceptance verifies tag display/moves, Couch question-to-link behavior, monthly link navigation and the local question limitation.
+
+<details>
+<summary>Superseded original acceptance — historical evidence</summary>
 
 - Typing `<!-- ` under a heading offers the three keys; `key: ` offers its values; `; ` offers only unused keys; the
   closing ` -->` is inserted (tests on both nvim versions).
 - Frontmatter key and value completion covers all three keys (test).
 - The comment renders as a badge and reveals on the cursor line (test).
 
+</details>
+
 ## Plan
 
-- [ ]
+- [ ] Approve the durable plan in `workshop/plans/000419-collaborative-chat-interface-plan.md` with the hub.
+- [ ] Implement pinned policy/bundle, single-buffer admission, tag/heading ownership, side-doc readers and historical round compatibility using existing effect owners.
+- [ ] Verify both runtimes, obtain live acceptance, close on the recorded suite and land.
 
 ## Log
 
@@ -96,3 +126,14 @@ The former pair#823 per-span presentation assignment must be reconciled with the
 ### 2026-10-23 — rescope reserved; awaiting contract and scope approval
 
 Claimed #419 for this slot; status remains open until start-plan. No stacking on the unlanded #418 branch and no pivot runtime edits. Proposal and revisions are being published independently of #418's code. Exact next step: hub approves allocation and #418 resolution; then start-plan #419 from main and complete its durable implementation plan against landed ariadne#575 fixtures. The previous TTY capture was unavailable on recovery; branch, issue Log and authenticated Couch receipts are the evidence.
+
+
+### 2026-10-23 17:35 — landed v4 prerequisite; active scope and local boundary
+
+ariadne#576's revision above was verified with Git. Authenticated correction 1760fe44 supersedes the earlier peer statement that notices did not change: empty collaboration-mode reports `collaboration-mode is empty or malformed; ignored`; unread-frontmatter reports only a closed leading fence block, not a thematic-break opener. Read code and examples at the pin, not a prior snapshot.
+
+#418 and #322 are landed; start-plan created this separate main-based branch, changed the card to working and pushed it. Catch-up rebuilt substrate tools. Generated issue vocabulary changes from weave were saved to Git-local `sdlc/diagnostics/419-weave-refresh.patch` and restored before the successful start-plan; unrelated generated configuration is not included in this issue.
+
+TL 3d546ddc explicitly keeps local review single-buffer: leave questions unchanged with a visible Couch-side-doc notice; commands still apply. The active Spec and Done-when now state this exception. Pair #838 is owned by pair:3 and remains unlanded; its current plan preserves historical round/span presentation, with new writes always highlight. No unlanded branch/API is consumed.
+
+Inventory corrected two earlier assumptions: Parley has no executable side-doc allocator to reuse, and its packaged export is v2, not v3 as the 11:15 compatibility note said. The v4 sync/consumer upgrade is atomic; current packaged runtime does not read live Ariadne. Existing generic tags, section ranges, attention discovery and side ownership all need explicit reconciliation, listed in the durable plan. No runtime code or tests changed during planning.
