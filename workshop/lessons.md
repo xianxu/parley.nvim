@@ -1078,3 +1078,6 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - After an operator scope pivot, keep prior plan rows explicitly historical and publish a current entity inventory; do not let an old completed checklist claim that removed runtime APIs remain part of delivery.
 
 - #322 close: when renaming a workflow in documentation, trace each recording/exclusion claim to its actual producer before replacing the old label. A broad text substitution can turn an obsolete exception into a false statement about a now-recorded path.
+
+
+- #428: a span's named highlight group does not describe its composed screen style. Semantic diagnostics can add an underline over a separate tint, then hide it when an Insert-mode refresh is deferred. Test effective cells across real mode changes and diagnostic publications; keep decoration policy in the owning namespace rather than changing global diagnostic behavior or adding mode hooks.

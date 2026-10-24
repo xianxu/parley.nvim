@@ -30,6 +30,9 @@ local round_marks = {}
 local function ensure_namespaces()
     if not diag_ns_id then
         diag_ns_id = vim.api.nvim_create_namespace(DIAG_NS)
+        -- Explanations annotate the tint; diagnostic underlines hide on Insert
+        -- refresh and would otherwise make that edit style mode-dependent.
+        vim.diagnostic.config({ underline = false }, diag_ns_id)
     end
     if not hl_ns_id then
         hl_ns_id = vim.api.nvim_create_namespace(HL_NS)

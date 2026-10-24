@@ -44,9 +44,9 @@ separate and stay).
 
 ## Plan
 
-- [ ] Configure underline=false once at the owned edit-explanation diagnostic namespace, retaining tint highlights and all diagnostic data (ARCH-DRY).
-- [ ] Add red-first native effective-cell comparisons across modes/refreshes, round/skill/footnote writers, tint kinds and custom styles; keep independent reference/foreign-diagnostic controls.
-- [ ] Update README/atlas, verify existing render/round/diagnostic display tests, then the recorded pre-close check and boundary review.
+- [x] Configure underline=false once at the owned edit-explanation diagnostic namespace, retaining tint highlights and all diagnostic data (ARCH-DRY).
+- [x] Add red-first native effective-cell comparisons across modes/refreshes, round/skill/footnote writers, tint kinds and custom styles; keep independent reference/foreign-diagnostic controls.
+- [x] Update README/atlas and verify existing render/round/diagnostic display tests. Recorded pre-close and boundary review remain workflow gates.
 
 ## Log
 
@@ -60,3 +60,14 @@ Native probe /Volumes/TestScratch/parley428.qkdGOp/probe.log on unchanged code p
 Owner chain: edit_round's on_lines schedules skill_render.rederive_round; set_round_diagnostics replaces INFO records in parley_skill; Neovim diagnostic.show calls hide before checking update_in_insert (default false), then defers its handlers until InsertLeave. This is an incidental diagnostic overlay, not an intentional Insert-mode edit style. Cause and fix plan reported to hub before code.
 
 The intended edited-span style is already the background-only ParleyEditAdd/ParleyEditChange tint (#386/#387). Disable diagnostic underline in that owned namespace rather than enabling all diagnostic refresh work in Insert or adding mode callbacks. The same namespace owns round, review-skill and footnote explanations, so enumerate all three writers. Do not change the global diagnostic options, semantic records, gutter/display handlers, or explicit reference groups. User highlight overrides remain supported and mode-independent. This adds no state a user acts on, no per-keystroke work, no timer, and no durable artifact. One namespace-local configuration at lazy namespace creation; the native matrix reads composed UI cell attributes, not merely named group definitions.
+
+
+### Implementation and targeted verification
+
+Hub approved93e9445b-7fbe-4420-99f6-191c12326a63: namespace-local underline=false only, retaining tint, messages, signs, independent reference underlines and foreign settings, with README discoverability. Added that one configuration at lazy skill_render namespace creation; no global setting, mode hook, update-in-insert policy, per-keystroke work or diagnostic payload changes.
+
+Native red.log on unchanged production code:0/6/0, all six composed-cell tests fail at the Normal/Insert refresh comparison. Green.log after the local configuration:6/0/0, clean census. Expanded to7 cases including explicit user underline styling. The new test reads actual composed UI attributes with nvim__inspect_cell at a buffer position, enters Normal/Insert/Replace/Visual/Visual-line through native input, and re-publishes each diagnostic kind. Add/change/round/skill/footnote/custom styles remain stable; reference and foreign diagnostic underlines survive, messages and sign marks remain. An initial strengthened global-config control counted the pre-existing custom handler registration as a setting mutation; corrected it to compare every pre-existing global option and the foreign namespace's full options. No production adjustment was needed for that fixture correction.
+
+Final focused-final.log: exits0,67/0/0 across skill_render, skill_render_round, edit_round, edit_round_hooks, review_diag_display, highlight_groups, native effective-cell matrix and arrival architecture guards. operator-native.log on installed /opt/homebrew/bin/nvim: exits0,7/0/0; clean process censuses on both. Final lint and diff check pending. Logs and initial cause probe retained under /Volumes/TestScratch/parley428.qkdGOp. README explains that skill and agent-edit explanations now show without diagnostic underlines; atlas maps the namespace-local rule. No operator stage touched. Next: pushed-head pre-close, close review, then hub-sequenced live check or landing instruction.
+
+Final lint-final.log exits0,858 files/0warnings/errors; git diff-check clean. All implementation and targeted verification is checkpointed before the recorded pre-close check.

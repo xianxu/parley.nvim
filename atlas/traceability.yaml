@@ -310,6 +310,7 @@ atlas:
       - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_groups_spec.lua
+      - tests/integration/edit_highlight_native_spec.lua
       - tests/unit/color_spec.lua
       - tests/integration/highlight_typing_spec.lua
       - tests/arch/performance_line_reader_spec.lua
@@ -879,6 +880,7 @@ atlas:
       - tests/unit/fake_couch_round_spec.lua
       - tests/unit/skill_render_round_spec.lua
       - tests/integration/edit_round_spec.lua
+      - tests/integration/edit_highlight_native_spec.lua
       - tests/integration/edit_round_hooks_spec.lua
 
   modes/interview:
@@ -1280,6 +1282,7 @@ atlas:
       - lua/parley/render.lua
       - lua/parley/highlighter.lua
       - lua/parley/highlight_groups.lua
+      - lua/parley/skill_render.lua
       - lua/parley/color.lua
       - lua/parley/timezone_diagnostics.lua
       - lua/parley/init.lua
@@ -1289,6 +1292,7 @@ atlas:
       - tests/integration/chat_treesitter_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_groups_spec.lua
+      - tests/integration/edit_highlight_native_spec.lua
       - tests/unit/color_spec.lua
       - tests/integration/highlight_typing_spec.lua
       - tests/unit/timezone_diagnostics_spec.lua

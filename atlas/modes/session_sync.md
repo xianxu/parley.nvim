@@ -425,7 +425,9 @@ compared as instants. BufUnload forgets the buffer.
 
 Drawing is `skill_render`'s round kind: `ParleyEditAdd` or `ParleyEditChange`
 highlights by span kind (#387: faint tints of `Normal`'s background) in the `parley_round_hl` namespace, plus INFO diagnostics with
-source `parley-round` in the shared review namespace. Every writer of that
+source `parley-round` in the shared review namespace. Diagnostic underlines are
+disabled only there, keeping the span tint consistent during Insert-mode
+refreshes. Messages and signs retain their existing behavior. Every writer of that
 namespace replaces only the kind it owns, through one `replace_kind` helper.
 The round is owned by the round functions alone, so a review-skill run, an
 undo/redo snapshot or a dismiss leaves it in place. Footnote and review-skill
