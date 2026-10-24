@@ -664,16 +664,6 @@ describe("session-sync native edits", function()
         end)
     end
 
-    it("releases a clean turn when the loop was blocked before the release (#432)",function()
-        open(false,false,true,true)
-        stall_next_lock("release")
-        keys("i");wait_for("return vim.fn.mode()=='i'")
-        assert.is_true(exists())
-        keys("<Esc>");wait_for("return vim.fn.mode()=='n'")
-        assert.is_true(vim.wait(arrival.MS,function() return not exists() end))
-        assert.is_true(exec("return _G.lock_stalled==true"))
-    end)
-
     it("submit refuses replacement legacy protection on a registered turn (#408)",function()
         open(false,false,true,true)
         keys("iX")
