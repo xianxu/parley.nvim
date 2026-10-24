@@ -1,8 +1,8 @@
 ---
 id: 000432
-status: open
+status: working
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-24
 estimate_hours:
 github_issue:
 flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits bounds operator calls and full reads across 8 confirmed turns (#408)]
