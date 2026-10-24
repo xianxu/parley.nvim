@@ -209,6 +209,7 @@ atlas:
       - tests/unit/markdown_heading_spec.lua
       - tests/unit/markdown_heading_conformance_spec.lua
       - tests/integration/entity_textobj_spec.lua
+      - tests/integration/review_tag_refusal_spec.lua
       - tests/integration/entity_delete_parity_spec.lua
 
   chat/lifecycle:
@@ -818,6 +819,7 @@ atlas:
       - tests/unit/review_brief_spec.lua
       - tests/unit/review_chat_structure_spec.lua
       - tests/unit/review_chat_policy_spec.lua
+      - tests/unit/review_chat_fixture_spec.lua
       - tests/unit/review_local_proposal_spec.lua
       - tests/unit/review_notice_spec.lua
       - tests/unit/review_tag_consumers_spec.lua

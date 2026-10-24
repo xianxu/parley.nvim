@@ -26,8 +26,11 @@ function M.snapshot(lines)
     local header = values.header(lines)
     local body_start = header.readable and header.close + 1 or 1
     local legacy_evidence, legacy_error = values.evidence(lines, header)
+    -- Closed metadata owns its bytes even when its legacy YAML is unreadable.
+    -- Mask it before the Markdown grammar can promote metadata text to structure.
+    local structural_start = header.closed and header.close + 1 or 1
     local source = {}
-    for row, line in ipairs(lines) do source[row] = row < body_start and "" or line end
+    for row, line in ipairs(lines) do source[row] = row < structural_start and "" or line end
     local text = table.concat(source, "\n")
     local ok, result = pcall(function()
         assert(vim.treesitter.language.add("markdown_inline"), "bundled Markdown inline parser unavailable")

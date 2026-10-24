@@ -71,7 +71,8 @@ function M.scan(lines, facts)
     end
     for _, index in ipairs(stack) do endings[index] = #lines end
     local tags = {}
-    for row = facts.body_start, #lines do
+    local tag_start = math.max(facts.body_start, (facts.protected_header_end or 0) + 1)
+    for row = tag_start, #lines do
         if trim(lines[row]) == "@@chat@@" and not (facts.literal_lines or facts.code_lines)[row] then
             if atx[row + 1] then tags[row] = true; scan.tags[#scan.tags + 1] = row
             else scan.misplaced[#scan.misplaced + 1] = row end

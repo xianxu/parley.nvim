@@ -107,3 +107,21 @@ describe("chat policy work", function()
         assert.is_true(large < small * 2.5 + 100, ("VM work grew from %d to %d"):format(small, large))
     end)
 end)
+
+describe("closed unreadable header structure", function()
+    it("does not let metadata tags or pseudoheadings own body items", function()
+        for _, fences in ipairs({ { "---", "---" }, { "---", " --- " }, { "\t---", "---" }, { "---\r", "---\r" } }) do
+            local lines = { fences[1], "...", "@@chat@@", "## Inbox", fences[2], "1. body item", "🤖[command]" }
+            local result = scan(lines)
+            assert.same({}, result.headings)
+            assert.same({}, result.tags)
+            assert.same({}, result.misplaced)
+            assert.same({}, result.sections)
+            assert.same({ "frontmatter could not be read, so any legacy mode keys in it were not read" }, result.notices)
+            local err = require("parley.skills.review.collaboration").validate_edits(table.concat(lines, "\n"),
+                { { old_string = "body item", new_string = "edited body item", explain = "command work" } },
+                { review_asks = { { line = 6, col = 0, raw = "🤖[command]", kind = "command" } } })
+            assert.is_nil(err)
+        end
+    end)
+end)

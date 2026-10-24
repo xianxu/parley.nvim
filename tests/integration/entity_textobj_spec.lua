@@ -292,6 +292,45 @@ describe("entity text objects", function()
 	-- <C-g>/<M-> families, so "it works in the plugin" does not imply "it works
 	-- in the app". This drives the APP's own option builder, not the shipped
 	-- defaults, and asserts the objects are really mapped on a prepped buffer.
+    it("keeps chat tags with native section yank, paste, delete and undo", function()
+        local lines = { "# topic: tags", "- file: tags.md", "---", "", "💬: q", "🤖: [A]",
+            "## Prior", "old", "@@chat@@", "## Tagged", "body", "", "@@chat@@", "## Next", "tail" }
+        for _, inner in ipairs({ false, true }) do
+            local buf = prepped(lines)
+            vim.api.nvim_win_set_cursor(0, { 10, 0 })
+            vim.cmd("normal " .. (inner and "yie" or "yae"))
+            assert.same(inner and { "body" }
+                or { "@@chat@@", "## Tagged", "body", "" }, vim.fn.getreg('"', 1, true))
+            vim.cmd("normal! Gp")
+            local after = body(buf)
+            assert.equals(inner and "body" or "@@chat@@", after[16])
+            if not inner then assert.equals("## Tagged", after[17]) end
+            vim.cmd("normal! u")
+            assert.same(lines, body(buf))
+            vim.api.nvim_win_set_cursor(0, { 9, 0 })
+            vim.cmd("normal " .. (inner and "die" or "dae"))
+            assert.equals("@@chat@@", body(buf)[9])
+            assert.equals(inner and "## Tagged" or "## Next", body(buf)[10])
+            vim.cmd("normal! u")
+            assert.same(lines, body(buf))
+        end
+    end)
+
+    it("gives command deletion the same tagged section as the native operator", function()
+        local lines = { "# topic: tags", "- file: tags.md", "---", "", "💬: q", "🤖: [A]",
+            "## Prior", "old", "@@chat@@", "## Tagged", "body", "", "@@chat@@", "## Next", "tail" }
+        local buf = prepped(lines)
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        vim.cmd("normal dae")
+        local native = body(buf)
+        buf = prepped(lines)
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        parley.cmd.DeleteEntity()
+        assert.same(native, body(buf))
+        assert.equals("@@chat@@", body(buf)[9])
+        assert.equals("## Next", body(buf)[10])
+    end)
+
 	it("installs the text objects under the packaged app profile", function()
 		local roots = { data = base_tmp_dir .. "/app/data", state = base_tmp_dir .. "/app/state" }
 		parley.setup(require("parley.starter_config").options(roots))

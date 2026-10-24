@@ -34,6 +34,8 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
     return false, nil, nil
   end
 
+  if opts.review_tags and opts.review_tags[line_number] then return false, nil, nil end
+
   -- Check different types of outline items
   local user_prefix = config.chat_user_prefix
 
@@ -216,7 +218,8 @@ function M._build_picker_items(bufnr, config, opts)
   if opts.cursor and (not saved or saved.doc~=doc or saved.tick~=tick) then
     return {},{status="stale"}
   end
-  local state=saved or {doc=doc,tick=tick,next=0,last=Document.size(doc).rows}
+  local state=saved or {doc=doc,tick=tick,next=0,last=Document.size(doc).rows,
+    review_tags={}}
   local items={}
   local function pause(status)
     local key={};cursors[key]=state
@@ -237,6 +240,16 @@ function M._build_picker_items(bufnr, config, opts)
     local text,complete=label(bufnr,row.start_row)
     local item={value={lnum=row.start_row+1,identity=row.handle}}
     local tag=token.preface_tag and question_tags.parse_tag(text)
+    -- Keep ordinary outline pages bounded. Only a plausible source marker
+    -- needs the explicit action's native structural snapshot, once per cursor.
+    local candidate=text
+    if token.heading_level and row.start_row>0 and not state.review_checked then
+      candidate=Reader.for_buffer(bufnr):chunk({row=row.start_row-1,col=0,max_bytes=4096}).bytes
+    end
+    if not state.review_checked and candidate:match("^%s*@@chat@@") then
+      state.review_checked=true
+      state.review_tags=question_tags.review_tags_for_buffer(bufnr)
+    end
     if token.kind=="user" then
       item.type="question";item.display="  "..text
       if sem.preface_origin then
@@ -249,11 +262,12 @@ function M._build_picker_items(bufnr, config, opts)
         end
       end
     elseif token.preface_tag then
-      if sem.preface or tag=="_" then item=nil
+      if state.review_tags[row.start_row+1] or sem.preface or tag=="_" then item=nil
       else item.type="annotation";item.display="  → "..(tag or text:sub(3)) end
     elseif token.kind=="branch" then item.type="branch";item.display="🌿 "..text
     elseif token.heading_level and token.heading_level<=markdown_heading.MAX_LEVEL then
       item.type="heading";item.display=string.rep("  ",token.heading_level)..text
+      if state.review_tags[row.start_row] then item.value.tag_lnum=row.start_row end
     else item=nil end
     if item then
       if state.pending then items[#items+1]=state.pending;state.pending=nil end
@@ -337,6 +351,7 @@ local function build_file_outline_items(file_path, config, depth)
   local code_memo = highlight_structure.code_block_memo(
     file_lines, highlight_structure.patterns(config), true)
 
+  local review_tags = question_tags.review_tags(file_lines)
   local user_prefix = config.chat_user_prefix
   for i = header_end + 1, #file_lines do
     local branches = branch_at_line[i]
@@ -344,7 +359,7 @@ local function build_file_outline_items(file_path, config, depth)
     -- Classify once. A question containing inline branches still owns a
     -- question row, so its preface can label it independently of those links.
     local is_item, item_type, formatted_line =
-      is_outline_item(nil, i, config, code_memo, file_lines, { is_chat = true })
+      is_outline_item(nil, i, config, code_memo, file_lines, { is_chat = true, review_tags = review_tags })
     if is_item and item_type ~= "branch" and (not branches or item_type == "question") then
       table.insert(items, {
         display = indent .. formatted_line,
@@ -368,7 +383,7 @@ local function build_file_outline_items(file_path, config, depth)
     end
   end
 
-  items = question_tags.apply_outline(items, file_lines, config, header_end)
+  items = question_tags.apply_outline(items, file_lines, config, header_end, review_tags)
   -- Drop trailing empty question (the placeholder prompt for the user to continue)
   if #items > 0 then
     local last = items[#items]

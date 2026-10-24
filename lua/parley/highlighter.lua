@@ -236,7 +236,10 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
             table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
         else
             local pos = 1
-            while true do
+            -- Standalone review metadata stays ordinary visible source;
+            -- rendering never parses whether its placement is valid.
+            local review_metadata = line:match("^%s*@@chat@@%s*$") ~= nil
+            while not review_metadata do
                 local tag_start, content_start = line:find("@@", pos)
                 if not tag_start then break end
                 local content_end, tag_end = line:find("@@", content_start + 1)
@@ -295,7 +298,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
             -- question itself ends in leave_row.
             elseif in_block and not in_code_block and not is_assistant and not is_local then
                 table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
-                if not shifted and line:match("^@@") then
+                if not review_metadata and not shifted and line:match("^@@") then
                     local is_tag_at_start = false
                     if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
                         is_tag_at_start = true
@@ -306,8 +309,10 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
                 end
             end
 
-            for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
-                table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
+            if not review_metadata then
+                for start_idx, _, end_idx in line:gmatch("()@(.-)@()") do
+                    table.insert(result[row], { hl_group = "ParleyAnnotation", col_start = start_idx - 1, col_end = end_idx - 1 })
+                end
             end
         end
         result[row].line_length = #line

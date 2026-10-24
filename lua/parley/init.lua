@@ -2743,7 +2743,7 @@ M.prep_chat = function(buf, file_name)
 	require("parley.tool_folds").setup(buf)
 
 	require("parley.neighborhood").attach_completion(buf)
-	require("parley.frontmatter_enum").attach(buf) -- #384: chats declare collaboration-mode too
+	require("parley.frontmatter_enum").attach(buf) -- Declared frontmatter values only; retired review keys have no completion.
 
 	if M.config.chat_prompt_buf_type then
 		vim.api.nvim_set_option_value("buftype", "prompt", { buf = buf })
@@ -3180,8 +3180,7 @@ M.setup_markdown_keymaps = function(buf)
 			-- review scope (#214 C1) — callbacks from the skill, install here
 			review_edit = review_cbs.review_edit,
 			review_menu = review_cbs.review_menu,
-			-- #316: <M-CR> sends the document to this slot's agent, steered by
-			-- its `process-instruction:` line (session-sync files submit).
+			-- Alt+Return uses Couch submission or the single-buffer local review.
 			review_next = review_cbs.review_next,
 		},
 		M.helpers.set_keymap
@@ -3189,14 +3188,11 @@ M.setup_markdown_keymaps = function(buf)
 
 	-- #312: 🤖 marker threads on <CR>; #386: conceallevel 0, text shows literally.
 	require("parley.comment").attach(buf, "markdown")
-	-- #384: typeahead for frontmatter enum values (collaboration-mode, …).
+	-- Typeahead for currently declared frontmatter values.
 	require("parley.frontmatter_enum").attach(buf)
 	require("parley.remote_session").observe(buf)
 	session_sync.attach(buf)
 	require("parley.agentic_document").attach(buf)
-	if review_cbs.review_next then
-		require("parley.review_send").attach(buf)
-	end
 end
 
 M.setup_buf_handler = function()
@@ -4713,10 +4709,14 @@ local function delete_entity_range(scope)
 	end
 
 	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-	local range = require("parley.entity_range").range(parsed_chat, lines, cursor_line, {
+	local range, tag_error = require("parley.entity_range").range(parsed_chat, lines, cursor_line, {
 		scope = scope,
 		config = M.config,
 	})
+    if tag_error then
+        require('parley.review_notice').show({tag_error}, 'review: section unavailable')
+        return
+    end
 	if not range then
 		M.logger.warning("DeleteEntity: no entity at cursor")
 		return
@@ -4974,11 +4974,34 @@ end
 ---@param cursor_col integer # 0-indexed
 ---@param is_chat boolean # directory references open in netrw only when true
 ---@return "opened"|"none"|"failed"
-local function open_reference_under_cursor(buf, current_line, cursor_col, is_chat, open)
+local function open_reference_under_cursor(buf, current_line, cursor_col, is_chat, open, review_tags, review_tag_error)
     open = open or follow_file
 	if not current_line then
 		return "none"
 	end
+
+    if current_line:match('^%s*@@chat@@%s*$') then
+        if review_tag_error then
+            require('parley.review_notice').show({review_tag_error}, 'review: tag lookup unavailable')
+            return 'failed'
+        end
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        if not review_tags then
+            local count = vim.api.nvim_buf_line_count(buf)
+            local size = vim.api.nvim_buf_get_offset(buf, count)
+            if size < 0 or size > 1048576 then
+                require('parley.review_notice').show({'chat tag lookup exceeds 1 MiB'}, 'review: tag lookup unavailable')
+                return 'failed'
+            end
+            local err
+            review_tags, err = require('parley.question_tags').review_tags(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+            if err then
+                require('parley.review_notice').show({err}, 'review: tag lookup unavailable')
+                return 'failed'
+            end
+        end
+        if review_tags[row] then return 'none' end
+    end
 
 	-- Link forms that carry their own target. Each reports its own failure, so
 	-- a non-nil answer is terminal either way.
@@ -5154,11 +5177,17 @@ M.cmd.OpenFileUnderCursor = function()
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local candidates = require("parley.reference_candidates")
 	local parsed, status = require("parley.entity_textobj").parsed_for(buf, lines)
-	local range, in_code = require("parley.entity_range").navigation_range(parsed, lines, cursor[1],
+	local range, in_code, review_tags, review_tag_error = require("parley.entity_range").navigation_range(parsed, lines, cursor[1],
 		{config = M.config})
+    if review_tag_error then
+        require('parley.review_notice').show({review_tag_error}, 'review: tag lookup unavailable')
+        restore_insert()
+        return
+    end
 	local transcript = parsed ~= nil or require("parley.chat_parser").transcript_header_end(lines) ~= nil
 	local scan_opts = {config = M.config, in_code = in_code, transcript = transcript,
-		branch_prefix = get_branch_prefix()}
+        review_tags = review_tags, branch_prefix = get_branch_prefix()}
+    if review_tags and review_tags[cursor[1]] then restore_insert(); return end
 	local direct
 	for _, item in ipairs(candidates.markdown_spans(lines, {first = 1, last = #lines}, scan_opts)) do
 		if item.end_row > item.row and cursor[1] >= item.row and cursor[1] <= item.end_row
@@ -5166,7 +5195,7 @@ M.cmd.OpenFileUnderCursor = function()
 			and (cursor[1] < item.end_row or cursor[2] < item.end_col) then direct = item; break end
 	end
 	local outcome = direct and (open_markdown_reference(direct.span, 0, buf, followed_open) or "none")
-		or open_reference_under_cursor(buf, current_line, cursor[2], is_chat, followed_open)
+		or open_reference_under_cursor(buf, current_line, cursor[2], is_chat, followed_open, review_tags)
 	if outcome ~= "none" then restore_insert(); return end
 	if direct then fallback(direct); return end
 	local artifact_ref = require("parley.artifact_ref")
@@ -5187,7 +5216,7 @@ M.cmd.OpenFileUnderCursor = function()
 		elseif item.kind == "branch" then
 			result = open_branch_ref(span, buf, followed_open)
 		else
-			result = open_reference_under_cursor(buf, span, 0, is_chat, followed_open)
+			result = open_reference_under_cursor(buf, span, 0, is_chat, followed_open, review_tags, review_tag_error)
 		end
         -- A same-file anchor intentionally moved this source window's cursor.
         if result ~= "opened" or vim.api.nvim_get_current_buf() ~= buf then restore_cursor() end
