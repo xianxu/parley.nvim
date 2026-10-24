@@ -37,5 +37,6 @@ start-plan's catch-up runs weave refresh, which regenerates construct/generated/
 ## Log
 
 ### 2026-10-23
+- 2026-10-23: closed — Generated output only: construct/generated/vocabulary/issue.json and its weave-sha256 as weave refresh wrote them against ariadne 500f48f1. Two independent regenerations were byte-identical (cmp), and the diff is one removed key, scaffold.collaboration_mode. After the commit the resting-branch start-plan path is clean: the files no longer differ from what weave writes.; review verdict: SHIP
 
 - Weave refresh against ariadne 500f48f1 regenerated both files on main-slot1, and start-plan refused the dirty tree. Saved them aside, restored, reran start-plan (no catch-up the second time), then copied them back here. No stash was used. The regeneration was byte-identical on both runs (cmp). The only content change is that scaffold.collaboration_mode is dropped.
