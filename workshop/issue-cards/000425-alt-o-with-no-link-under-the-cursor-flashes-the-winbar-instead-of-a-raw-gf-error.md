@@ -1,6 +1,6 @@
 ---
 id: 000425
-status: working
+status: codecomplete
 created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.29
+tracker:
+    version: 1
+    completion:
+        token: close-17ba9ee404c3
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 3f9321f80a8aff88078f4d30f69c04637b8586ed
+        evidence_commit: 7e43bea490d4b9387f4ae8d3823d32890b5b11bc
 ---
 
 # Alt+o with no link under the cursor flashes the winbar instead of a raw gf error
