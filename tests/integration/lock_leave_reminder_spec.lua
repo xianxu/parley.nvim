@@ -272,4 +272,37 @@ describe("lock leave reminder", function()
         assert.equals(3, red); assert.equals(1, #messages)
     end)
 
+    for _, stage in ipairs({ "queued", "active" }) do
+        for _, departure in ipairs({ "buffer", "window" }) do
+            it("lets leave feedback supersede a " .. stage .. " no-target pulse on " .. departure .. " departure", function()
+                edit()
+                band.flash_notice(win, "No file to open")
+                if stage == "active" then tick(pulse()) end
+                if departure == "buffer" then swap() else vim.cmd("vsplit") end
+                vim.wait(1) -- drain: scheduled pulse setup has no external work
+                assert.equals(1, #messages, "leave warning must not coalesce with a quiet notice")
+                assert.truthy(messages[1]:find("unsubmitted: Alt+Return to submit", 1, true))
+                local leave = timers[#timers]
+                assert.truthy(leave)
+                finish(leave)
+                assert.is_true(leave.closed)
+                assert.falsy(label():find("ParleySessionSyncLeave", 1, true))
+            end)
+        end
+    end
+
+    for _, stage in ipairs({ "queued", "active" }) do
+        it("keeps a " .. stage .. " leave pulse when a quiet notice arrives", function()
+            edit(); swap()
+            local leave = pulse()
+            if stage == "active" then tick(leave) end
+            band.flash_notice(win, "No file to open")
+            vim.wait(1) -- drain: quiet notice setup
+            assert.falsy(leave.closed, "quiet feedback must not cancel a leave reminder")
+            assert.equals(1, #messages)
+            finish(leave)
+            for _, bar in ipairs(painted) do assert.falsy(bar:find("No file to open", 1, true)) end
+        end)
+    end
+
 end)
