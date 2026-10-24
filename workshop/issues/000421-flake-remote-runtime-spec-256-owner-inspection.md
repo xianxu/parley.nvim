@@ -44,6 +44,8 @@ Design (test-only; product deadlines unchanged):
 ## Done when
 
 - The root cause is fixed (never a retry loop or a longer timeout); closing this issue unregisters the tests.
+- (Revision 1, #430 fold) Both #430 cases ('joins an admitted absolute deadline while retaining a possibly published binding', and 'keeps the absolute-deadline observer until its native exit delivery joins') expire only after the fake's held publication; their registrations are removed and #430 is closed as fixed by #421.
+- (Revision 2) Every hrtime deadline timer in lua/ arms through helper.start_deadline or helper.start_absolute_deadline, enforced by tests/arch/deadline_timer_spec.lua.
 
 ## Plan
 
@@ -84,3 +86,4 @@ Design (test-only; product deadlines unchanged):
 - remote_session mapping (all reply-gate users): 278/0/0 on nvim 0.12.5 and 0.11.7.
 - Third 20-rep load run on the final code (deadline_timer, editor_endpoint_registry, remote_process, remote_runtime specs; 3 CPU spinners plus an fsync dd loop, 2400 s cap, trap cleanup): 20/20.
 - Recorded suite on bbe93c63 (attempt 36c10d10): every spec ran; the one failure was session_sync_native 'undo releases acquisition baseline, redo retakes: watch autosave=true' at :1593 ('Remote view unavailable'), the #427 signature. It passed 4/4 in targeted runs on unchanged session-sync code; registered onto #427 per the flake rule. The head advances with this entry for the rerun.
+- Close round 1: FIX-THEN-SHIP (Review-Window cd5fc8bf..71c8a0b3). BR-1 (Important): Done when omitted the #430 fold. Fixed: Done when now carries both revisions; #430's two cases are unregistered; #430 has a Log entry and is set to working (only sdlc close may set codecomplete), to be finished when #421 lands. Minor, lint scope: the lint now also catches vim.defer_fn and timer_start deadlines, and a hand-rolled remaining time passed to start_deadline; its comment lists what it still cannot see (an earlier-line computation such as tasker.lua's injected-clock reconcile delay). Minor, ARCH-DRY: helper.start_absolute_deadline computes the remaining time once and goes through the start_deadline seam; remote_runtime, remote_process and document_registry use it. The busy wait is tests/helpers/loop_clock.block. Verified: remote_session mapping 278/0/0 on nvim 0.12.5 and 0.11.7; lint 2/0/0; a hand-rolled control fails the new rule.

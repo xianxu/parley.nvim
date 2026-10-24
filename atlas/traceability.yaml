@@ -1496,6 +1496,7 @@ atlas:
       - lua/parley/remote_process.lua
       - lua/parley/document_registry.lua
       - tests/helpers/fake_process_source.lua
+      - tests/helpers/loop_clock.lua
       - tests/helpers/remote_runtime_fixture.lua
       - tests/helpers/fixture_files.lua
       - tests/helpers/embedded_nvim.lua

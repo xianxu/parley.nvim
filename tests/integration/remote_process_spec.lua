@@ -117,10 +117,9 @@ describe('bounded remote process evidence', function()
     end)
     it('measures its deadline from now even after the loop was blocked (#421)', function()
         local source = fake.new({ [12]={started=stamp} }); source.hold=true
-        -- Synchronous work leaves libuv's cached clock 1.2 s behind; a timer
-        -- armed from that stale clock would expire this 1 s deadline at once.
-        local stop = uv.hrtime() + 1200 * 1e6
-        while uv.hrtime() < stop do end
+        -- 1.2 s of synchronous work: a timer armed from the stale loop clock
+        -- would expire this 1 s deadline at once.
+        require('tests.helpers.loop_clock').block(1200)
         local receipt = observe({12}, {source=source,deadline_ms=1000})
         vim.wait(100, function() return false end) -- absence: a stale-clock deadline fires in the first loop turns
         assert.is_nil(receipt.status, vim.inspect(receipt.status))

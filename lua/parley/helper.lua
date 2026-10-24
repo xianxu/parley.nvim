@@ -22,6 +22,17 @@ _H.start_deadline = function(timer, ms, callback, runtime)
 	return timer:start(ms, 0, callback)
 end
 
+--- Start a one-shot timer for an absolute `deadline_ms` on the uv.hrtime()/1e6
+--- clock (#421): at least 1 ms, measured once the loop clock is refreshed.
+--- Goes through _H.start_deadline, so a spec that holds that seam holds this.
+--- @param timer userdata a uv timer
+--- @param deadline_ms number
+--- @param callback function
+_H.start_absolute_deadline = function(timer, deadline_ms, callback)
+	local clock = vim.uv or vim.loop
+	return _H.start_deadline(timer, math.max(1, math.ceil(deadline_ms - clock.hrtime() / 1e6)), callback)
+end
+
 --- vim.defer_fn for a deadline (#382): `fn` runs on the main loop `ms` after
 --- now, with the loop clock refreshed first. Returns the timer, closed after
 --- it fires, so a caller may stop it earlier as with vim.defer_fn.

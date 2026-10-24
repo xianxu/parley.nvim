@@ -420,8 +420,7 @@ describe('private editor RPC runtime ownership', function()
     it('measures its acquisition deadline from now even after the loop was blocked',function()
         -- The registered #421 failure: synchronous seeding left libuv's cached
         -- clock behind the budget, so the deadline timer fired at once.
-        local stop=uv.hrtime()+1200*1e6
-        while uv.hrtime()<stop do end
+        require('tests.helpers.loop_clock').block(1200)
         local result=await_start({timeout_ms=1000})
         assert.equals('ready',result.kind,vim.inspect(result))
     end)

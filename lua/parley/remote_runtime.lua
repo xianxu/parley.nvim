@@ -108,9 +108,9 @@ local function transaction(timeout, callback, body, deadline)
         elseif ctx.request then pcall(uv.cancel,ctx.request) end
     end
     timer=uv.new_timer()
-    -- The deadline is hrtime; refresh the loop clock so synchronous work before
-    -- acquire cannot make the timer fire at once (#382, #421).
-    require('parley.helper').start_deadline(timer,math.max(1,math.ceil(ctx.deadline-now())),
+    -- Refreshes the loop clock first, so synchronous work before acquire cannot
+    -- make the timer fire at once (#382, #421).
+    require('parley.helper').start_absolute_deadline(timer,ctx.deadline,
         vim.schedule_wrap(function() operation.cancel('runtime deadline') end))
     co=coroutine.create(function() check();return body(ctx) end)
     vim.schedule(function() resume() end)
