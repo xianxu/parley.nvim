@@ -1741,6 +1741,15 @@ describe("session-sync native edits", function()
         end)
     end
 
+    -- Control for the empty-notice assertion below: against a Couch from before
+    -- pair#437, an unregistered open's lookup fails and its notice is captured.
+    it("an unavailable remote-view lookup reaches the captured notices (#427)", function()
+        exec('vim.env.FAKE_COUCH_LOOKUP = "legacy"')
+        open(false)
+        wait_for("return #notifications > 0")
+        assert.same({ "Remote view unavailable; reopen the file to retry" }, exec("return notifications"))
+    end)
+
     for _, autosave in ipairs({false, true}) do
         for _, reloaded in ipairs({"open", "watch", "checktime"}) do
             it("undo releases acquisition baseline, redo retakes: " .. reloaded .. " autosave=" .. tostring(autosave), function()
