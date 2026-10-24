@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "96ef3248"}
 ---
 
 # substrate refresh: regenerated vocabulary after ariadne#576
