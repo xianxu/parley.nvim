@@ -709,7 +709,7 @@ describe("session-sync native edits", function()
         assert.equals("unavailable",exec("return _G.slowed_release"))
     end)
 
-    it("retries a clean release whose reply was lost, so the next turn is new (#432)",function()
+    it("retries a clean release whose reply was lost and the next turn is new (#432)",function()
         open(false,false,true,true)
         local calls=slow_next_release("after")
         keys("i");wait_for("return vim.fn.mode()=='i'")
