@@ -3,6 +3,17 @@
 ## Highlight Groups
 Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `ParleyThinking`, `ParleyAnnotation`, `ParleyReference`, `ParleyFootnote`, `ParleyPickerApproximateMatch`, `InterviewTimestamp`, `InterviewThought`) linked to standard Neovim groups. `ParleyReference` (default underline) marks drill-in `[referenced span]` brackets — see [chat/drill_in](../chat/drill_in.md). `ParleyFootnote` (default `DiagnosticHint`) marks managed definition-footnote footer lines. Review markers (#312, see [modes/review](../modes/review.md#marker-rendering-312-386)): `ParleyReviewQuoted` / `ParleyReviewStrike` paint a marker's anchor, `ParleyReviewBroken` (`DiagnosticUnderlineError`) a marker that doesn't close on its line. Edited spans (#386, #387) — review-skill edits, a define's term, the agent's round — get only the edited text marked: `ParleyEditAdd` when the edit replaced nothing, `ParleyEditChange` otherwise (`presentation.kind`), and a deletion leaves no trace. Both are faint background tints of `Normal`'s bg (15% toward green / blue, `lua/parley/color.lua`'s `blend`; with no `Normal` bg, from black or white by `'background'`), so the text keeps its color in any theme. Override via `highlight.edit_add` / `highlight.edit_change`. `:colorscheme` runs `:hi clear`, which drops every Parley group, so each module that defines groups (highlighter, session_sync, attention, issue_tracker, float_picker, review diag_display) hands its definer to `lua/parley/highlight_groups.lua`'s `keep`, and one `ColorScheme` autocmd re-runs them all. `tests/integration/highlight_groups_spec.lua` refuses a module that sets a Parley group without registering.
 
+## Chat review metadata (#419)
+
+A standalone `@@chat@@` line stays visible as ordinary source, in Markdown and
+chat buffers. It gets no tag/reference/annotation decoration or conceal; inline
+ordinary tags retain their existing styling. There is no chat-section/body tint
+or review-policy parse on the redraw path. Structural meaning belongs to the
+[review policy](../modes/review.md#chat-metadata-and-ownership), not the painter.
+New local command edits still use edit highlights. Stored agent rounds instead
+follow their historical per-span presentation; current document keys do not
+change those decorations.
+
 ## Exchange partitions contain fence state (#218)
 
 `💬:` / `🤖:` / `🔒:` / `🌿:` at **column zero** are hard partitions: any open

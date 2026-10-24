@@ -90,7 +90,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [Skill System](skills/skill-system.md): Review, voice application, and term definition.
 - [Interview Mode](modes/interview.md)
 - [Raw Mode](modes/raw_mode.md)
-- [Document Review](modes/review.md)
+- [Document Review](modes/review.md): One collaborative policy, local command review, Couch side answers, and legacy compatibility.
 - [Session-Sync Files](modes/session_sync.md)
 - [Private Editor Endpoints](modes/remote_session.md): Listener ownership, typed publication and conservative startup cleanup.
 - [Super-Repo Mode](modes/super_repo.md)

@@ -1,20 +1,24 @@
 # Document Review
 
-Headless LLM-powered review workflow for markdown files. Users annotate
-documents with `🤖[comment]` markers, then an agent rewrites the document
-to address the comments — or run a **mode** (see Review Modes below) for a
-whole-document pass that needs no markers at all.
+Documents use one collaborative policy (#419). Direct operator edits are
+content; a ready `🤖[...]` marker is a question or a command. In Couch, the
+agent answers questions in linked side documents and applies commands in their
+stated scope. A standalone `@@chat@@` above a heading gives that section chat
+items whose answers also live in side documents.
 
-**Run flow.** A *mode* run always proceeds, even with zero markers
-(the no-marker general review). A legacy no-mode run still needs ≥1 ready `[]`
-marker. Pending `{}` markers no longer **block** submission — ready markers are
-processed, `{}` ones skipped, and pending markers surface via the **on-save**
-quickfix (`BufWritePost`), not at submission. The resubmit loop re-runs only
-while a *ready* marker remains and the ready count shrank, so a whole-doc mode
-round is effectively one-shot (inserting `{}` findings is not "stuck"). Applied
-edits are oriented by span highlights (#386: the edited text only, never the whole line; #387: `ParleyEditChange`, or `ParleyEditAdd` for an edit whose old text is empty, by `presentation.kind`) + INFO gutter diagnostics that
-**ride** subsequent edits until the next round or an explicit dismiss; a pure
-deletion leaves no trace — no highlight and no diagnostic (#387).
+Parley's local review applies command asks in the current file and leaves
+question markers unchanged, reporting
+`questions are answered in a side doc by Couch review; left unchanged`.
+It creates no side documents or multi-file writes. Ready markers inside chat
+remain ordinary asks; the surrounding operator-owned chat items stay intact.
+Pure chat items and documents without ready asks launch no provider work.
+
+A local run requires at least one ready marker, even when an old caller supplies
+mode or standing-instruction arguments. Pending agent turns do not block other
+ready work. After command progress, the owner may resubmit only while the ready
+count shrinks, at most three times; a deferred question ends that loop. A
+question-only no-op writes no journal or decoration projection. New local edits
+use span highlights and INFO explanations; deletions leave no painted span.
 
 The same marker family is also used inside chat buffers for
 [drill-in discussions](../chat/drill_in.md) (different keybindings + a chat-
@@ -100,7 +104,7 @@ tolerates #125 multi-line markers so old documents keep resolving.
 | `<M-a>`         | Accept the marker at cursor (rules below) |
 | `<M-r>`         | Reject the marker at cursor (rules below)            |
 | `<CR>`          | On a marker: open its thread float (#312). Elsewhere: native `<CR>` (count kept). Chat buffers too. |
-| `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
+| `<C-g>ve`       | Run local review for ready robot asks |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
 | `<M-s>`         | Open the **skill picker** (review is one of the skills) |
 | `<M-CR>`        | Submit the document in a Couch pane; request a mode-free local review outside Couch (below). |
@@ -121,28 +125,37 @@ Inside a Couch pane, Alt+Return in a named Markdown document follows
 [agentic document submission](session_sync.md) (#332): save, register on first
 submission, attach the existing turn engine and send `submitted: <absolute
 path>`. It adds no frontmatter and does not prompt for a process instruction.
-Ariadne's `xx-universal-review` skill reads `process-instruction:` from the
-submitted file and computes changes since its last read through Couch. Parley
-sends no instruction prose or editor diff, and keeps no review-send baseline.
-The pane's agent is the default owner; explicit `couch-owner:` overrides it,
-while a business `owner:` field does not. Confirmed membership survives header
-edits. Unknown offline membership stays editable with `Couch unavailable:
-agentic state unknown`; known attached/cached identities keep turn protection.
+The agent-side review skill reads the submitted document and the changes since
+its last read. Parley sends no instruction prose or editor diff and keeps no
+review-send baseline. The pane's agent is the default owner; explicit
+`couch-owner:` overrides it, while a business `owner:` field does not.
+Confirmed membership survives header edits. Unknown offline membership stays
+editable with `Couch unavailable: agentic state unknown`; known attached/cached
+identities keep turn protection.
 
-Outside a Couch pane, Alt+Return reports `review: local review requested` and
-calls the existing local review owner with empty arguments. It does not ask for,
-read as an instruction, or write `process-instruction:`. Plain documents and
-partial headers stay unchanged. Existing metadata is preserved; the v4 legacy-key
-mapping/notices and chat-tag policy are part of #419.
+Outside Couch, the same binding requests the local owner without a prompt or a
+standing instruction. The manifest has no selectable mode arguments.
+`process-instruction:`, other retired keys and their existing bytes stay in the
+file; they select no work. The old instruction completion/requoting hooks and
+mode popup are removed. Frontmatter `status:` completion still belongs to the
+issue vocabulary.
 
-The local review still requires a ready `🤖[...]` comment. No-marker documents
-report no work, pending-only documents ask for the operator's reply, and protected
-chat or invalid legacy collaboration routing retain their current visible
-outcomes. An unnamed buffer reports save-first. Provider errors and cancellation
-stay with the existing review/skill-invocation owner; the route notice means a
-request was made, not that generation or an edit completed. Typed legacy
-session-sync files retain their dedicated submit path. Legacy `[` instruction
-completion remains until #419 removes it; Alt+Return no longer consumes it.
+An unnamed buffer reports save-first. Pure chat items are left unchanged with
+`chat items are answered in a side doc by Couch review; left unchanged`.
+Pending-only documents ask for the operator's reply; no-ask documents report
+`read your edits; no asks`. Legacy metadata produces compatibility notices,
+not a mode gate. Typed legacy session-sync files keep their dedicated submit
+path. Dispatch, registration, save and failure handling stay with the existing
+[session-sync owners](session_sync.md).
+
+`review_notice.show` stores each exact notice in Neovim's message history and
+shows one short caption pointing to `:messages`. The caption uses the shared
+editor display units, at most 48 cells and the available width minus 16;
+whitespace is normalized only in that caption. Captured `unsilent echomsg`
+receives a JSON-encoded string as data, so newlines, quotes and pipes remain
+literal. No separate message store, watcher or queue is introduced. Native
+Normal/Insert tests retain the builtin notifier and prove subsequent typing
+continues without hit-enter.
 
 The sidecar (`*.parley-journal.md`) is excluded from review attachment
 (`is_journal_sidecar`). `<M-CR>` is free here — chat-respond's `<M-CR>` is
@@ -164,93 +177,98 @@ Review is implemented as a **skill** in the unified skill system (see the [skill
 - **Feedback**: Highlights on edited spans (`ParleyEditAdd` / `ParleyEditChange`), diagnostics from explain fields (INFO), quickfix for pending agent questions
 - **Provider**: Requires a client tool wire: Anthropic or an OpenAI-compatible provider, including CLIProxyAPI routes. Direct Google AI has no wire. Agent choice follows the [skill agent cascade](../skills/skill-system.md).
 
-## Review Modes
+## One policy and named editing briefs (#419)
 
-Review runs in a selectable **mode** (a stage of document construction). A mode is
-a sub-markdown file `lua/parley/skills/review/modes/<name>.md` = YAML frontmatter
-(behavior flags) + a prompt body. One skill owns all modes; there is no parallel
-engine. The review skill's `source(ctx)` composes the canonical round and
-grammar and optional collaboration modes in `SKILL.md`, selected mode bodies/flag values and operator instruction,
-then `local-adapter.md`. The adapter requires `propose_edits` for all responses.
-With no mode selected, explicit parser defaults retain marker-only review.
-A local invocation uses its supplied full snapshot; it introduces no editor
-change baseline.
+`review.skill.source` composes the packaged canonical round, marker grammar and
+collaboration policy, the five named editing briefs, then Parley's
+`local-adapter.md` and exact ready-marker identities. `brief.lua` reads only
+version-4 manifest members in manifest order. A brief is task context with a
+matching `name:` and body; it carries no behavior flags. The operator's ask
+selects the work and its scope. There is no standing instruction, inferred mode,
+frontier flag or markerless whole-document review.
 
-- **`lua/parley/skills/review/mode.lua`** — `parse(content)` (PURE: frontmatter →
-  `{name,scope,deletions,frontier,order,body}`) and the thin IO seam `load(dir,name)`/`list(dir)` (sorted by
-  `order` then name). Canonical name == file basename (kebab), so `load` resolves
-  by the selected name; the menu prettifies for display.
-- **Behavior flags:** `scope` (`whole-doc` | `markers-only`), `deletions`
-  (`apply-with-gutter-why` | `propose-strike` | `apply`), `frontier` (`on` | `off`
-  — when on, treat text above the topmost `🤖[]` as settled). `deletions` is
-  optional with no default (#383): export v3 (ariadne#437) retires it, and the
-  document's own `presentation:` is then the one proposal knob, copied into no
-  flag. A v2 mode file carries it. Plus `order:` — the
-  editorial-sequence position that orders the menu (developmental=1 … free-form=6).
-- **Six shipped modes:** developmental, line-editing, copy-editing, proofreading,
-  fact-check (inserts `🤖{}` findings only — no edits; resolution handed to the
-  main agent), free-form (operator instruction governs).
-- **`ctx.skill_dir` injection** (`skill_providers.lua`): the disk provider injects
-  the skill's own absolute dir into `source(ctx)` (alongside `ctx.skill_md`) so the
-  review skill reads its `modes/` subdir without re-deriving the path.
+The shipped briefs are developmental, line-editing, copy-editing, proofreading
+and fact-check. The local provider receives one captured source snapshot; the
+invocation owner validates question/command classifications against that
+snapshot's exact ready-marker identities before any tool writes. Question-only
+results are no-ops. In mixed results, commands can apply while the original
+question markers remain. Other skills keep their existing driver behavior.
+Local review admits at most 1 MiB before reading/parsing the snapshot; larger
+local requests refuse visibly and leave Couch submission available.
 
-### Canonical prompt snapshot
+### Canonical package
 
-Ariadne's `construct/local/universal-review/` owns the round, marker grammar
-and stock modes. `scripts/sync-review-protocol.py --source DIR --output
-lua/parley/skills/review` validates the versioned export and every resolved
-member's byte count and SHA256 before updating the fixed package snapshot.
-Add `--check` for a read-only freshness check. The plugin runs from its packaged
-files, with no sibling Ariadne checkout or runtime peer lookup required.
-`export.json` records the source manifest; generated `SKILL.md` combines the
-round, grammar and the optional `collaboration-modes.md` member in that order.
-That role is a singleton in version 1; older exports without it remain valid
-and the sync CLI prints a notice that the resulting prompt lacks collaboration
-modes. The shipped snapshot includes it; package tests require its presence.
-Version 2 also exports the canonical move fixtures as `fixture` members under
-`examples/<case>/`; the sync snapshots and hashes those trees but excludes them
-from prompt composition and mode discovery. Version 1 remains accepted with a
-notice that move fixtures are absent. Version 3 drops `deletions` from every
-mode record and mode file; a v3 record still carrying it is refused, and v1/v2
-records still require it. With no mode selected, the brief's default
-`deletions: propose-strike` line follows the snapshot's version: v2 keeps it,
-v3 writes none. The shipped snapshot requires both move
-cases, and the mover's projection checks load their before/after bytes through
-the manifest. Recursive generated-output preflight rejects symlinks and special
-files; stale files are reported for explicit removal. `local-adapter.md` stays Parley-owned and is appended last.
-The Couch file-edit adapter is excluded from local composition. The mapped
-bundle fixture tests exercise deterministic output and validation failures.
+The shipped source is pinned to ariadne#576, Git
+`354e5fac5c96e0b2c26350ee712eb835746a6d67`, whose
+[collaboration contract](https://github.com/xianxu/ariadne/blob/354e5fac5c96e0b2c26350ee712eb835746a6d67/construct/local/universal-review/collaboration-modes.md)
+owns the agent-side outcomes. `scripts/sync-review-protocol.py --source DIR
+--output lua/parley/skills/review` validates export version 4, roles, safe member
+paths, byte counts and SHA256 before updating the finite package. `--check`
+checks freshness without writing. Versions 1–3 are refused by this synchronizer;
+flagless briefs cannot be interpreted as the earlier mode format.
 
-### Local collaboration compatibility
+`export.json` identifies the canonical round, review convention, collaboration
+policy, named briefs and example fixtures. Generated `SKILL.md` composes the
+policy members; fixtures are validation data and never prompt prose. The package
+runs without a sibling checkout or runtime peer lookup. Parley's Lua adapter and
+`local-adapter.md` remain locally owned; stale generated mode members are removed
+explicitly. `tests/integration/review_protocol_bundle_spec.lua` is the executable
+Lua wrapper for the Python export/CLI tests, including packaged cold-copy checks.
 
-`review/collaboration_value.lua` decodes the collaboration-mode field's scalar,
-block/flow map and heading-list forms without a runtime YAML dependency.
-Unsupported YAML constructs and malformed values refuse visibly.
-Root frontmatter must be a closed block mapping; uniformly indented and
-quoted/escaped keys are decoded. Root flow maps, sequences, complex keys,
-tags/anchors/aliases and merge keys refuse instead of becoming absent routing.
-Unrelated nested metadata and literal blocks do not define root routing. The pure
-parser splits a root key from its value before scanning comments: a quote opens
-a quoted root scalar only at the value's first character. Literal quotes after
-punctuation in unrelated plain text cannot hide a legacy chat declaration (#418).
-The existing flow-map/list grammar keeps its own quote context. The pure
-`review/collaboration.lua` resolver handles normalized heading names, repeated
-headings, ATX levels 1–6, fenced code, nearest named ancestors and dangling-name
-warnings. Unknown modes and cross-mode heading conflicts refuse before local
-generation; the local review owner performs admission after review_send selects the local route.
+### Chat metadata and ownership
 
-`review.run_via_invoke` uses that plan for admission and resubmission, excluding
-chat markers. Discussion/default and collaboration answer in place; chat
-sections are skipped. Deterministic vim.notify notices report in-place routing
-and that the hub agent answers chat, including all-chat/no-marker rounds. A
-whole-document review mode can still review eligible non-chat text without
-markers. The invocation-owned validate_edits hook rejects a proposed edit that
-touches chat bytes, their boundary newlines or frontmatter before tool execution.
-Other skills preserve their existing behavior when no validator is supplied.
+A line containing only `@@chat@@` (surrounding whitespace allowed) immediately
+above an ATX heading outside code starts a chat section. Its items follow the
+pinned contract: numbered items for tag-declared chat, with supported legacy
+bullet forms retained where legacy metadata declares chat. A robot marker
+inside chat is still a normal ask. `chat_structure.snapshot` owns Markdown
+structure; pure `chat_policy` owns tag association, sections, item extents and
+notices. `collaboration` combines them with exact marker positions and protects
+frontmatter, chat metadata and operator-owned item text during local proposals.
 
-The local adapter overrides shared discussion routing explicitly. Side-doc and
-chat answer creation, cross-file folds/actions and previous-read baselines
-remain with the agent-side skill; local review creates none of those resources.
+Valid chat metadata survives context preparation and is not a file reference or
+an extra outline row. Section operations carry a supported heading's tag with
+it, including native undo. Rendering leaves standalone `@@chat@@` visible as
+ordinary source: no badge, conceal, section/body tint or semantic parse on the
+redraw path. A misplaced tag stays ordinary text and is reported when reviewed.
+
+### Historical document compatibility
+
+Before #419, selectable runtime modes could run without markers, consumed
+`process-instruction:`, and used `scope`, `frontier`, `deletions` and `order`
+flags. Those authoring paths are retired, not migration instructions for old
+files. Current code writes no replacement mode key.
+
+Readable legacy `collaboration-mode: chat`, supported chat section maps and
+heading comments still identify chat sections with a notice. Other retired
+collaboration values, presentation/instruction keys and unsupported closed
+frontmatter produce notices and do not select a mode. A leading fence without a
+closing fence is ordinary Markdown rather than a frontmatter block. Unknown
+legacy bytes are retained. `collaboration_value.evidence` is the bounded
+compatibility reader; it does not add a general YAML dependency.
+
+Older journals retain their recorded mode fields. Older Couch rounds retain
+stored round/span presentation, described in
+[session-sync history](session_sync.md#historical-round-presentation-419).
+Those fields describe historical output; current document presentation keys do
+not change it. The landed Pair#823 fixture at Git
+`aba41239d6473e2da5d3f0ce00e82129a47a2ba3` is historical codec compatibility data,
+not the authoring policy for new review work.
+
+### Side documents
+
+Couch review owns side/answer documents, follow-ups, decisions, folds and index
+writes. New links use `<name>.side/YYYY-MM/YYYY-MM-DD-NN-slug.md`; a discussion
+opened from a side document stays under the same owning `.side` root and names
+its actual immediate parent in `parent:`. Parley follows those paths and
+[confirms inherited ownership](session_sync.md#side-documents-and-owner-inheritance-378-419)
+through the existing Couch model. It adds no allocator or second writer.
+
+Flat side documents and historical nested side folders remain readable. Older
+`qa/` links continue to open without inventing Couch ownership from the filename.
+The shared `side_document_path` relation and the
+[attention scan](../ui/attention_finder.md#side-docs) understand flat and one-month
+layouts while keeping actual parenthood separate from the owning root.
 
 ## Journal
 
@@ -265,9 +283,11 @@ changes, while the journal preserves a durable record across sessions.
   (`vim.fn.sha256` compare), plus the thin IO seam `sidecar_path` / `read` /
   `append`. 4-backtick fences wrap the journal's own blocks so a 3-backtick code
   fence inside the doc or diff can't break parsing.
-- **Per round** it stores: round number (derived), mode, side, ISO timestamp,
+- **Per round** it stores: round number (derived), side, ISO timestamp,
   content hash, rationale (the per-edit `explain`s), and the unified diff. Round 0
-  is the base snapshot (written once, on the first round).
+  is the base snapshot (written once, on the first round). Historical `mode`
+  fields remain readable; new mode-free local entries use the existing neutral
+  journal representation rather than inventing a new format.
 - **Wiring**: `skill_invoke`'s `on_done` payload carries `original` /
   `new_content` / `decorations` (pure-fed); review's `on_done` builds the entry
   and calls `journal.append` (skips no-op rounds + path-less buffers).
@@ -350,24 +370,21 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- submi
 
 ## Key Files
 
-- `lua/parley/skills/review/init.lua` — skill definition (+ `source(ctx)` mode composition, `mode` arg), marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
-- `lua/parley/skills/review/mode.lua` — Mode parse (PURE) + load/list IO seam
-- `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files
-- `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam
-- `lua/parley/review_send.lua` — `<M-CR>` dispatch to agentic submission in Couch; mode-free in-editor fallback with a visible route notice; legacy `[` completion until #419
-- `lua/parley/agentic_document.lua` — named-document registration/admission and native rename hooks; see [session-sync](session_sync.md)
-- `lua/parley/skills/review/instruction.lua` — `process-instruction` grammar, mode expansion and neutral context (PURE)
-- `lua/parley/frontmatter.lua` — shared frontmatter reader (hyphenated keys, raw values, quoting; PURE)
-- `lua/parley/couch.lua` — the `couch` seam: send, query, this editor's own actor. Every child gets a deadline: a caller that names none gets `couch.deadline_ms()` (the user's `agentic_submit_timeout_ms`, through `document_registry.config_ms`); a send gets `couch.send_deadline_ms()`, three of them (`document_registry.lost_ms`, #359), so a press past the submit deadline can still join it. Expiry kills the child and reports `couch.timed_out`; a killed send logs one line and says it may have arrived (#400). Only `document_registry`, which runs its own deadline timer, opts out with `timeout = false`
-- `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state
-- `lua/parley/skills/review/diag_display.lua` — inline "why" display toggle (`:ParleyShowDiagnostics`, cursor-region auto-show)
-- `lua/parley/progress.lua` — detached progress bar (general reusable long-op feedback; review is the first user)
-- `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
-- `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
-- `lua/parley/skill_render.lua` — diagnostics + edit highlights
-- `lua/parley/tools/builtin/propose_edits.lua` — batch edit-apply (inline `.parley-backup`)
-- `lua/parley/highlighter.lua` — `ParleyReviewUser`/`ParleyReviewAgent` groups
-- `lua/parley/config.lua` — default keybindings and config
-- `tests/unit/review_spec.lua` — unit tests for the marker parser
-- `tests/integration/skill_invoke_review_spec.lua` — review's marker pre-check + resubmit
-- `tests/unit/skill_edits_spec.lua` / `tests/unit/tools_builtin_propose_edits_spec.lua` — batch edit-apply
+- `lua/parley/skills/review/init.lua` — packaged source composition, marker admission, deferred-question completion and bounded resubmit.
+- `lua/parley/skills/review/brief.lua` — version-4 named brief listing/loading; `briefs/` holds flagless task context.
+- `lua/parley/skills/review/chat_structure.lua` / `chat_policy.lua` — Markdown facts and pure chat/tag/item policy.
+- `lua/parley/skills/review/collaboration.lua` / `collaboration_value.lua` — snapshot permissions and readable legacy evidence.
+- `lua/parley/skills/review/local_proposal.lua` — pure exact-identity classifications, protected ranges and local question deferral.
+- `lua/parley/review_send.lua` — existing Couch/session dispatch or local marker review.
+- `lua/parley/review_notice.lua` / `display_text.lua` — exact message history with one bounded display caption.
+- `lua/parley/side_document_path.lua` — owning-root and actual-parent projection; no IO or ownership grant.
+- `lua/parley/agentic_document.lua` / `couch.lua` — existing registration, confirmation and bounded Couch requests.
+- `lua/parley/skills/review/journal.lua` / `projection.lua` — durable attributed diffs and per-content undo/redo style.
+- `lua/parley/skills/review/diag_display.lua` / `skill_render.lua` — inline explanations and span highlights.
+- `lua/parley/skill_invoke.lua` — snapshot-bound tool exchange through the existing dispatcher.
+- `lua/parley/skills/review/SKILL.md` / `local-adapter.md` — pinned canonical policy and the explicit local single-file boundary.
+- `scripts/sync-review-protocol.py` — versioned package validation and synchronization.
+
+The owning entries in [the traceability map](../traceability.yaml) route brief,
+policy, native input, proposal, codec and export tests through executable Lua
+specs. Python validation runs through the existing bundle wrapper.
