@@ -5,6 +5,7 @@ created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
 github_issue:
+flake_tests: [lua:tests/integration/lock_leave_reminder_spec.lua#lock leave reminder cancels on window close and ignores a late tick]
 ---
 
 # Lock leave reminder window-close case gets no pulse when the first-edit operator acquire fails
