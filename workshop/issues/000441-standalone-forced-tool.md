@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "09c88959", done: "ad42cdfe"}
 ---
 
 # Standalone review: forced tool choice rejected by claude-sonnet-5-5; expose upstream failure reason
