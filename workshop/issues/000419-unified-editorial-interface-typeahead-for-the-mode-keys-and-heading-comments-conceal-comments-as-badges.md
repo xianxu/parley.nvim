@@ -213,3 +213,10 @@ Current implementation checkpoint f6e32d3f includes visible ordinary tags, attac
 Actual preview at codepin0a1283df:9.24h, window11:08:07–18:21:44, including357.3minutes11:18–17:15 for #418/#322. TL59404f19 approves close --no-actual with --verified citing that contaminated concurrent-claim attribution (ariadne#580), no typed hours. No actual adopted.
 
 Remaining prerequisite: landed ariadne#581 and its new closed-header fixture/manifest pin; ariadne:2 will send it. Current bundle remains exactly #576. After repin: focused qualification, push candidate, one recorded suite, fresh hub-approved stage/joint operator check, close review and merge. No stage or merge action is authorized by old #322 approval; no :0 files touched. Follow-ups #434 and #435 are unclaimed and reported to hub with submitted receipts.
+
+
+### 2026-10-23 19:27 — new pre-close selector exercised on pushed draft
+
+Authenticated fleet notice c64d51ab adopts ariadne#578's command. Ran sdlc local-check run --pre-close on pushed d64283a04d4a4224aed8866d676c13c5edd59787. It correctly selected suite because trains are off and main declares no affected graph, refreshed the verified private sibling suite helper, and retained normal FIFO queue position. Run lease-1002561823; log .git/sdlc/test-stats/inflight/42b7c10950aed39224f3491f2dda07dd/run.log in the common Git directory. No result yet; keep this runner, do not duplicate it.
+
+ariadne:2 confirms #581 only just entered planning; keep #576's pin. Its eventual contract also validates answer destinations (nonempty, no whitespace or parentheses). Wait for landed fixtures before repinning/qualifying that rule. This current suite is early qualification requested by the fleet notice, not final evidence for a future changed pin.
