@@ -59,11 +59,18 @@ function M.select(scope, inner)
 			"Parley: entity object needs a readable chat header (is the `---` separator intact?)")
 		return
 	end
-	local range = require("parley.entity_range").range(parsed, lines, row, {
+	local range, range_error = require("parley.entity_range").range(parsed, lines, row, {
 		scope = scope,
 		inner = inner,
 		config = parley.config,
 	})
+    if range_error then
+        -- Cancel an existing visual selection or pending native operator before
+        -- reporting: returning alone can let a following d consume stale rows.
+        vim.cmd("normal! \27")
+        require("parley.review_notice").show({ range_error }, "review: section unavailable")
+        return
+    end
 	if not range then
 		return
 	end

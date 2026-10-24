@@ -531,17 +531,17 @@ function M.attach(buf)
     return true
 end
 
---- #378: `buf` was opened from `parent_buf`. A side doc (a file directly in
---- the parent's `.side/` folder, the mover's and the finder's rule) takes the
---- parent's effective owner, which the model confirms with Couch first. With no
---- parent identity there is nothing to inherit, and the pane's actor is never
---- consulted. Returns whether the inheritance was asked for.
+--- #378/#419: navigation offers the actual parent's identity only when the
+--- child's attachment agrees. The existing model confirms it with Couch before
+--- registering; a path relation never grants ownership by itself.
 function M.inherit(buf, parent_buf)
     local parent = M.identity(parent_buf)
     if not parent or buf == parent_buf or not M.attach(buf) then return false end
     local s = states[buf]
     if s.reading or not valid(s) then return false end
-    if vim.fs.dirname(s.path) ~= require("parley.document_move_plan").side_path(parent.File) then return false end
+    local relation = require("parley.side_document_path")
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, math.min(40, vim.api.nvim_buf_line_count(buf)), false)
+    if not relation.relation(s.path, parent.File, lines) then return false end
     dispatch(s, { type = "inherit", parent = { path = parent.File, id = parent.ID, owner = parent.Owner } })
     return true
 end

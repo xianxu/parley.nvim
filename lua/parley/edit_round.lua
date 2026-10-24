@@ -1,8 +1,6 @@
--- Edit round (#383): shows the agent's last write of a document, the round
--- Couch keeps (pair#661), the way the document's `presentation:` asks. Under
--- highlight (the default) each changed span is highlighted with its reason;
--- under direct nothing is drawn; under propose the markers are already in the
--- text. The round clears on the operator's next confirmed submit.
+-- Edit round: shows the agent's last stored write using that history's
+-- per-span presentation. Direct/propose history has no tint; proposal markers
+-- already live in the text. The round clears on the next confirmed submit.
 --
 -- The shell around the pure presentation module: one bounded Couch request
 -- per refresh, and a generation per buffer, the single guard that drops a
@@ -18,7 +16,7 @@ local generation = {}
 local attached = {}
 -- buf -> true while a re-derive is scheduled: keystrokes coalesce into one.
 local pending = {}
--- buf -> the result_hash of the last round whose cap was announced.
+-- buf -> the last round cap or malformed-history notice, deduplicated per lifetime.
 local announced = {}
 -- buf -> true once its BufUnload forgets it.
 local hooked = {}
@@ -63,11 +61,17 @@ end
 
 local function draw(buf, round)
     local lines = lines_of(buf)
-    if presentation.value(lines) ~= "highlight" then
+    local decorations, err = presentation.decorations(round, lines, file_hash(lines))
+    if not decorations then
         skill_render.clear_round(buf)
+        local notice = "invalid:" .. tostring(round.result_hash) .. ":" .. err
+        if announced[buf] ~= notice then
+            announced[buf] = notice
+            vim.notify("parley: cannot show agent round: " .. err, vim.log.levels.WARN)
+        end
         return
     end
-    skill_render.publish_round(buf, presentation.decorations(round, lines, file_hash(lines)))
+    skill_render.publish_round(buf, decorations)
     follow_edits(buf)
     local count = type(round.spans) == "table" and #round.spans or 0
     if count > presentation.MAX_SPANS and announced[buf] ~= round.result_hash then
@@ -84,10 +88,6 @@ end
 --- @param buf number
 function M.refresh(buf)
     if not vim.api.nvim_buf_is_valid(buf) then return end
-    if presentation.value(lines_of(buf)) ~= "highlight" then
-        M.clear(buf)
-        return
-    end
     local name = vim.api.nvim_buf_get_name(buf)
     if name == "" then return end
     local path = vim.fn.fnamemodify(name, ":p")

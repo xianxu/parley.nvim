@@ -204,10 +204,12 @@ atlas:
       - lua/parley/entity_textobj.lua
       - lua/parley/markdown_heading.lua
     tests:
+      - tests/unit/review_tag_consumers_spec.lua
       - tests/unit/entity_range_spec.lua
       - tests/unit/markdown_heading_spec.lua
       - tests/unit/markdown_heading_conformance_spec.lua
       - tests/integration/entity_textobj_spec.lua
+      - tests/integration/review_tag_refusal_spec.lua
       - tests/integration/entity_delete_parity_spec.lua
 
   chat/lifecycle:
@@ -514,6 +516,7 @@ atlas:
       - lua/parley/highlight_structure.lua
       - lua/parley/helper.lua
     tests:
+      - tests/unit/review_tag_consumers_spec.lua
       - tests/unit/answer_structure_spec.lua
       - tests/unit/parse_chat_spec.lua
       - tests/unit/chat_parser_section_lines_spec.lua
@@ -606,6 +609,7 @@ atlas:
       - lua/parley/file_tracker.lua
       - lua/parley/helper.lua
     tests:
+      - tests/unit/review_tag_consumers_spec.lua
       - tests/arch/single_resolver_spec.lua
       - tests/integration/open_reference_spec.lua
       - tests/integration/entity_navigation_native_spec.lua
@@ -783,6 +787,20 @@ atlas:
 
   modes/review:
     code:
+      - lua/parley/skills/review/brief.lua
+      - lua/parley/skills/review/chat_structure.lua
+      - lua/parley/skills/review/chat_policy.lua
+      - lua/parley/skills/review/local_proposal.lua
+      - lua/parley/review_notice.lua
+      - lua/parley/display_text.lua
+      - lua/parley/skills/review/export.json
+      - lua/parley/skills/review/local-adapter.md
+      - tests/unit/review_protocol_export_test.py
+      - lua/parley/skills/review/briefs/developmental.md
+      - lua/parley/skills/review/briefs/line-editing.md
+      - lua/parley/skills/review/briefs/copy-editing.md
+      - lua/parley/skills/review/briefs/proofreading.md
+      - lua/parley/skills/review/briefs/fact-check.md
       - lua/parley/skills/review/diag_display.lua
       - lua/parley/skills/review/collaboration.lua
       - lua/parley/skills/review/collaboration_value.lua
@@ -794,18 +812,23 @@ atlas:
       - lua/parley/comment/float.lua
       - lua/parley/drill_in.lua
       - lua/parley/skills/review/init.lua
-      - lua/parley/skills/review/instruction.lua
       - lua/parley/review_send.lua
       - lua/parley/frontmatter.lua
       - lua/parley/couch.lua
     tests:
+      - tests/unit/review_brief_spec.lua
+      - tests/unit/review_chat_structure_spec.lua
+      - tests/unit/review_chat_policy_spec.lua
+      - tests/unit/review_chat_fixture_spec.lua
+      - tests/unit/review_local_proposal_spec.lua
+      - tests/unit/review_notice_spec.lua
+      - tests/unit/review_tag_consumers_spec.lua
+      - tests/integration/review_brief_source_spec.lua
+      - tests/integration/review_tag_highlight_spec.lua
       - tests/unit/review_collaboration_spec.lua
       - tests/unit/review_collaboration_value_spec.lua
       - tests/integration/skill_invoke_review_spec.lua
       - tests/integration/review_protocol_bundle_spec.lua
-      - tests/integration/review_mode_load_spec.lua
-      - tests/unit/review_mode_spec.lua
-      - tests/unit/review_instruction_spec.lua
       - tests/unit/frontmatter_spec.lua
       - tests/unit/couch_spec.lua
       - tests/integration/review_send_spec.lua
@@ -822,6 +845,9 @@ atlas:
 
   modes/session_sync:
     code:
+      - lua/parley/side_document_path.lua
+      - tests/fixtures/review_rounds/presentation.json
+      - tests/fixtures/review_rounds/provenance.txt
       - lua/parley/session_sync.lua
       - lua/parley/operator_admission.lua
       - lua/parley/view_map.lua
@@ -845,6 +871,7 @@ atlas:
       - tests/fixtures/fake_couch_registry.py
       - tests/fixtures/fake_couch_operator.py
     tests:
+      - tests/unit/side_document_path_spec.lua
       - tests/integration/lock_leave_reminder_spec.lua
       - tests/integration/keybinding_agreement_spec.lua
       - tests/unit/session_sync_spec.lua
@@ -1284,6 +1311,7 @@ atlas:
       - lua/parley/copy.lua
       - lua/parley/highlight_structure.lua
     tests:
+      - tests/integration/review_tag_highlight_spec.lua
       - tests/integration/chat_treesitter_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_groups_spec.lua
@@ -1304,6 +1332,7 @@ atlas:
 
   ui/attention_finder:
     code:
+      - lua/parley/side_document_path.lua
       - lua/parley/attention_model.lua
       - lua/parley/attention_store.lua
       - lua/parley/attention.lua
@@ -1313,6 +1342,7 @@ atlas:
       - lua/parley/keybinding_registry.lua
       - lua/parley/config.lua
     tests:
+      - tests/unit/side_document_path_spec.lua
       - tests/unit/attention_model_spec.lua
       - tests/unit/attention_store_spec.lua
       - tests/unit/attention_rows_spec.lua
@@ -1329,6 +1359,7 @@ atlas:
       - lua/parley/outline.lua
       - lua/parley/chat_parser.lua
     tests:
+      - tests/unit/review_tag_consumers_spec.lua
       - tests/unit/question_tags_spec.lua
       - tests/unit/outline_spec.lua
       - tests/unit/outline_parity_spec.lua

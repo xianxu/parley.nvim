@@ -61,7 +61,7 @@ local function unquote(span)
     return table.concat(out)
 end
 
-local function decode(text, block_scalar)
+local function decode(text, block_scalar, evidence)
     local i = 1
     local function skip() local _, last = text:find("^%s*", i); i = (last or i - 1) + 1 end
     local function scalar(key, whole)
@@ -119,7 +119,9 @@ local function decode(text, block_scalar)
             if result[key] ~= nil then fail("duplicate mapping key: " .. key) end
             i = i + 1
             skip()
-            result[key] = key == "default" and scalar(false) or list()
+            if key == "default" or evidence and key == "chat" and text:sub(i, i) ~= "[" then
+                result[key] = scalar(false)
+            else result[key] = list() end
             skip()
             local c = text:sub(i, i)
             if c == "}" then break end
@@ -219,12 +221,12 @@ local function root_fields(lines, close)
     return entries
 end
 
-local function parse(lines)
+local function parse(lines, entries, evidence, close)
     if lines[1] ~= "---" then return nil end
-    local fm = frontmatter.parse(lines)
+    local fm = close and { close = close } or frontmatter.parse(lines)
     if not fm then fail("frontmatter is not closed") end
     local field
-    for _, entry in ipairs(root_fields(lines, fm.close)) do
+    for _, entry in ipairs(entries or root_fields(lines, fm.close)) do
         if entry.key == "collaboration-mode" then
             if field then fail("duplicate collaboration-mode field") end
             field = entry
@@ -237,9 +239,12 @@ local function parse(lines)
         if #values > 1 and values[1].text:sub(1, 1) ~= "{" then fail("unexpected continuation of scalar value") end
         local joined = {}
         for _, value in ipairs(values) do joined[#joined + 1] = value.text end
-        return decode(table.concat(joined, " "))
+        return decode(table.concat(joined, " "), nil, evidence)
     end
-    if #values == 1 then fail("collaboration-mode requires a value") end
+    if #values == 1 then
+        if evidence then return "" end
+        fail("collaboration-mode requires a value")
+    end
     local parts, index, indent = {}, 2, values[2].indent
     while index <= #values do
         local item = values[index]
@@ -270,7 +275,7 @@ local function parse(lines)
         end
         parts[#parts + 1] = key .. ":" .. value
     end
-    return decode("{" .. table.concat(parts, ",") .. "}")
+    return decode("{" .. table.concat(parts, ",") .. "}", nil, evidence)
 end
 
 --- Decode only collaboration-mode from a Markdown snapshot.
@@ -280,5 +285,39 @@ function M.parse(lines)
     local ok, result = pcall(parse, lines)
     if not ok then return nil, "collaboration-mode: " .. tostring(result) end
     return result, nil
+end
+--- Leading fence evidence matches the pinned FrontBlock/frontmatter distinction.
+function M.header(lines)
+    local header = { closed = false, readable = false }
+    if trim(lines[1] or "") ~= "---" then return header end
+    for row = 2, #lines do
+        if trim(lines[row]) == "---" then header.closed, header.close = true, row; break end
+    end
+    if not header.closed or lines[1] ~= "---" or lines[header.close] ~= "---" then return header end
+    for row, line in ipairs(lines) do
+        if line:find("\r", 1, true) then return header end
+        if row > 1 and row < header.close and (line == "..." or line:match("^%.%.%. ")
+            or line:match("^%-%-%- ") or line:sub(1, 1) == "%") then return header end
+    end
+    header.readable = true
+    return header
+end
+
+--- Supported root evidence for the mode-free reader. Unknown retired values
+--- stay opaque; only presence matters. The older strict parse API is unchanged.
+function M.evidence(lines, header)
+    header = header or M.header(lines)
+    if not header.closed then return { fields = {} } end
+    if not header.readable then return nil, "unsupported frontmatter fence or document directive" end
+    local ok, entries = pcall(root_fields, lines, header.close)
+    if not ok then return nil, tostring(entries) end
+    local fields = {}
+    for _, entry in ipairs(entries) do
+        if fields[entry.key] then return nil, "duplicate root field" end
+        fields[entry.key] = entry
+    end
+    local parsed, value = pcall(parse, lines, entries, true, header.close)
+    if not parsed then return nil, tostring(value) end
+    return { fields = fields, collaboration = value, close = header.close }
 end
 return M

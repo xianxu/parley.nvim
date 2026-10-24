@@ -27,6 +27,9 @@ describe("local review native input", function()
             require("parley.skill_invoke").invoke = function(buf, manifest, args, opts)
                 vim.fn.writefile({ vim.json.encode({ buf = buf, name = manifest.name, args = args, manual = opts.manual }) },
                     root .. "/invocation.json")
+                if vim.g.parley_test_deferred then
+                    opts.on_done({ ok = true, review = { deferred = 1, noop = true } })
+                end
             end
         ]], root)
     end)
@@ -37,10 +40,14 @@ describe("local review native input", function()
     end)
 
     local cases = {
-        { name = "no-marker Markdown", document = { "# Notes", "plain prose" }, note = "no markers found" },
+        { name = "no-marker Markdown", document = { "# Notes", "plain prose" }, note = "read your edits; no asks" },
         { name = "ready-marker Markdown", document = { "# Notes", "prose 🤖[fix this]" }, ready = true },
-        { name = "protected chat", document = { "---", "collaboration-mode: chat", "---", "🤖[answer this]" },
-            note = "the hub agent answers chat", chat = true },
+        { name = "deferred question completion", document = { "# Notes", "prose 🤖[why?]" }, ready = true,
+            deferred = true, note = "questions are answered in a side doc by Couch review; left unchanged" },
+        { name = "pure chat items", document = { "@@chat@@", "# Inbox", "1. Why?" },
+            note = "chat items are answered in a side doc by Couch review; left unchanged" },
+        { name = "robot ask in legacy chat", document = { "---", "collaboration-mode: chat", "---", "🤖[tighten this]" },
+            ready = true, note = "legacy key" },
         { name = "unnamed Markdown", document = { "# Notes", "🤖[fix this]" },
             note = "save the file first", unnamed = true },
     }
@@ -50,6 +57,7 @@ describe("local review native input", function()
             it("Alt+Return handles " .. case.name .. " in " .. (insert and "Insert" or "Normal") .. " mode", function()
                 local before = child:exec([[
                     local root, case = ...
+                    vim.g.parley_test_deferred = case.deferred or false
                     if case.unnamed then
                         vim.cmd("enew")
                     else
@@ -97,7 +105,14 @@ describe("local review native input", function()
                     local invocation = vim.json.decode(table.concat(vim.fn.readfile(root .. "/invocation.json"), "\n"))
                     assert.equals(before.buf, invocation.buf)
                     assert.equals("review", invocation.name)
-                    assert.same({}, invocation.args)
+                    assert.is_nil(invocation.args.mode)
+                    assert.is_nil(invocation.args.modes)
+                    assert.is_nil(invocation.args.instruction)
+                    assert.equals(1, #invocation.args.review_asks)
+                    local ask = invocation.args.review_asks[1]
+                    local source = before.lines[ask.line + 1]
+                    assert.equals(ask.raw, source:sub(ask.col + 1, ask.col + #ask.raw))
+                    assert.truthy(ask.raw:find("🤖[", 1, true))
                     assert.is_true(invocation.manual)
                 else
                     assert.equals(0, vim.fn.filereadable(root .. "/invocation.json"), "real marker admission prevents provider work")

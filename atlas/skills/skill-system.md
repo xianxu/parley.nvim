@@ -9,11 +9,11 @@ declared arguments, then runs the selected skill without creating a chat buffer.
 
 | Skill | What it does | Entry or requirement |
 |---|---|---|
-| `review` | Apply document edits from ready markers or a review mode; show edit explanations | `<C-g>ve` for marker review; `<M-CR>` in Markdown submits to Couch or requests mode-free local review (#322) |
+| `review` | Apply ready command asks; defer questions to Couch side documents; show edit explanations | `<C-g>ve` for marker review; `<M-CR>` in Markdown submits to Couch or requests mode-free local review (#322) |
 | `voice-apply` | Rewrite an artifact using a personal writing-style guide | Choose a style from `~/.personal/<slug>-writing-style.md` |
 | `define` | Produce an inline definition for a selected term | Visual definition action supplies the selected phrase and bounded context |
 
-See [document review](../modes/review.md) for markers, modes, journal, and undo
+See [document review](../modes/review.md) for markers, chat sections, named briefs, historical journal, and undo
 behavior. Skills can write the artifact: `propose_edits` uses the shared tool
 execution path, writes a numbered `.parley-backup.N`, and reloads the buffer.
 The driver prevents concurrent invocations on the same buffer and reports

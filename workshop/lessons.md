@@ -1066,3 +1066,8 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - After an operator scope pivot, keep prior plan rows explicitly historical and publish a current entity inventory; do not let an old completed checklist claim that removed runtime APIs remain part of delivery.
 
 - #322 close: when renaming a workflow in documentation, trace each recording/exclusion claim to its actual producer before replacing the old label. A broad text substitution can turn an obsolete exception into a false statement about a now-recorded path.
+
+
+- #419 plan-quality: a bounded viewport painter does not bound a parser invoked before painting. Admit document bytes/lines before reading/parsing, state visible over-limit behavior and qualify the chosen latency budget. Name production functions with adversarial/mechanical test strategies instead of duplicating executable test cases in plan prose.
+
+- #419 pre-close: a retired-writer sweep includes assertions for every creator (root and child, short and full templates), while legacy reader fixtures remain intentional. Keep a buffer-only adapter in its existing IO consumer; adding two buffer reads to a data-transform module is still an architecture boundary change. Include the purity guard in the focused map before the full suite.

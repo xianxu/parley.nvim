@@ -458,63 +458,27 @@ end
 -- Skill definition
 --------------------------------------------------------------------------------
 
--- Resolve the review skill's own modes/ dir via runtimepath (the provider also
--- injects ctx.skill_dir at invoke time; this is the fallback for the `complete`
--- arg picker, which runs outside a source(ctx) call).
-local function modes_dir()
-    return (vim.api.nvim_get_runtime_file("lua/parley/skills/review/modes", false) or {})[1]
-end
-
---- The modes a run names: `args.modes` (#316), else the single `args.mode`.
-M.mode_names = function(args)
-    if type(args.modes) == "table" and #args.modes > 0 then
-        return args.modes
-    end
-    return (args.mode and args.mode ~= "") and { args.mode } or {}
-end
-
 M.skill = {
     name = "review",
     description = "Edit document based on review markers",
 
-    -- The `mode` arg selects a review stage; values come from modes/*.md (#133).
-    args = {
-        {
-            name = "mode",
-            description = "review mode",
-            complete = function()
-                local dir = modes_dir()
-                local names = {}
-                for _, m in ipairs(dir and require("parley.skills.review.mode").list(dir) or {}) do
-                    table.insert(names, m.name)
-                end
-                return names
-            end,
-        },
-    },
+    args = {},
 
-    -- Canonical round + grammar, neutral mode inputs, then the local IO adapter.
-    -- Filesystem access stays here; instruction.context is pure.
+    -- The packaged v4 source supplies policy and five flagless briefs. Only
+    -- current marker asks select work; old mode/standing-instruction args do not.
     source = function(ctx)
         ctx = ctx or {}
-        local mode = require("parley.skills.review.mode")
-        local args = ctx.args or {}
-        local dir = assert(ctx.skill_dir, "review source requires the packaged skill directory")
-        local loaded = {}
-        for _, name in ipairs(M.mode_names(args)) do
-            local m, err = mode.load(dir .. "/modes", name)
-            assert(m, err)
-            table.insert(loaded, m)
-        end
-        local adapter, err = io.open(dir .. "/local-adapter.md", "r")
-        assert(adapter, "review local adapter unavailable: " .. tostring(err))
-        local adapter_md = adapter:read("*a")
-        adapter:close()
-        assert(adapter_md and adapter_md ~= "", "review local adapter is empty")
-        assert(ctx.skill_md and ctx.skill_md ~= "", "review canonical source is empty")
-        return table.concat({ ctx.skill_md,
-            require("parley.skills.review.instruction").context(loaded, args.instruction, mode.export_version(dir)),
-            adapter_md }, "\n\n")
+        local dir = assert(ctx.skill_dir, 'review source requires the packaged skill directory')
+        local briefs, brief_error = require('parley.skills.review.brief').context(dir)
+        assert(briefs, brief_error)
+        local adapter, err = io.open(dir .. '/local-adapter.md', 'r')
+        assert(adapter, 'review local adapter unavailable: ' .. tostring(err))
+        local adapter_md = adapter:read('*a'); adapter:close()
+        assert(adapter_md and adapter_md ~= '', 'review local adapter is empty')
+        assert(ctx.skill_md and ctx.skill_md ~= '', 'review canonical source is empty')
+        local identities = (ctx.args or {}).review_asks or {}
+        return table.concat({ctx.skill_md, briefs, adapter_md,
+            'Ready marker identities (zero-based line and byte column):\n' .. vim.json.encode(identities)}, '\n\n')
     end,
 
     -- Declarative manifest fields (#128). Runs through the skill_invoke driver
@@ -548,8 +512,7 @@ M.should_resubmit = function(ready_before, ready_remaining, resubmit_count)
     return ready_remaining > 0 and ready_remaining < ready_before and resubmit_count < 3
 end
 
-M.run_via_invoke = function(buf, args, resubmit_count)
-    args = args or {}
+M.run_via_invoke = function(buf, _args, resubmit_count)
     resubmit_count = resubmit_count or 0
     local parley = get_parley()
     local skill_render = require("parley.skill_render")
@@ -580,59 +543,53 @@ M.run_via_invoke = function(buf, args, resubmit_count)
         return n
     end
 
-    -- Pre-check. A MODE run always proceeds — whole-doc modes work with zero
-    -- markers (the headline no-marker general review, #133). A legacy
-    -- marker-only run (no mode) needs at least one READY `[]` marker: pending
-    -- `{}` markers no longer BLOCK submission (they're skipped and re-surface via
-    -- the on-save quickfix), but if they're the only markers and no mode is set
-    -- there's nothing to process.
+    local count = vim.api.nvim_buf_line_count(buf)
+    local size = vim.api.nvim_buf_get_offset(buf, count)
+    if size < 0 or size > 1048576 then
+        require('parley.review_notice').show({'local snapshot exceeds 1 MiB; use Couch review'},
+            'review: local limit reached', vim.log.levels.WARN)
+        return
+    end
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local collaboration = require('parley.skills.review.collaboration')
     local routing, routing_error = collaboration.resolve(lines)
     if not routing then
-        vim.notify('review: ' .. routing_error, vim.log.levels.ERROR)
+        require('parley.review_notice').show({routing_error}, 'review: unavailable', vim.log.levels.WARN)
         return
     end
-    if resubmit_count == 0 then
-        if routing.discussion then
-            vim.notify('review: answered in place: discussion routing needs Couch', vim.log.levels.INFO)
-        end
-        if #routing.chat > 0 then
-            vim.notify('review: chat section(s) ' .. table.concat(routing.chat, ', ')
-                .. ' skipped: the hub agent answers chat', vim.log.levels.INFO)
-        end
-        for _, warning in ipairs(routing.warnings) do vim.notify('review: ' .. warning, vim.log.levels.WARN) end
-    end
-    if not routing.editable then return end
     local markers = collaboration.eligible(routing, M.parse_markers(lines))
-    local has_mode = #M.mode_names(args) > 0
     local ready_count_before = count_ready(markers)
-    if not has_mode then
-        if #markers == 0 then
-            skill_render.clear_decorations(buf)
-            vim.fn.setqflist({}, "r")
-            pcall(vim.cmd, "cclose")
-            parley.logger.info("Review: complete — no markers found")
-            return
+    if ready_count_before == 0 then
+        local notices = routing.warnings
+        if #routing.chat > 0 then
+            notices[#notices+1] = 'chat items are answered in a side doc by Couch review; left unchanged'
         end
-        if ready_count_before == 0 then
-            -- Nothing actionable. Distinguish pending agent questions (surface
-            -- them) from strike-only / non-pending markers (accept/reject those
-            -- with <M-a>/<M-r> — there's nothing for the agent to do).
-            local has_pending = false
-            for _, m in ipairs(markers) do
-                if m.pending then
-                    has_pending = true
-                    break
-                end
-            end
-            if has_pending then
-                M.populate_quickfix(buf, markers, "pending")
-                parley.logger.info("Review: no ready markers — pending agent turns await your reply")
-            else
-                parley.logger.info("Review: nothing to do — markers present but none ready (e.g. strike proposals; accept/reject with <M-a>/<M-r>)")
-            end
-            return
+        if #notices > 0 then
+            require('parley.review_notice').show(notices, 'review: unchanged; Couch answers chat', vim.log.levels.INFO)
+        end
+        local pending = false
+        for _, marker in ipairs(markers) do if marker.pending then pending = true end end
+        if pending then
+            M.populate_quickfix(buf, markers, 'pending')
+            parley.logger.info('Review: no ready markers — pending agent turns await your reply')
+        else
+            skill_render.clear_decorations(buf)
+            vim.fn.setqflist({}, 'r')
+            pcall(vim.cmd, 'cclose')
+            parley.logger.info(#markers == 0 and 'Review: read your edits; no asks'
+                or 'Review: nothing to do — no ready asks')
+        end
+        return
+    end
+    if resubmit_count == 0 and #routing.warnings > 0 then
+        require('parley.review_notice').show(routing.warnings, 'review: document notices', vim.log.levels.WARN)
+    end
+    -- Supply exact identities so the agent need not infer byte columns. They
+    -- are still checked against the driver's own invocation snapshot at apply.
+    local args = {review_asks={}}
+    for _, marker in ipairs(markers) do
+        if marker.ready then
+            args.review_asks[#args.review_asks+1] = {line=marker.line,col=marker.col,raw=marker.raw}
         end
     end
     -- Proceeding: clear stale quickfix (pending markers re-surface on save).
@@ -658,7 +615,18 @@ M.run_via_invoke = function(buf, args, resubmit_count)
         on_done = function(result)
             if not result or not result.ok then
                 projection.set_applying(buf, false)
-                return -- skill_invoke already surfaced the error
+                if result and result.msg then
+                    require('parley.review_notice').show({tostring(result.msg)}, 'review: unchanged', vim.log.levels.WARN)
+                end
+                return
+            end
+            if result.review and result.review.deferred > 0 then
+                require('parley.review_notice').show({'questions are answered in a side doc by Couch review; left unchanged'},
+                    'review: questions deferred', vim.log.levels.INFO)
+            end
+            if result.review and result.review.noop then
+                projection.set_applying(buf, false)
+                return
             end
             -- Journal this round first — a durable, attributed per-round record
             -- beside the doc (#133 M3), regardless of what markers remain. Skip a
@@ -674,7 +642,6 @@ M.run_via_invoke = function(buf, args, resubmit_count)
                     end
                 end
                 local jok, jerr = journal.append(doc_path, {
-                    mode = table.concat(M.mode_names(args), "+"),
                     side = "agent",
                     ts = os.date("!%Y-%m-%dT%H:%M:%S"),
                     hash = journal.hash(result.new_content),
@@ -699,10 +666,9 @@ M.run_via_invoke = function(buf, args, resubmit_count)
             projection.ensure_watch(buf)
             projection.set_applying(buf, false)
 
-            -- Then decide whether to run another round. A whole-doc mode round is
-            -- one-shot — it may legitimately INSERT `{}` findings (fact-check),
-            -- which is not "stuck"; a `{}`-only / non-shrinking remainder ends the
-            -- round cleanly. Pending `{}` markers surface via the on-save quickfix.
+            -- Resubmit only a shrinking set of ready command asks. Deferred
+            -- questions and pending agent turns wait for the operator.
+            if result.review and result.review.deferred > 0 then return end
             local after_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             local after_routing = collaboration.resolve(after_lines)
             if not after_routing then return end
@@ -792,7 +758,7 @@ M.registry_callbacks = function(buf)
     -- retired because they duplicated that path with divergent
     -- output shapes.
     return {
-        -- <C-g>ve: run review (legacy marker-only, no mode)
+        -- <C-g>ve: review current ready marker asks.
         review_edit = function()
             M.run_via_invoke(buf, {})
         end,
@@ -802,9 +768,7 @@ M.registry_callbacks = function(buf)
         review_menu = function()
             require("parley.skill_picker").open()
         end,
-        -- <M-CR> sends the document as its `process-instruction:` line directs:
-        -- to this slot's agent, or (outside pair) a review round here (#316).
-        -- It replaced the review-mode menu float (#133 M4).
+        -- <M-CR> submits to Couch, or requests local marker review outside it.
         review_next = function()
             require("parley.review_send").submit(buf)
         end,

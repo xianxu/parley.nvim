@@ -1,8 +1,47 @@
 local fixtures = require('tests.helpers.review_move_fixtures')
 local projection = require('parley.document_move_plan')
+local fixtures_ok, exported_cases = pcall(fixtures.load)
 local function copy(t)
     local out = {}; for k, v in pairs(t) do out[k] = v end; return out
 end
+-- Extend the pinned legacy fixtures locally: the package remains the sole producer
+-- of exported bytes, while these variants qualify the monthly reader layout.
+local function monthly_variant(base)
+    local case = { name = base.name .. '-monthly-grandchild', old = base.old, new = base.new,
+        before = copy(base.before), after = copy(base.after), monthly = true }
+    local child = '2026-10/23-monthly.md'
+    local grandchild = '2026-11/01-follow-up.md'
+    for _, state in ipairs({ 'before', 'after' }) do
+        local stem = state == 'before' and 'design' or 'spec'
+        local side = stem .. '.side/'
+        case[state][stem .. '.md'] = case[state][stem .. '.md']:gsub(
+            'discussions:\n', 'discussions:\n  - doc: "' .. side .. child .. '" # monthly index\n', 1)
+            .. '\n[monthly](' .. side .. child .. '#details)\n'
+        case[state][side .. child] = '---\nparent: "../../' .. stem .. '.md" # actual root\n'
+            .. 'opaque: {future: [keep, "design.side/raw"]}\ndiscussions:\n'
+            .. '  - doc: "../' .. grandchild .. '" # same owning root\n---\n'
+            .. '[root](../../' .. stem .. '.md#details)\n'
+            .. '[child](../' .. grandchild .. '#answer)\n'
+            .. '[flat](../01-why-per-file.md)\n'
+        case[state][side .. grandchild] = '---\nparent: "../' .. child .. '" # actual side parent\n'
+            .. 'opaque: [null, {future: "untouched"}]\n---\n'
+            .. '[parent](../' .. child .. '#details)\n'
+            .. '[root](../../' .. stem .. '.md#details)\n'
+        case[state][side .. '2026-11/opaque.bin'] = 'opaque\0bytes\255\n'
+    end
+    if base.name == 'move-orphan' then
+        case.before['spec.side/2026-09/older.md'] = '---\nfuture: {opaque: true}\n---\norphan\0bytes\n'
+        case.after['spec_1.side/2026-09/older.md'] = case.before['spec.side/2026-09/older.md']
+    end
+    return case
+end
+local function qualification_cases()
+    local cases = fixtures.load()
+    local count = #cases
+    for i = 1, count do cases[#cases + 1] = monthly_variant(cases[i]) end
+    return cases
+end
+local qualification_ok, cases = pcall(qualification_cases)
 local function under(path, root) return path:sub(1, #root + 1) == root .. '/' end
 local function move_tree(tree, old, new)
     local moving = {}
@@ -55,8 +94,14 @@ local function project_tree(case)
 end
 
 describe('canonical exported move projections', function()
+    it('loads the exported move fixtures independently of other review examples', function()
+        assert.is_true(fixtures_ok, tostring(exported_cases))
+        assert.is_true(qualification_ok, tostring(cases))
+        assert.is_true(#exported_cases > 0)
+        for _, case in ipairs(exported_cases) do assert.matches('^move%-', case.name) end
+    end)
     it('matches every exported after byte and path', function()
-        for _, case in ipairs(fixtures.load()) do
+        for _, case in ipairs(qualification_cases()) do
             assert.same(case.after, project_tree(case), case.name)
         end
     end)
@@ -121,7 +166,7 @@ describe('canonical exported moves through disk and the registry transport', fun
         vim.fn.delete(root, 'rf')
     end)
 
-    for _, case in ipairs(fixtures.load()) do
+    for _, case in ipairs(qualification_ok and cases or {}) do
         it('matches the complete exported ' .. case.name .. ' result with stable ownership', function()
             for path, bytes in pairs(case.before) do write_bytes(tree .. '/' .. path, bytes) end
             local old, new = tree .. '/' .. case.old, tree .. '/' .. case.new
@@ -136,6 +181,8 @@ describe('canonical exported moves through disk and the registry transport', fun
             })
             assert(operation, err and err.error)
             operations[#operations + 1] = operation
+            assert.equals(2, operation.journal.version)
+            assert.same(operation.journal, vim.json.decode(read_bytes(operation.journal_path)))
             local result
             mover.advance(operation, function(value) result = value end)
             assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end, 10))
@@ -151,6 +198,15 @@ describe('canonical exported moves through disk and the registry transport', fun
             assert.same(result.registration, binding.registration)
             assert.same(case.after, disk_tree(tree), case.name)
             assert.is_nil(uv.fs_lstat(operation.journal_path))
+            if case.monthly then
+                local model = require('parley.side_tree_model')
+                local side = tree .. '/spec.side/'
+                local chain = model.chain(side .. '2026-11/01-follow-up.md', function(path)
+                    return model.parse(vim.split(read_bytes(path), '\n', { plain = true }), vim.fs.dirname(path))
+                end)
+                assert.same({ new, side .. '2026-10/23-monthly.md', side .. '2026-11/01-follow-up.md' }, chain.paths)
+                assert.is_nil(chain.marker)
+            end
             local target_side = projection.side_path(case.new)
             local had_orphan = false
             for path in pairs(case.before) do if under(path, target_side) then had_orphan = true end end
@@ -176,7 +232,8 @@ describe('canonical exported moves through disk and the registry transport', fun
             for path, bytes in pairs(case.before) do
                 -- A side doc parented by another side doc has no root-relative parent rewrite.
                 local parent = bytes:match('\nparent: ([^\n]+)\n')
-                if under(path, source_side) and parent and parent:sub(1, 3) ~= '../' then
+                if under(path, source_side) and not path:sub(#source_side + 2):find('/', 1, true)
+                    and parent and parent:sub(1, 3) ~= '../' then
                     assert.equals(bytes, read_bytes(tree .. '/' .. target_side .. path:sub(#source_side + 1)))
                 end
             end

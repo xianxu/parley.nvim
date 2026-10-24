@@ -1,0 +1,204 @@
+[
+  {
+    "name": "mixed",
+    "before": "---\npresentation-mode: direct\n---\n# Highlight\n<!-- presentation-mode: highlight -->\nold highlight\n# Propose\n<!-- presentation-mode: propose -->\nold proposal\n# Direct\nold direct\n# Inherited\nold inherited\n",
+    "result": "---\npresentation-mode: direct\n---\n# Highlight\n<!-- presentation-mode: highlight -->\nnew highlight\n# Propose\n<!-- presentation-mode: propose -->\n🤖~old~{new} proposal\n# Direct\nnew direct\n# Inherited\nnew inherited\n",
+    "round": {
+      "base_hash": "5bf2d530018855c3",
+      "result_hash": "1e0d049e9a6e7caa",
+      "at": "2026-10-23T00:00:00Z",
+      "presentation": "direct",
+      "spans": [
+        {
+          "start": [
+            5,
+            0
+          ],
+          "end": [
+            5,
+            3
+          ],
+          "old": "old",
+          "new": "new",
+          "future": {
+            "keep": [
+              1,
+              2
+            ]
+          },
+          "presentation": "highlight"
+        },
+        {
+          "start": [
+            8,
+            0
+          ],
+          "end": [
+            8,
+            14
+          ],
+          "old": "old",
+          "new": "🤖~old~{new}",
+          "future": {
+            "keep": [
+              1,
+              2
+            ]
+          },
+          "presentation": "propose"
+        },
+        {
+          "start": [
+            10,
+            0
+          ],
+          "end": [
+            10,
+            3
+          ],
+          "old": "old",
+          "new": "new",
+          "future": {
+            "keep": [
+              1,
+              2
+            ]
+          },
+          "presentation": "direct"
+        },
+        {
+          "start": [
+            12,
+            0
+          ],
+          "end": [
+            12,
+            3
+          ],
+          "old": "old",
+          "new": "new",
+          "future": {
+            "keep": [
+              1,
+              2
+            ]
+          }
+        }
+      ],
+      "future": {
+        "keep": "round"
+      }
+    },
+    "records": [
+      {
+        "old": "old",
+        "new": "new",
+        "new_occurrence": 1,
+        "presentation": "highlight",
+        "future": {
+          "keep": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "old": "old",
+        "new": "🤖~old~{new}",
+        "new_occurrence": 1,
+        "presentation": "propose",
+        "future": {
+          "keep": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "old": "old",
+        "new": "new",
+        "new_occurrence": 3,
+        "presentation": "direct",
+        "future": {
+          "keep": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "old": "old",
+        "new": "new",
+        "new_occurrence": 4,
+        "presentation": "direct",
+        "future": {
+          "keep": [
+            1,
+            2
+          ]
+        }
+      }
+    ],
+    "expected_effective": [
+      "highlight",
+      "propose",
+      "direct",
+      "direct"
+    ]
+  },
+  {
+    "name": "legacy-round",
+    "before": "old\n",
+    "result": "new\n",
+    "round": {
+      "base_hash": "01d09d19c2139a46",
+      "result_hash": "7aa7a5359173d05b",
+      "at": "2026-10-23T00:00:00Z",
+      "spans": [
+        {
+          "start": [
+            0,
+            0
+          ],
+          "end": [
+            0,
+            3
+          ],
+          "old": "old",
+          "new": "new"
+        }
+      ],
+      "presentation": "direct"
+    },
+    "expected_effective": [
+      "direct"
+    ]
+  },
+  {
+    "name": "legacy-default",
+    "before": "old\n",
+    "result": "new\n",
+    "round": {
+      "base_hash": "01d09d19c2139a46",
+      "result_hash": "7aa7a5359173d05b",
+      "at": "2026-10-23T00:00:00Z",
+      "spans": [
+        {
+          "start": [
+            0,
+            0
+          ],
+          "end": [
+            0,
+            3
+          ],
+          "old": "old",
+          "new": "new"
+        }
+      ]
+    },
+    "expected_effective": [
+      "highlight"
+    ]
+  }
+]

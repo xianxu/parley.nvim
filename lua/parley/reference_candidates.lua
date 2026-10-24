@@ -1,4 +1,5 @@
--- Pure occurrence enumeration and picker completion. Destinations stay textual;
+-- Occurrence enumeration and picker completion. Destinations stay textual;
+-- callers may supply review tag rows from the operation's native snapshot.
 -- the editor boundary owns resolution, opening and all buffer/window effects.
 local M = {}
 
@@ -166,6 +167,7 @@ function M.collect(lines, range, opts)
     local artifact_ref = require("parley.artifact_ref")
     local out = {}
     local reserved, markdown = {}, {}
+    local review = opts.review_tags or require("parley.question_tags").review_tags(lines)
     for _, item in ipairs(M.markdown_spans(lines, range, { in_code = in_code, config = opts.config, transcript = opts.transcript })) do
         markdown[item.row] = markdown[item.row] or {}
         markdown[item.row][item.col + 1] = item
@@ -190,7 +192,7 @@ function M.collect(lines, range, opts)
                     label = label, target = target, fallback_col = fallback - 1,
                 }
             end
-            for _, ref in ipairs(M.at_references(line)) do
+            for _, ref in ipairs(not review[row] and M.at_references(line) or {}) do
                 local destination = line:find(ref.content, ref.start_col + 2, true)
                 add("at", ref.start_col, ref.end_col, ref.content, ref.content, destination)
             end
