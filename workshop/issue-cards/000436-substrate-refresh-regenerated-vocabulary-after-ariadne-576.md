@@ -1,6 +1,6 @@
 ---
 id: 000436
-status: codecomplete
+status: done
 created: 2026-10-23
 updated: 2026-10-23
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: acde0888ea717bdab41bcbe2efd4549e865d2791
         evidence_commit: 80c7dc66a8c296802192c7d0173c8d68b168fe75
+        landed_commit: 0d5760d0a08fc4a443090d514a7b2836aada5e78
 ---
 
 # substrate refresh: regenerated vocabulary after ariadne#576
