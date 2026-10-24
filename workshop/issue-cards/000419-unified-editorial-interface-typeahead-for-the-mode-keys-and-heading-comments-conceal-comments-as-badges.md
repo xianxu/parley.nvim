@@ -1,6 +1,6 @@
 ---
 id: 000419
-status: codecomplete
+status: done
 created: 2026-10-22
 updated: 2026-10-24
 estimate_hours: 4.77
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 588a7b6f042e4e166a5095152515ab450721a872
         evidence_commit: 81b73d9f75553059e35234b4dd9fb0814b48df9b
+        landed_commit: 0e4da36672efc113c78b8196aea99615a2575789
 ---
 
 # unified-editorial-interface: typeahead for the mode keys and heading comments; conceal comments as badges
