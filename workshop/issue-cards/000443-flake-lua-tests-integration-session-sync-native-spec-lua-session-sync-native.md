@@ -5,6 +5,7 @@ created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
 github_issue:
+flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retained release journal respects current intent at after-new/before-restore (#404), lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retained release journal respects current intent at after-old/before-restore (#404)]
 ---
 
 # flake: lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retained release journal respects current intent at after-new/before-restore (#404), lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retained release journal respects current intent at after-old/before-restore (#404)
