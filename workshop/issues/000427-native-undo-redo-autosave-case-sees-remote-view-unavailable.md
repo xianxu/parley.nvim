@@ -41,7 +41,7 @@ Cause (traced in a disposable clone, nvim 0.11.7): opening an unregistered sessi
 
 - [x] The fake's registry-less `--session-sync lookup` answers that nothing is registered, as a current Couch does. FAKE_COUCH_LOOKUP=legacy opts back into the pre-pair#437 exit 2 (TL revision, ARCH-MOCK; see Log).
 - [x] Regression: an unregistered open whose lookup is unavailable (the knob unset) does post the notice, and the spec's notification capture sees it. This control shows the empty-notice assertion can still catch a real failure.
-- [ ] The traced red state: with the knob set, the lookup reports absent and no notice is posted. The undo/redo cases pass 20 reps per nvim under capped load, then the suite. The close unregisters both flakes, and the checktime sibling seen during #432 is covered by the same fix.
+- [x] The traced red state: with the knob set, the lookup reports absent and no notice is posted. The undo/redo cases pass 20 reps per nvim under capped load, then the suite. The close unregisters both flakes, and the checktime sibling seen during #432 is covered by the same fix.
 
 ## Log
 
