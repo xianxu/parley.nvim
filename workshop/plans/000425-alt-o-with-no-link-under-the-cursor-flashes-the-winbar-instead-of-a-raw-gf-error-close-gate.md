@@ -85,6 +85,93 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 24d3cc93-3d3f-43af-824d-5762bf11dd70
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000425"
+            recipe: small-diff-review
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Volumes/TestScratch/review-checkouts/a8ea9196da5a8e62
+            reviewed_head: 3f9321f80a8aff88078f4d30f69c04637b8586ed
+            slot: parley.nvim:2
+            requested_at: "2026-10-24T02:32:18.834048Z"
+          phase: finished
+          pid: 54753
+          started_at: "2026-10-24T02:32:18.988112Z"
+          finished_at: "2026-10-24T02:34:52.555704Z"
+          session_id: 01a16bc0-7cea-76b1-8b56-57d3438f2159
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 3f9321f80a8aff88078f4d30f69c04637b8586ed
+        tracker_head: 209a40f9cfa70681299f768cccd5c725fba3fb58
+        branch_point: 5958d5f2aa7899ed3fb6b141ec4ca6a21aa8c32b
+        since: "2026-10-23T12:32:20-07:00"
+        until: "2026-10-23T19:31:26-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-23T12:32:20-07:00"
+              end: "2026-10-23T19:31:26-07:00"
+              began: "2026-10-23T12:32:20-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a13b56-32ec-7310-8650-104071939f2f
+              slot: parley.nvim:2
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: cd4291a08ff154812ed7c8a495961407a5caaa5f271ade7e99c7aba7fbf71d89
+              started: "2026-10-14T16:54:39.906Z"
+              spawned: false
+              bytes: 78496167
+              windows:
+                - start: "2026-10-23T12:32:20-07:00"
+                  end: "2026-10-23T19:31:26-07:00"
+        queue_waits:
+            - attempt_id: b55f8e0de7d3b4b2ffd06a83b4efba87
+              slot: parley.nvim:2
+              record_digest: c397361cc1ee03f72b59cca75365780342aa8f62a8bbd46f12591dc6bd641530
+              start: "2026-10-23T19:45:12.469664Z"
+              end: "2026-10-23T20:53:46.674704Z"
+              queue_seconds: 4114.20504
+              raw_seconds: 4114.20504
+              exact: true
+        cuts:
+            - dispatched: "2026-10-23T12:45:35-07:00"
+              finalized: "2026-10-23T12:49:33-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-23T19:34:54-07:00"
+      dispatched: "2026-10-23T19:32:18-07:00"
+      agent: codex
+      reviewer: codex (openai; author openai)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: tests/integration/navigation_no_target_spec.lua:163–184 covers 12 insertion-position cases across absent/custom bars, nonzero columns, EOL and UTF-8. All pass at head and fail when position restoration is reverted.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: tests/integration/lock_leave_reminder_spec.lua:263–294 covers four notice/departure combinations and two reverse-priority cases. All pass at head and fail when purpose-aware coalescing is reverted.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: README.md:265–268 now documents quiet no-target feedback, prior-bar restoration and retained diagnostics, matching lua/parley/init.lua:5153–5155 and lua/parley/document_band.lua:232–287.
+          round: 2
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: 3f9321f80a8aff88078f4d30f69c04637b8586ed
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#425 (boundary-review)
@@ -103,8 +190,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `document-user-visible-behavior` (kind: defect) README update appears missing for Alt+o no-target feedback
   README.md:252–266 documents Alt+o and its native fallback, but the pinned range contains no README change describing the new quiet flash and temporary-bar restoration. This is the only changed user-facing gesture in the window; atlas/context/file_references.md:61–64 already documents it. Add the corresponding README explanation to satisfy the requested docs gate.
 
+## Round 2 — 2026-10-23T19:34:54-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — tests/integration/navigation_no_target_spec.lua:163–184 covers 12 insertion-position cases across absent/custom bars, nonzero columns, EOL and UTF-8. All pass at head and fail when position restoration is reverted.
+- BR-2 — addressed — tests/integration/lock_leave_reminder_spec.lua:263–294 covers four notice/departure combinations and two reverse-priority cases. All pass at head and fail when purpose-aware coalescing is reverted.
+- BR-3 — addressed — README.md:265–268 now documents quiet no-target feedback, prior-bar restoration and retained diagnostics, matching lua/parley/init.lua:5153–5155 and lua/parley/document_band.lua:232–287.
+
 ## Open findings
 
-- **BR-1** [Critical] `preserve-edit-position-on-noop` (kind: defect) No-target Alt+o moves the Insert-mode cursor left
-- **BR-2** [Critical] `coalesce-only-equivalent-feedback` (kind: defect) A no-target pulse suppresses the unsubmitted-turn leave reminder
-- **BR-3** [Important] `document-user-visible-behavior` (kind: defect) README update appears missing for Alt+o no-target feedback
+(none — every finding has been disposed)
