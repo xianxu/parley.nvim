@@ -1,13 +1,13 @@
 ---
 id: 000421
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-22
 updated: 2026-10-23
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'd2d93f55f6370ed3ee851a96129dd836d6d3b05b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a88763860ad4258492f79f663eedba33a39fe9a7' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-23T15:07:22-07:00
 claimant:
     operator: Xian Xu
@@ -18,6 +18,7 @@ claimant:
     repository: github.com/xianxu/parley.nvim
 flake_tests: [lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership keeps inspection bounded when all 256 marked directory owners differ from this editor, lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership retains a directory whose inode changes after inspection begins]
 flow: {kind: quick, provenance: inferred, spec: "75be48b0", done: "a0bbe98b"}
+actual_hours: 1.99
 ---
 
 # flake: lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership keeps inspection bounded when all 256 marked directory owners differ from this editor, lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership retains a directory whose inode changes after inspection begins
