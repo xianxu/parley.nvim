@@ -26,10 +26,10 @@ describe("edit_round", function()
         buf = vim.api.nvim_get_current_buf()
     end
 
-    local function seed(spans, at)
+    local function seed(spans, at, mode)
         fake_couch.round(vim.env.FAKE_COUCH_REGISTRY, file, { base_hash = "aaaaaaaaaaaaaaaa",
             result_hash = vim.fn.sha256(table.concat(vim.fn.readfile(file), "\n") .. "\n"):sub(1, 16),
-            at = at or "2020-01-01T00:00:00Z", presentation = "highlight", spans = spans })
+            at = at or "2020-01-01T00:00:00Z", presentation = mode or "highlight", spans = spans })
     end
 
     local function span(line, col, new, explain)
@@ -87,16 +87,40 @@ describe("edit_round", function()
     end)
 
     for _, case in ipairs({ { "direct", "34" }, { "propose", "33" } }) do
-        it(("draws nothing under presentation: %s (row %s)"):format(case[1], case[2]), function()
+        it(("ignores current document presentation: %s when drawing stored highlights (legacy row %s)"):format(case[1], case[2]), function()
             local lines = { "---", "presentation: " .. case[1], "---", "🤖~old~{first} change" }
             open(lines)
             seed({ span(3, 0, "🤖~old~{first}") })
-            edit_round.refresh(buf)
-            vim.wait(200, function() return false end, 10)
-            assert.equals(0, #marks())
+            assert.is_true(refreshed(1))
             assert.same(lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
         end)
     end
+
+    it("uses each stored span's presentation independently of current document keys (#419)", function()
+        open({ "---", "presentation: direct", "---", "highlight", "direct", "🤖~old~{proposal}" })
+        local highlighted, direct, proposed = span(3, 0, "highlight"), span(4, 0, "direct"), span(5, 0, "🤖~old~{proposal}")
+        highlighted.presentation, direct.presentation, proposed.presentation = "highlight", "direct", "propose"
+        seed({ highlighted, direct, proposed }, nil, "direct")
+        assert.is_true(refreshed(1))
+        assert.equals(3, marks()[1][2])
+    end)
+
+    it("visibly refuses malformed stored presentation and clears stale decorations (#419)", function()
+        open({ "# Doc", "first change" })
+        seed({ span(1, 0, "first") })
+        assert.is_true(refreshed(1))
+        seed({ span(1, 0, "first") }, nil, "future-unknown")
+        local notices, notify = {}, vim.notify
+        vim.notify = function(message) notices[#notices + 1] = message end
+        local ok, err = pcall(function()
+            assert.is_true(refreshed(0))
+            assert.is_true(vim.wait(arrival.MS, function() return #notices > 0 end, 10))
+        end)
+        vim.notify = notify
+        assert.is_true(ok, tostring(err))
+        assert.truthy(notices[1]:find("presentation", 1, true))
+        assert.equals(0, #messages())
+    end)
 
     it("draws nothing for a round a later submit cleared, and stays cleared on reopen (row 32)", function()
         open({ "# Doc", "first change" })

@@ -150,42 +150,78 @@ local function mtime_id(stat)
     return stat.mtime.sec .. "." .. stat.mtime.nsec
 end
 
---- The events for the side docs the agent wrote (attention_model.scan owns
---- the rule): every `*.md` with frontmatter `type: side-doc` in the `.side/`
---- folder of an entry already in the finder. Only the files the rule picks by
---- their mtimes have their frontmatter read. Side docs are entries too, so
---- nesting is found on the next scan.
+--- Scan each owning root once, flat files plus one month directory level.
+--- Historical direct nested folders remain separate explicit entry roots. No
+--- scan descends through a link or through an arbitrary directory.
 function M.discover(state)
-    local uv = vim.uv or vim.loop
-    local files = {}
+    local uv, side = vim.uv or vim.loop, require("parley.side_document_path")
+    local roots, files, by_path = {}, {}, {}
+    local function since(entry)
+        return entry.kind == "side" and entry.submitted_at or (entry.recorded_at or entry.submitted_at)
+    end
+    local function root(folder, entry, monthly)
+        if not folder then return end
+        local value = roots[folder]
+        if not value then value = { parent = entry, monthly = monthly }; roots[folder] = value end
+        if since(entry) < since(value.parent) then value.parent = entry end
+        value.monthly = value.monthly or monthly
+    end
     for _, entry in pairs(state.entries) do
-        local folder = require("parley.document_move_plan").side_path(entry.path)
-        local scan = uv.fs_scandir(folder)
-        while scan do
-            local name, kind = uv.fs_scandir_next(scan)
+        root(side.root(entry.path), entry, true)
+        root(require("parley.document_move_plan").side_path(entry.path), entry, false)
+    end
+    local function scan(folder, value, months)
+        local stat = uv.fs_lstat(folder)
+        if not stat or stat.type ~= "directory" then return end
+        local directory = uv.fs_scandir(folder)
+        while directory do
+            local name, kind = uv.fs_scandir_next(directory)
             if not name then break end
             local path = folder .. "/" .. name
-            local stat = (kind == "file" or kind == "link") and name:match("%.md$") and uv.fs_stat(path)
-            if stat and stat.type == "file" then
-                files[#files + 1] = { path = path, parent = entry.path, mtime_sec = stat.mtime.sec, mtime_id = mtime_id(stat) }
+            if kind == "directory" and months and side.month(name) then
+                scan(path, value, false)
+            elseif kind == "file" and name:match("%.md$") then
+                local file = uv.fs_stat(path)
+                if file and file.type == "file" and not by_path[path] then
+                    local candidate = { path = path, parent = value.parent.path,
+                        mtime_sec = file.mtime.sec, mtime_id = mtime_id(file) }
+                    files[#files + 1], by_path[path] = candidate, candidate
+                end
             end
         end
     end
+    for folder, value in pairs(roots) do scan(folder, value, value.monthly) end
     table.sort(files, function(x, y) return x.path < y.path end)
-    return vim.tbl_filter(function(event)
+    local events = {}
+    -- The provisional parent is the oldest tracked attachment in this root:
+    -- mtime selection remains cheap. Read only selected headers, then repeat
+    -- that rule with the proven actual parent, never the provisional one.
+    for _, event in ipairs(Model.scan(state, files)) do
         local ok, head = pcall(vim.fn.readfile, event.path, "", SIDE_HEAD_LINES)
-        return ok and M.is_side_doc(head)
-    end, Model.scan(state, files))
+        if ok and M.is_side_doc(head) then
+            local candidate = by_path[event.path]
+            local parent = side.parent(event.path, head)
+            if parent and state.entries[parent] and side.relation(event.path, parent, head) then
+                local real_child, real_parent = uv.fs_realpath(event.path), uv.fs_realpath(parent)
+                if real_child and real_parent and side.relation(real_child, real_parent, head) then
+                    candidate.parent = parent
+                    local selected = Model.scan(state, { candidate })
+                    if selected[1] then events[#events + 1] = selected[1] end
+                end
+            end
+        end
+    end
+    return events
 end
 
---- The operator's editor wrote `buf`'s file: when it is a `*.md` in a `.side/`
---- folder, record its new mtime, so a scan does not take the save for the agent's.
+--- The operator's own saves suppress discovery for flat/monthly side files,
+--- including legacy nested direct folders already represented in the finder.
 function M.saved(buf)
     if vim.bo[buf].buftype ~= "" then return end
     local name = vim.api.nvim_buf_get_name(buf)
     if name == "" then return end
     local path = vim.fn.fnamemodify(name, ":p")
-    if not path:match("%.side/[^/]+%.md$") then return end
+    if not require("parley.side_document_path").member(path) and not path:match("%.side/[^/]+%.md$") then return end
     local stat = (vim.uv or vim.loop).fs_stat(path)
     if not stat then return end
     apply({ type = "saved", path = path, mtime = mtime_id(stat) }, { now = M.clock() })

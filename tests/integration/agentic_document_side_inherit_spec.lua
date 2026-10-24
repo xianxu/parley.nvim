@@ -106,6 +106,54 @@ describe("side docs inherit the parent's owner (#378)", function()
         assert.equals(0, sends())
     end)
 
+    it("inherits a monthly child and its same-root grandchild from their actual parents (#419)", function()
+        local month = root .. "/parent.side/2026-10"
+        vim.fn.mkdir(month, "p")
+        local first, second = month .. "/first.md", month .. "/second.md"
+        vim.fn.writefile({ "---", "type: side-doc", "parent: ../../parent.md", "---",
+            "[child](second.md)" }, first)
+        vim.fn.writefile({ "---", "type: side-doc", "parent: first.md", "---" }, second)
+        vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "[monthly](parent.side/2026-10/first.md)" })
+        local child = follow(vim.api.nvim_buf_line_count(buf))
+        await(function() return settled(child) end)
+        assert.is_truthy(document.identity(child), "monthly child did not inherit")
+        assert.equals("ops:0", lookup(first).registration.Owner)
+        -- Prove the immediate parent rather than taking the top root's owner.
+        local forgotten
+        require("parley.document_registry").request("forget", { first }, {}, function(value) forgotten = value end)
+        await(function() return forgotten ~= nil end)
+        register(first, "ops:7")
+        document.recheck(child)
+        await(function() return document.identity(child) and document.identity(child).Owner == "ops:7" end)
+        local grandchild = follow(5, child)
+        await(function() return settled(grandchild) end)
+        assert.is_truthy(document.identity(grandchild), "same-root grandchild did not inherit")
+        assert.equals("ops:7", lookup(second).registration.Owner)
+        assert.equals(0, sends())
+    end)
+
+    it("does not infer monthly ownership from membership, basename or a symlink escape (#419)", function()
+        local month = root .. "/parent.side/2026-10"
+        vim.fn.mkdir(month, "p")
+        for _, case in ipairs({ { name = "wrong.md", parent = "../../other.md" },
+            { name = "missing.md" } }) do
+            local path = month .. "/" .. case.name
+            vim.fn.writefile(case.parent and { "---", "parent: " .. case.parent, "---" } or { "# No attachment" }, path)
+            vim.cmd("edit " .. vim.fn.fnameescape(path))
+            local child = vim.api.nvim_get_current_buf()
+            await(function() return settled(child) end)
+            assert.is_false(document.inherit(child, buf))
+            assert.equals("absent", lookup(path).kind)
+        end
+        local escape = month .. "/escape.md"
+        assert(vim.uv.fs_symlink(other, escape))
+        vim.cmd("edit " .. vim.fn.fnameescape(escape))
+        local child = vim.api.nvim_get_current_buf()
+        await(function() return settled(child) end)
+        assert.is_false(document.inherit(child, buf))
+        assert.equals("absent", lookup(other).kind)
+    end)
+
     it("keeps a side child that is already registered", function()
         register(side, "ops:7")
         local child = follow(2)
