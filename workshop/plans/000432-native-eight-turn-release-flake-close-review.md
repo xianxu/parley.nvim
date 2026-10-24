@@ -98,3 +98,88 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"25afca10-02e5-4490-b605-98e5b277fb34","repository":"github.com/xianxu/parley.nvim","issue_id":"000432","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/9daf8c919fb1c499","reviewed_head":"93d4fda8b5e31994544f4ae181222b7ed9989122","slot":"parley.nvim:1","requested_at":"2026-10-24T14:39:10.303065Z"},"phase":"finished","pid":40442,"started_at":"2026-10-24T14:39:10.394845Z","finished_at":"2026-10-24T14:50:54.513764Z","session_id":"4059122b-a3f4-4d1e-91c1-f41412b48f75","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-24T08:24:32-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 432 — Native eight-turn clean release intermittently retains its lock |
+| repo | parley.nvim |
+| issue file | workshop/issues/000432-native-eight-turn-release-flake.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 0675cc21d442bf438f7a08a7425a7567d5623101..604649db4857d4827ad09eb73327935bcd62058a |
+| command | sdlc close --issue 432 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | fenced |
+| timestamp | 2026-10-24T08:24:32-07:00 |
+| verdict | SHIP |
+
+## Review
+
+I'm checking whether the new retry tests really go red without the fix. Next I'll run a trimmed copy of the native spec with the fresh-release bump reverted.
+
+Build a trimmed spec (only #432 cases) and a runner script.
+
+The 5 #432 cases ran inside a 41-case pass. Now the controls: revert the fresh-release bump, then the WARN.
+
+The supersede case goes red as claimed. Next control: remove the WARN.
+
+Both controls go red as the Log claims. Restoring the checkout.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Verdict: SHIP.** All three findings from round 1 are fixed, and I raised nothing new. #432 now has a deterministic reproduction of the stuck lock, and the fix is small. A clean automatic release whose Couch call comes back unavailable (unconfirmed) is retried, with the same idempotent turn token, at most 3 times. Each attempt re-checks the turn's epoch, a generation counter, the baseline, insert mode and lock ownership. A refused release is still never retried, so lock ownership is no weaker. I checked the BR-1 fix by breaking the code and running the tests in this disposable checkout, then restored it (`git status` clean):
+
+- **Remove the fresh-release generation bump** (`session_sync.lua:1129`): "a fresh release supersedes an older release's retries" fails.
+- **Remove the exhaustion WARN** (`:1098`): the "warns once…" case fails at `:760` and the "supersedes" case at `:775`.
+- **Unmodified head:** all 5 #432 cases pass in a 41-case run.
+
+1. **Strengths**
+   - `session_sync.lua:475`: only an `unavailable` result counts as unconfirmed. `confirmed` succeeds and a refusal is final, as the Plan's state table requires.
+   - `session_sync.lua:1110-1116`: the `ours()` check accepts a missing lock only on a retry. That covers a lost reply (Couch released the lock but the answer never arrived) without letting a fresh release adopt a missing lock.
+   - The fake's `FAKE_COUCH_OPERATOR_PRE_DELAY` (`tests/fixtures/fake_couch_operator.py:83`) lets tests reproduce both shapes: killed before the release ran, and killed after it ran.
+   - The tests count operator calls from the fake's local trace file rather than through a call into the child Neovim. That avoids the harness stall recorded in `workshop/lessons.md`.
+   - `M.release_if_baseline` keeps its one-argument public shape (`:1142`). The 5 external callers in `agentic_document.lua` and `session_sync.lua` can't pass `retrying` by accident.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor:** none new.
+
+5. **Test coverage**
+   - **Bounds:** exactly 4 release calls before exhaustion (the boundary of the 3-entry `RELEASE_RETRY_MS` table), and exactly 5 when a second fresh release supersedes the first chain.
+   - **Acquire bump (`:442`):** still only covered together with the baseline and insert-mode guards. I agree with the Log that no reachable ordering lets the generation alone decide. Insert mode blocks an automatic release, an edit moves the content off the baseline, and Esc or undo issues a fresh release, which bumps the generation anyway. So this is a defensive guard, not a coverage gap.
+   - **Submit during the retry window:** a submit confirms the release, which clears `owned_lock`, so a pending retry exits early at `:1117`.
+
+6. **Architecture**
+   - **ARCH-DRY: pass.** The retry reuses `release_owned` → `dispatch_admission` and `helper.defer_deadline`; nothing is duplicated.
+   - **ARCH-PURE: pass.** This is IO-shell orchestration; the retry policy is a small constant table.
+   - **ARCH-PURPOSE: pass.** It covers both unconfirmed shapes, and every automatic-release caller goes through the one internal function.
+   - **ARCH-EVOLVE: pass.** No persisted format changes. `release_generation` lives only in memory.
+
+7. **Plan revisions:** none. The Plan and Log match the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Tests at session_sync_native_spec.lua:751 and :764. Reverting the :1129 bump turns the supersede case red; removing the WARN turns both red (:760, :775). Acquire bump is defensive and has no isolatable ordering.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      atlas/modes/session_sync.md:129 now says 1, 2 and 4 s after each failed try, matching RELEASE_RETRY_MS in retry_release.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The issue Log records that Done-when clause 3 holds apart from the 427-registered undo/redo cases, which belong to issue 427.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"040e6e99-9c98-453e-a07c-6537d41271bd","repository":"github.com/xianxu/parley.nvim","issue_id":"000432","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Volumes/TestScratch/review-checkouts/b0e10f7cd672843b","reviewed_head":"604649db4857d4827ad09eb73327935bcd62058a","slot":"parley.nvim:1","requested_at":"2026-10-24T15:20:31.764395Z"},"phase":"finished","pid":7105,"started_at":"2026-10-24T15:20:31.96489Z","finished_at":"2026-10-24T15:24:31.232105Z","session_id":"84efcb66-e779-4beb-8387-1e6ac754ae72","outcome":"returned"}] -->

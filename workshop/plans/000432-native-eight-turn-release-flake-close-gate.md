@@ -713,6 +713,712 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 040e6e99-9c98-453e-a07c-6537d41271bd
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000432"
+            recipe: small-diff-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Volumes/TestScratch/review-checkouts/b0e10f7cd672843b
+            reviewed_head: 604649db4857d4827ad09eb73327935bcd62058a
+            slot: parley.nvim:1
+            requested_at: "2026-10-24T15:20:31.764395Z"
+          phase: finished
+          pid: 7105
+          started_at: "2026-10-24T15:20:31.96489Z"
+          finished_at: "2026-10-24T15:24:31.232105Z"
+          session_id: 84efcb66-e779-4beb-8387-1e6ac754ae72
+          outcome: returned
+      actual_inputs:
+        version: 3
+        method: active-time-v3-branch-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 604649db4857d4827ad09eb73327935bcd62058a
+        tracker_head: 289c91d8b957befd6387aaf135faab24ba450dc1
+        branch_point: 0675cc21d442bf438f7a08a7425a7567d5623101
+        since: "2026-10-23T23:11:45-07:00"
+        until: "2026-10-24T08:18:05-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-23T23:11:45-07:00"
+              end: "2026-10-24T08:18:05-07:00"
+              began: "2026-10-23T23:11:45-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: claude
+              id: d993777e-4c43-455a-b373-52b1dc0fc833
+              slot: parley.nvim:1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: c65ce1c8c1d2c62950a666c282ce741327ee2160380e09297b48d6fd35176594
+              started: "2026-10-23T07:59:20.816Z"
+              spawned: false
+              bytes: 16683677
+              windows:
+                - start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+              dispatch_windows:
+                - start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T08:18:05-07:00"
+        branches:
+            - root: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              path: /Users/xianxu/workspace/parley.nvim/.git/worktrees/parley.nvim/logs/HEAD
+              head: 604649db4857d4827ad09eb73327935bcd62058a
+              branch: 000432-native-eight-turn-release-flake
+              digest: a283786dda5162c2d8d8ee4d133455a6689d30a18336b171026d7df538b6e5be
+              bytes: 159097
+              intervals:
+                - source: claude/0ed605c3-75e4-4fc0-a1aa-e5a2cf6a5f5e
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/0ed605c3-75e4-4fc0-a1aa-e5a2cf6a5f5e
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/0ed605c3-75e4-4fc0-a1aa-e5a2cf6a5f5e
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/0ed605c3-75e4-4fc0-a1aa-e5a2cf6a5f5e
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/25391601-bb6c-4495-93ec-9ca17df63658
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/25391601-bb6c-4495-93ec-9ca17df63658
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/25391601-bb6c-4495-93ec-9ca17df63658
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/25391601-bb6c-4495-93ec-9ca17df63658
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/294ab56e-1303-48a8-9312-df8d4e484ea9
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/294ab56e-1303-48a8-9312-df8d4e484ea9
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/294ab56e-1303-48a8-9312-df8d4e484ea9
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/294ab56e-1303-48a8-9312-df8d4e484ea9
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/3d73ddc6-2c4d-4617-be75-f1e690b92305
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/3d73ddc6-2c4d-4617-be75-f1e690b92305
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/3d73ddc6-2c4d-4617-be75-f1e690b92305
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/3d73ddc6-2c4d-4617-be75-f1e690b92305
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/53acb8ed-7204-4e14-bfb8-954e774fcdbb
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/53acb8ed-7204-4e14-bfb8-954e774fcdbb
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/53acb8ed-7204-4e14-bfb8-954e774fcdbb
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/53acb8ed-7204-4e14-bfb8-954e774fcdbb
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/5fd9cfe6-ba3b-4799-a2d6-18a004661e57
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/5fd9cfe6-ba3b-4799-a2d6-18a004661e57
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/5fd9cfe6-ba3b-4799-a2d6-18a004661e57
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/5fd9cfe6-ba3b-4799-a2d6-18a004661e57
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/614d7266-98f2-4cb4-901b-cb2b908f26f6
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/614d7266-98f2-4cb4-901b-cb2b908f26f6
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/614d7266-98f2-4cb4-901b-cb2b908f26f6
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/614d7266-98f2-4cb4-901b-cb2b908f26f6
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/81b9dc8e-790b-48a3-b384-a7f93c050e98
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/81b9dc8e-790b-48a3-b384-a7f93c050e98
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/81b9dc8e-790b-48a3-b384-a7f93c050e98
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/81b9dc8e-790b-48a3-b384-a7f93c050e98
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/aa2f3d6f-e82d-4001-9c1c-3fed00c10f1b
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/aa2f3d6f-e82d-4001-9c1c-3fed00c10f1b
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/aa2f3d6f-e82d-4001-9c1c-3fed00c10f1b
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/aa2f3d6f-e82d-4001-9c1c-3fed00c10f1b
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/b73b2e5c-68c3-4d9c-983f-c8ca4e5eb0ec
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/b73b2e5c-68c3-4d9c-983f-c8ca4e5eb0ec
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/b73b2e5c-68c3-4d9c-983f-c8ca4e5eb0ec
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/b73b2e5c-68c3-4d9c-983f-c8ca4e5eb0ec
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/ccd7458f-0a93-435d-9ad8-ef93721fedc3
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/ccd7458f-0a93-435d-9ad8-ef93721fedc3
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/ccd7458f-0a93-435d-9ad8-ef93721fedc3
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/ccd7458f-0a93-435d-9ad8-ef93721fedc3
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/d0921b18-345d-44d2-afbf-ee8330b92a0b
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/d0921b18-345d-44d2-afbf-ee8330b92a0b
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/d0921b18-345d-44d2-afbf-ee8330b92a0b
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/d0921b18-345d-44d2-afbf-ee8330b92a0b
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/d993777e-4c43-455a-b373-52b1dc0fc833
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/d993777e-4c43-455a-b373-52b1dc0fc833
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/d993777e-4c43-455a-b373-52b1dc0fc833
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/d993777e-4c43-455a-b373-52b1dc0fc833
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/df9ebbe6-ac00-4c6f-89b9-58f49ba70a55
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/df9ebbe6-ac00-4c6f-89b9-58f49ba70a55
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/df9ebbe6-ac00-4c6f-89b9-58f49ba70a55
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/df9ebbe6-ac00-4c6f-89b9-58f49ba70a55
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: claude/ed0a4bfd-765f-4ca3-8eed-f8264fbaf6ba
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/ed0a4bfd-765f-4ca3-8eed-f8264fbaf6ba
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: claude/ed0a4bfd-765f-4ca3-8eed-f8264fbaf6ba
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: claude/ed0a4bfd-765f-4ca3-8eed-f8264fbaf6ba
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a14239-bf1b-7bf0-ab35-87bfe0a9c79e
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14239-bf1b-7bf0-ab35-87bfe0a9c79e
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a14239-bf1b-7bf0-ab35-87bfe0a9c79e
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14239-bf1b-7bf0-ab35-87bfe0a9c79e
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a1423b-c235-7140-aec0-476b729ef99f
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1423b-c235-7140-aec0-476b729ef99f
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a1423b-c235-7140-aec0-476b729ef99f
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1423b-c235-7140-aec0-476b729ef99f
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a1423e-282c-7252-b50a-a43332482dec
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1423e-282c-7252-b50a-a43332482dec
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a1423e-282c-7252-b50a-a43332482dec
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1423e-282c-7252-b50a-a43332482dec
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a1423e-b822-7e10-98ba-78536ba8f5c3
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1423e-b822-7e10-98ba-78536ba8f5c3
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a1423e-b822-7e10-98ba-78536ba8f5c3
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1423e-b822-7e10-98ba-78536ba8f5c3
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a14a49-286a-71d0-a9b1-3b2a480c0c3d
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14a49-286a-71d0-a9b1-3b2a480c0c3d
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a14a49-286a-71d0-a9b1-3b2a480c0c3d
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14a49-286a-71d0-a9b1-3b2a480c0c3d
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a14a4b-894e-7253-a995-a82ca9bdaccb
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14a4b-894e-7253-a995-a82ca9bdaccb
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a14a4b-894e-7253-a995-a82ca9bdaccb
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14a4b-894e-7253-a995-a82ca9bdaccb
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a14a4c-e538-7380-a5e6-3262ec911043
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14a4c-e538-7380-a5e6-3262ec911043
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a14a4c-e538-7380-a5e6-3262ec911043
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14a4c-e538-7380-a5e6-3262ec911043
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a14a4d-6978-7983-87a6-96666ef3d84d
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14a4d-6978-7983-87a6-96666ef3d84d
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a14a4d-6978-7983-87a6-96666ef3d84d
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a14a4d-6978-7983-87a6-96666ef3d84d
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a162f7-67e1-7a50-85ba-8daa8c35ef7c
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a162f7-67e1-7a50-85ba-8daa8c35ef7c
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a162f7-67e1-7a50-85ba-8daa8c35ef7c
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a162f7-67e1-7a50-85ba-8daa8c35ef7c
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a162fc-0ab8-72c0-b6ba-cc4baa5e466b
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a162fc-0ab8-72c0-b6ba-cc4baa5e466b
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a162fc-0ab8-72c0-b6ba-cc4baa5e466b
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a162fc-0ab8-72c0-b6ba-cc4baa5e466b
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a16386-b503-73f3-934d-1c36ecd543ba
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a16386-b503-73f3-934d-1c36ecd543ba
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a16386-b503-73f3-934d-1c36ecd543ba
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a16386-b503-73f3-934d-1c36ecd543ba
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a1638a-8d3e-73c2-8e2a-0aed5bf28af9
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1638a-8d3e-73c2-8e2a-0aed5bf28af9
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a1638a-8d3e-73c2-8e2a-0aed5bf28af9
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1638a-8d3e-73c2-8e2a-0aed5bf28af9
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a1638c-6e36-7142-94d2-59f91265ff08
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1638c-6e36-7142-94d2-59f91265ff08
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a1638c-6e36-7142-94d2-59f91265ff08
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1638c-6e36-7142-94d2-59f91265ff08
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+                - source: codex/01a1638c-e3cf-7b91-a5c2-fb326f3ae063
+                  start: "2026-10-23T23:11:45-07:00"
+                  end: "2026-10-24T06:12:33Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1638c-e3cf-7b91-a5c2-fb326f3ae063
+                  start: "2026-10-24T06:12:33Z"
+                  end: "2026-10-24T10:57:46Z"
+                  branch: 000431-native-release-journal-setup-flake
+                  kind: foreign-branch
+                - source: codex/01a1638c-e3cf-7b91-a5c2-fb326f3ae063
+                  start: "2026-10-24T10:57:46Z"
+                  end: "2026-10-24T10:59:34Z"
+                  branch: main-slot1
+                  kind: resting-excluded
+                - source: codex/01a1638c-e3cf-7b91-a5c2-fb326f3ae063
+                  start: "2026-10-24T10:59:34Z"
+                  end: "2026-10-24T08:18:05-07:00"
+                  branch: 000432-native-eight-turn-release-flake
+                  kind: branch
+        queue_waits:
+            - attempt_id: 16f270505f1783fe39fabe0b7a857fe8
+              slot: parley.nvim:1
+              record_digest: 5e5096d84e7f7d92fe475b1393d0149db5f780050de12d0c6fef4841078ee889
+              start: "2026-10-24T12:19:33.5729Z"
+              end: "2026-10-24T13:13:30.752185Z"
+              queue_seconds: 3237.179285
+              raw_seconds: 3237.179285
+              exact: true
+            - attempt_id: 3584b9dce5da10532b4432f9043dd699
+              slot: parley.nvim:1
+              record_digest: a85e3d03be1de9f61640d3e514a426319afa73f65fc5059b6a608c5f687f5a20
+              start: "2026-10-24T13:18:17.420584Z"
+              end: "2026-10-24T14:30:16.443755Z"
+              queue_seconds: 4319.023171
+              raw_seconds: 4319.023171
+              exact: true
+        cuts:
+            - dispatched: "2026-10-24T07:39:10-07:00"
+              finalized: "2026-10-24T07:52:02-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-24T08:24:33-07:00"
+      dispatched: "2026-10-24T08:20:31-07:00"
+      agent: claude
+      reviewer: claude (anthropic; author anthropic)
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Tests at session_sync_native_spec.lua:751 and :764. Reverting the :1129 bump turns the supersede case red; removing the WARN turns both red (:760, :775). Acquire bump is defensive and has no isolatable ordering.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: atlas/modes/session_sync.md:129 now says 1, 2 and 4 s after each failed try, matching RELEASE_RETRY_MS in retry_release.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: The issue Log records that Done-when clause 3 holds apart from the 427-registered undo/redo cases, which belong to issue 427.
+          round: 2
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: 604649db4857d4827ad09eb73327935bcd62058a
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#432 (boundary-review)
@@ -731,8 +1437,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Minor] `done-when-qualification-scope` (kind: defect) Done-when clause 3 (complete native spec passes under repeated qualification) holds only if the registered 427 cases are excluded
   The Log shows 15 of 20 reps on 0.11.7 and 8 of 20 on 0.12.5 failing, all in the 427 undo/redo cases. Record that exclusion explicitly at close.
 
+## Round 2 — 2026-10-24T08:24:33-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — Tests at session_sync_native_spec.lua:751 and :764. Reverting the :1129 bump turns the supersede case red; removing the WARN turns both red (:760, :775). Acquire bump is defensive and has no isolatable ordering.
+- BR-2 — addressed — atlas/modes/session_sync.md:129 now says 1, 2 and 4 s after each failed try, matching RELEASE_RETRY_MS in retry_release.
+- BR-3 — addressed — The issue Log records that Done-when clause 3 holds apart from the 427-registered undo/redo cases, which belong to issue 427.
+
 ## Open findings
 
-- **BR-1** [Important] `retry-bound-untested` (kind: defect) Release-retry chain bounds (fresh-release generation bump, exhaustion WARN) have no regression test
-- **BR-2** [Minor] `doc-claim-precision` (kind: defect) Atlas says retries happen "at 1, 2 and 4 s" but the delays are per-attempt backoff (about 1, 3, 7 s+)
-- **BR-3** [Minor] `done-when-qualification-scope` (kind: defect) Done-when clause 3 (complete native spec passes under repeated qualification) holds only if the registered 427 cases are excluded
+(none — every finding has been disposed)
