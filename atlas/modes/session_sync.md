@@ -126,7 +126,7 @@ No lock or journal is overwritten to force recovery.
 Attachment completed during insert mode takes the same lock. No idle-release
 timer or new watcher is added; a refused release retains the existing band/recovery.
 An automatic release killed at its budget is unconfirmed, not failed (#432): it
-is retried with the same idempotent token at 1, 2 and 4 s while the same clean
+is retried with the same idempotent token 1, 2 and 4 s after each failed try while the same clean
 turn stands (a new acquire or a fresh release supersedes it), then one WARN
 leaves that recovery. This acquisition baseline is an in-memory content hash: explicit saves
 and immediate auto-save never advance it. A save of changed text keeps the turn.
