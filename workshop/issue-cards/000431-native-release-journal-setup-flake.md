@@ -1,6 +1,6 @@
 ---
 id: 000431
-status: codecomplete
+status: done
 created: 2026-10-23
 updated: 2026-10-24
 estimate_hours:
@@ -22,6 +22,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 838d439028664564b76a616cc5fcea7df4b0a55e
         evidence_commit: f7475a9fece770098e1e9275c479a21450ea9a38
+        landed_commit: 58228d3dd418bbfec4949af6a92e1246005779bc
 ---
 
 # Native release-journal test intermittently loses its setup lock
