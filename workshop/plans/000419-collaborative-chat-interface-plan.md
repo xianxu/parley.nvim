@@ -8,7 +8,7 @@
 
 **Tech stack:** Lua/LuaJIT, Neovim 0.12.5 and 0.11.7, bundled Markdown Tree-sitter structural adapter, Python standard-library export synchronizer, Plenary/native embedded-Neovim tests.
 
-**Status:** draft for TL approval; no runtime implementation authorized by this document alone.
+**Status:** TL approved 2026-10-23 (ad007bf0); render envelope approved 862a7213. Implementation still waits for change-code gates.
 
 ## Source and allocation
 
@@ -42,7 +42,7 @@
 - **ChatScan:** `{sections, headings, tags, misplaced, notices}`; submitted-document 1-based lines, inclusive section end, heading 0 means whole document. Each section has `{heading, finish, source, legacy}`. A heading has source row, level, name and ATX/setext kind. Sections are nested/disjoint; a stack projects innermost section once per row. Tag coordinates remain available even under a whole-document legacy scalar. Pure core receives typed structural facts, never Neovim nodes. Unit-test with plain tables.
 - **Items:** separate operator-owned item extents from ready robot-marker asks inside chat. Tag grammar uses numbered `N.` items; legacy also `-`/`*`; tab stops, shallowest list indentation, continuations, prose breaks and answered links follow the pinned source. Each line is visited a constant number of times. Do not blanket-filter every marker in chat.
 - **Legacy evidence:** reuse the existing bounded scalar/map decoder and root-plain correction. Preserve known block/flow chat maps and quoted/plain strings. Errors become exact visible unread/malformed notices, never admission failure. Retired keys do not enter an interpretation pipeline. Do not grow a general YAML scanner: if supported legacy forms cannot match the pinned oracle, stop and bring the smallest mismatch to TL before adding syntax. Empty presence differs from missing; only a closed leading fence block can emit unread-frontmatter.
-- **Local proposal:** agent semantics remain agent-owned. Require each ready marker to be identified exactly once by `{line, col, raw, kind}` in a review-only classification envelope, with `kind=command|question` (unclear/unsure resolve question). Coordinates and bytes bind it to this invocation snapshot. Question spans become protected; only declared command work may be applied. Missing/duplicate/stale/malformed classification refuses the complete local batch before any effect. Reject proposed edits that replace deferred questions or protected tag/heading/item/frontmatter bytes. No punctuation-based question detector.
+- **Local proposal:** agent semantics remain agent-owned. Require each ready marker to be identified exactly once by `{line, col, raw, kind}` (zero-based line and byte column, matching parse_markers) in a review-only classification envelope, with `kind=command|question` (unclear/unsure resolve question). Coordinates and bytes bind it to this invocation snapshot. Question spans become protected; only declared command work may be applied. Missing/duplicate/stale/malformed classification refuses the complete local batch before any effect. Reject proposed edits that replace deferred questions or protected tag/heading/item/frontmatter bytes. No punctuation-based question detector.
 - **Brief loader:** names and bodies derive only from manifest role `brief`. Validate flag absence and name-only frontmatter; retire free-form. Load the five small brief bodies with the source so the agent can infer the applicable brief from the current ask. No mode args, bracket selectors, flags or standing instruction. No new completion list.
 - **Side path relation:** pure normalized path helpers distinguish flat and one-month layouts, derive one owning `.side` root, and accept a child opened from its actual parent only after its declared `parent:` resolves correctly under that root. No basename-only proof; no nested `.side` root for a side doc. Reuse `side_tree_model` parent-chain/cycle rules. The relationship does not itself grant Couch ownership.
 - **Historical presentation:** validate known values, absent fallback only, preserve unknown JSON members by leaving persistence with the existing producer. Render stored direct as no tint, highlight as tint, propose as existing marker content. New local edits always highlight. No document key can suppress or reinterpret a stored round.
@@ -63,7 +63,7 @@
 
 **Structure boundary:** parse one string snapshot with Markdown grammar, extract heading/code/source ranges in one traversal, then call the pure policy. Keep the established outline/editing H1–H3 dialect unchanged: tag ownership only widens extents of an already supported editing heading. ATX H4–H6 and setext still define review policy. No guessed title-based attachment. If the bundled parser is unavailable, visibly skip decoration and refuse local command execution requiring a policy proof; Couch submit remains available. Test this explicit degraded state; do not silently use a different grammar.
 
-**Proposal boundary:** add optional `review_asks` metadata to the existing propose_edits schema; other tools/callers remain unchanged. Extend the existing pre-effect `validate_edits(snapshot, edits, input)` hook to receive complete input. Review requires exactly one proposal and complete typed classification; validates the whole batch before launching the existing tool producer. No new tool executor, state machine or write authority. Completion derives the deferral notice from that validated snapshot result; all-question rounds do not auto-resubmit endlessly. A no-op question batch must not create backups or write the source. Preserve generic skill callers that do not install the review hook.
+**Proposal boundary:** add optional `review_asks` metadata to the existing propose_edits schema; other tools/callers remain unchanged. Extend the existing pre-effect `validate_edits(snapshot, edits, input)` hook to receive complete input. Review requires exactly one proposal and complete typed classification; validates the whole batch before launching the existing tool producer. No new tool executor, state machine or write authority. Completion derives the deferral notice from that validated snapshot result; all-question rounds do not auto-resubmit endlessly. Preflight all calls before any producer starts; denied or missing-proposal responses complete as failure without reload. A no-op question batch completes successfully before tool dispatch/readback/reload/render/journal/projection, checking resolve_user(source_capture) plus existing generation so ABA edits invalidate it. Emit notices only from current successful on_done. Stop automatic resubmission whenever deferred questions remain. A no-op question batch must not create backups or write the source. Preserve generic skill callers that do not install the review hook.
 
 **External seams/fakes:** reuse existing provider/tasker response fixtures, async tool producer/file authority, filesystem-backed fake_couch and embedded editor fixtures. Do not use the live fleet for automated tests. Actual provider output is untrusted; classification is a model decision, while coverage, identity, protection and scope are deterministic validation. A malicious model could misclassify a question as a command; this semantic limit is explicit and matches the shared agent contract. Live checks cover ordinary wording and mixed asks.
 
@@ -89,10 +89,10 @@ This adds snapshot data and a proposal validation contract, not another operatio
 ## Operating envelope and growth
 
 - Submit-time snapshot cost: bytes B, lines L, headings H, legacy names K, ready asks A and proposed edits E. One Markdown parse/traversal, one legacy-header scan, one section stack and one item pass. Target O(B+L+H+K) policy work, memory O(B+L+H+K). Count node/byte/line/stack visits at N/2N (e.g. 64/128 headings, mixed fences/items) and reject >2.5x work plus a fixed allowance; parser's native parse cost is separately measured as in the source oracle.
-- Never call a whole-document policy parse per heading, visible row or edit. Capture one projection per submit/render batch; ordinary highlighter still respects its existing 256-row redraw budget. Reuse the document's invalidation/snapshot boundary rather than add a watcher or persistent policy cache. Tests count parser calls for N/2N visible rows and one batch of edits.
+- Never call a whole-document policy parse per heading, visible row or edit. Capture one projection per submit/render batch. Before reading/parsing for optional tint, use native line count and final byte offset to admit only documents <=64 KiB AND <=2,048 lines, once per redraw batch; above either limit skip tint with one short lifetime-scoped notice through existing feedback, without blocking edits or Couch submit. Keep the existing 256-row paint budget. TL approved this envelope from real 11 KiB session /20 KiB maximum side-doc examples; it is an operator workload choice, not a new semantic limit. Reuse the document's invalidation/snapshot boundary rather than add a watcher or persistent policy cache. Tests count parser calls for N/2N visible rows and one batch of edits.
 - Retain existing round cap 200 spans and recursive move limits 4096 entries /512 Markdown files. Existing unique edit matching remains bounded by the invocation's snapshot; do not claim linear aggregate edit matching if it still searches once per edit.
 - Attention: at most its existing 256 tracked roots, deduplicate owning roots before scanning. Accept only direct flat `.md` and one `YYYY-MM` directory level, no arbitrary recursion/symlink descent. Scan each selected owning root once per refresh; read headers only for selected mtime events, retain existing 40-line side-doc header limit. Count directory visits at N/2N months/files and shared-root tracked entries. Unknown/unreadable directory state must not delete attention records or mint ownership.
-- No network/parser work on a per-byte callback and no new process, timer, machine-global path or machine setting. UI effects use the existing scheduled/bounded owners. Document scan latency is measured on representative 1 MiB snapshots on both runtimes; no unsupported absolute performance claim.
+- No network/parser work on a per-byte callback and no new process, timer, machine-global path or machine setting. UI effects use the existing scheduled/bounded owners. For admitted tint, acceptance is p95 <10 ms over 50 representative redraw parses on each runtime under normal load; record samples and rerun only to diagnose a failed bound, never weaken it. Over-budget measurements block the change until smaller admissible input or cheaper work is agreed with TL. Explicit local review and section operations admit at most 1 MiB (existing source-read cap), checked before parser allocation; beyond it refuse that guarded local action visibly and preserve Couch submission. Full-doc parse on submit is outside the keystroke path.
 
 ## Trust, compatibility and residue
 
@@ -106,13 +106,36 @@ ARCH-ORDER: the most dangerous ordering is a deferred-question decision from an 
 
 ARCH-DRY / ARCH-PURE: one pure policy and one side-root relation; structural parser and IO stay thin. ARCH-PURPOSE: explicitly sweep existing consumers and templates, not just add a new tag decoration. ARCH-MOCK: reuse stateful fake Couch/provider seams. ARCH-CONSTRAINTS: counted work above. These cover all delivered architecture principles.
 
+## Function-level verification strategy (PQ-1)
+
+Pinned exported fixtures remain executable oracles; tests drive the actual functions below, not a copied fixture interpreter. Each new pure function gets a direct plain-table test; integration seams use existing stateful fixtures.
+
+| Production function | Adversarial class and mechanical guard |
+|---|---|
+| sync.validate_manifest / render_snapshot / read_output | Mutate versioned manifest/member and filesystem shape; assert complete preflight and byte-identical output on refusal. |
+| brief.list / brief.load | Mutate name-only manifest/body records; digest and flag-absence guard rejects half-migrated input. |
+| chat_structure.snapshot | Generate Markdown containers/literals and malformed delimiters; compare typed source coordinates with pinned fixtures, count traversal and parser calls. |
+| chat_policy.scan / chat_policy.items | Grammar-aware seeded documents plus pinned examples; assert disjoint valid/misplaced tags, laminar sections and exact submitted-line notices; mutation controls prove branches execute. |
+| collaboration_value.parse | Mutate legacy evidence beside arbitrary metadata; preserve supported chat forms and root-plain quote semantics, degrade unread evidence visibly without refusal. |
+| collaboration.eligible / validate_edits | Mutate exhaustive classification identities and overlapping proposals; coverage, unique source match and protected-byte guards reject the whole batch. |
+| skill_invoke.invoke | Controlled fake-provider/tool ordering; zero producers/readback/apply on preflight refusal or question-only no-op, stale and ABA source witnesses cannot complete successfully. |
+| review.run_via_invoke | Stateful mixed-ask results; deferred questions produce exact notice, unchanged result produces no journal/projection, resubmit stops. |
+| entity_range.section_range / entity_textobj operations | Generate neighboring heading attachments; source conservation and native delete/yank/paste/undo parity enforce tag+heading ownership. |
+| question_tags / reference_candidates / outline projections | Mutate tag role and surrounding source; valid chat association cannot be stripped or opened as a file, ordinary references remain unchanged. |
+| highlighter.compute_window_decorations | Scale document and viewport independently; native size admission, one parse per batch and existing row budget bound reads/work; measure approved latency threshold. |
+| side_document_path.relation | Generate normalized path/parent graphs; actual-parent and owning-root proof rejects escapes/cycles without inference from basename. |
+| attention.discover / saved | Stateful filesystem/mtime fixture; root dedup and one monthly depth bound scans, unreadable entries cannot erase attention evidence. |
+| agentic_document.inherit | Stateful fake Couch with paused replies; confirmed actual-parent proof controls ownership and stale/unconfirmed responses cannot grant it. |
+| document_move.plan / existing move journal | Pinned trees plus layout mutation; existing preimages/journal recover partial effects and preserve attachment/link/index data. |
+| presentation.decorations / edit_round.refresh | Producer fixture and malformed wire mutations; effective stored presentation and generation guards preserve historical meaning and reject malformed known data. |
+
 ## Implementation tasks (one final review boundary)
 
 ### 1. Pin contract and migrate bundle/brief consumers together
 
 **Files:** synchronizer above; `lua/parley/skills/review/{export.json,SKILL.md,round.md,collaboration-modes.md,review-convention.md,brief.lua,init.lua,local-adapter.md,briefs/,examples/}`; delete old generated `modes/` plus obsolete `mode.lua`/`instruction.lua` after sweeping imports. Tests: `tests/unit/review_protocol_export_test.py`, `tests/integration/review_protocol_bundle_spec.lua`, replace `review_mode_load_spec.lua` / `review_mode_spec.lua` / `review_instruction_spec.lua` with brief contracts.
 
-- [ ] Write failing v4 role/path/name-only/flag-absence, five-brief/no-free-form, digest and stale-output tests. Run `python3 -m unittest discover -s tests/unit -p review_protocol_export_test.py`; expect current v4 rejection.
+- [ ] Write failing sync/brief tests using the function-level strategy above. Run `python3 -m unittest discover -s tests/unit -p review_protocol_export_test.py`; expect current v4 rejection.
 - [ ] Materialize source members with `git show` from the exact pin, including the canonical grammar symlink target; record Git revision and member digests in test provenance. No copy from a moving working tree.
 - [ ] Extend pure validator to v4 while retaining prior manifest tests. Include `briefs` in owned output safety scanning, explicitly remove obsolete generated mode files, regenerate and verify zero drift. Preserve local Lua and local adapter.
 - [ ] Change runtime source/manifest to flagless brief bodies and current-only marker instructions. Remove review mode args, instruction context and no-marker mode bypass; local adapter text states the TL's question exception. Keep generic provider selection unchanged.
@@ -123,28 +146,28 @@ ARCH-DRY / ARCH-PURE: one pure policy and one side-root relation; structural par
 
 **Files:** `chat_structure.lua`, `chat_policy.lua`, `collaboration_value.lua`, `collaboration.lua`, `review/init.lua`, `skill_invoke.lua`, `tools/builtin/propose_edits.lua`. Tests: new `tests/unit/review_chat_policy_spec.lua`, `review_local_proposal_spec.lua`; existing collaboration/value, skill_invoke_review, review_send native tests.
 
-- [ ] Write fixture-backed failures for valid/misplaced tags, scalar/map/default/comment aliases, duplicated headings, whole-doc source plus tag, nesting, code/container negatives and exact notices. Add empty/malformed metadata and thematic-break controls. Read the 13 exported cases and test production parse/admission paths; expected after files are routing/IO references, not a claim local mode creates files.
+- [ ] Write failing snapshot/policy/legacy tests from the function-level strategy and pinned executable oracles. Expected after files describe Couch IO, not local file creation.
 - [ ] Extract typed Markdown structure once; implement pure ChatScan, innermost/item extents and exact legacy notice projection. Retain established bounded legacy parser, converting failures to visible policy notices. Stop for TL if reference semantics demand general YAML expansion.
 - [ ] Require exhaustive review_asks classifications on the single review proposal. Validate marker identities and protect questions, operator chat-item text, tag+heading and metadata before the existing write tool. Extend validate_edits hook with full input, not another dispatcher. All-question no-op bypasses disk writes/backups and reports the exact limitation notice.
-- [ ] Add stateful provider fixtures for command/question/unclear/unsure, mixed batch, duplicate/missing classification, forged coordinates, old marker bytes and attempted question replacement. Assert refused batch leaves live text, disk, tick and backup inventory unchanged. Chat robot command remains eligible while chat item prose stays protected.
-- [ ] Test cancellation, user edit, reload and detach at controlled completion boundaries. No stale notice, apply or resubmit; mixed deferred questions never cause a three-round loop.
+- [ ] Implement the stateful proposal/admission verification strategy; rejected preflight preserves source and starts no effects.
+- [ ] Exercise controlled invocation event sequences against the existing lifetime owner; assert deferred questions cannot cause automatic repeat.
 - [ ] Count work at N/2N and mutate tag detection, question protection and classification coverage guards: each appropriate test must fail. Run mapped review and skill-system tests on each runtime; commit.
 
 ### 3. Preserve heading attachment and render the tag
 
 **Files:** `entity_range.lua`, `entity_textobj.lua`, `document/lexical.lua`, `question_tags.lua`, `reference_candidates.lua`, `outline.lua`, `highlighter.lua`, highlight registration/config as required. Tests: entity range/textobj/delete parity, question tags, references, outline parity, highlighter document/visible spans.
 
-- [ ] Add failing extents for tag before selected heading and before the next heading, tag+legacy-comment, nested/sibling/duplicate headings, misplaced tags and code controls. Retain old H1–H3 editing dialect tests.
+- [ ] Write failing attachment/projection/native tests using the named function strategies; retain the old editing-dialect contract.
 - [ ] Derive tag association from the shared snapshot/structure; adjust selected section start and prior section end consistently. Inner text objects keep the heading/tag. Update generic tag/ref/outline consumers to avoid stripping or opening `chat` as a file for valid review tags; ordinary labels/file tags remain unchanged.
 - [ ] Paint valid tags through the current bounded markdown/chat renderer with a dedicated light group registered in existing ColorScheme ownership. Keep exact source visible in Normal/Insert; no conceal/badge/typeahead.
-- [ ] Native yank/delete/paste, command delete and undo retain tag association and source bytes; selected previous section cannot take next tag. Test viewport/no whole-file rescan counters.
+- [ ] Verify native operation parity and source conservation; run counted viewport and approved latency measurements.
 - [ ] Run `make test-spec SPEC=chat/entity_delete`, `SPEC=context/file_references`, `SPEC=ui/outline`, `SPEC=ui/highlights` sequentially on each runtime. Commit.
 
 ### 4. Make monthly side-document readers and ownership agree
 
 **Files:** `side_document_path.lua`, `attention.lua`, `agentic_document.lua`, `side_tree_model.lua` only if needed; existing mover files only if reference tests expose a gap. Tests: new pure side-path spec; attention finder, side inheritance, side tree, document_move_plan and existing move integration specs.
 
-- [ ] Write flat/month/grandchild/relative-parent and old `qa` linked-file controls. Include parent traversal, wrong root, symlink escape, cycles, unreadable header, stale/unconfirmed Couch registration and path changes during inheritance.
+- [ ] Write failing path/discovery/inheritance tests from the generated-graph and stateful-fake strategies above.
 - [ ] Add pure owning-root/actual-parent relation and use it in attention discovery/save detection and inheritance. Deduplicate roots, scan one monthly level, map attachment to actual parent rather than top root. No parent proof is inferred from pathname membership alone.
 - [ ] Reuse existing navigation and recursive move journal; add month/grandchild variants to exported move-orphan/move-rename qualification. Assert backlinks, relative links, discussions index and unknown metadata remain intact, and old flat/qa follow-up links stay unchanged.
 - [ ] Use filesystem-backed fake Couch through production request/inherit owner; retry and uncertain outcomes remain existing model transitions. Run mapped `ui/attention_finder`, `modes/session_sync`, `ui/breadcrumb`, and relevant move tests sequentially on both runtimes; commit.
@@ -153,7 +176,7 @@ ARCH-DRY / ARCH-PURE: one pure policy and one side-root relation; structural par
 
 **Files:** `presentation.lua`, `edit_round.lua`; tests `presentation_spec.lua`, `skill_render_round_spec.lua`, `edit_round_spec.lua`, fake Couch round fixtures. Docs: `atlas/modes/review.md`, relevant linked atlas pages, README/TOOLING and `atlas/traceability.yaml` (verify exact existing page paths before edit).
 
-- [ ] Pin #823's landed fixture and test mixed direct/highlight/propose, span absence, legacy round-only and neither level. Do not reinterpret stored spans using current document keys. Test new-round highlight and stale clear/refresh generations.
+- [ ] Pin #823's landed fixture and implement the historical projection/refresh strategy above; current document keys never reinterpret stored presentation.
 - [ ] Add strict known-field/type controls at the read boundary while retaining opaque members. Avoid any serialization unless existing feature requires it; if it does, add independent raw unknown-value round-trip controls.
 - [ ] Update atlas/help to current policy and explicit local question limitation, monthly links and legacy notices. Map every new test to the owning executable spec; run those actual mapped commands and architecture guards.
 - [ ] Verify both supported runtime binaries using the harness's `PARLEY_TEST_NVIM` selector and mapped commands. Record failures individually; do not rerun unrelated full suites to hide them.
@@ -167,3 +190,10 @@ ARCH-DRY / ARCH-PURE: one pure policy and one side-root relation; structural par
 The scope allocation is settled. Approve the proposed structural parser seam and optional review_asks envelope before implementation. This envelope is the smallest deterministic way found to distinguish an intentionally deferred question from a missing/truncated tool answer while retaining the existing write owner; a prompt-only instruction cannot produce a reliable visible outcome or protect an identified question from the returned edit batch.
 
 Covered: supported tag/legacy structure, existing consumer sweep, local deferral, imported v4 agent guidance, side-doc readers/inheritance/moves, historical rounds, controlled stale completion and counted growth. Not covered: a local multi-document writer or external command executor (explicit TL exclusion), changes to Pair's unlanded parser/projection API, or a general YAML implementation (no expansion without replanning).
+
+
+## Revisions
+
+### 2026-10-23 17:35 — plan-quality PQ-1 / PQ-2
+
+PQ-1: compressed prose test-case inventories into named production functions with one adversarial/mechanical strategy each. Imported fixtures remain executable oracles. PQ-2: replaced the unbounded render-time assumption with the TL-approved 64 KiB/2,048-line optional tint envelope, p95 <10 ms qualification and visible oversized degradation; explicit guarded local actions keep the existing 1 MiB limit. TL approval 862a7213 cites the real workload. No incremental parser, persistent cache, watcher or new writer added. Proposal preflight now explicitly precedes every producer, and no-op/refused completion bypasses readback/apply; classification uses existing zero-based marker coordinates.
