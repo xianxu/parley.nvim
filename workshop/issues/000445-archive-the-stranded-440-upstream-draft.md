@@ -37,4 +37,6 @@ Move the file byte-for-byte to workshop/history/plans/000440-a-predicate-wait-do
 
 ## Log
 
+
+- 2026-10-25: closed — Docs-only move at hub direction, citing ariadne#623. The #440 upstream draft was stranded active at workshop/plans/000440-...-plan.side/upstream-neovim-draft.md, because the archive step refused a plan side folder with no plan document. It is moved byte-for-byte with git mv to workshop/history/plans/000440-...-plan.side/upstream-neovim-draft.md: git ls-tree on the head shows blob 019dc761539e225e0164bb94a882ef50545afbc6, 2784 bytes, the same as on main d1f173bf, and it is the only copy in the tree. The archived #440 issue link (../plans/000440-...-plan.side/upstream-neovim-draft.md) resolves to the new path; test -f confirmed. Nothing else changed.; review verdict: SHIP
 Filed at hub direction (cfa12599). Cites ariadne#623.
