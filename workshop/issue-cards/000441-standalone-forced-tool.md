@@ -1,6 +1,6 @@
 ---
 id: 000441
-status: codecomplete
+status: done
 created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 475638abdc2bd0cb6de83318df9720a9bfb1572e
         evidence_commit: 84fa9c04c4fafdf802b86fe917d5b0ad2dc96a87
+        landed_commit: 24b0343bc26e41a22f69deec49bc715d86fc54fe
 ---
 
 # Standalone review: forced tool choice rejected by claude-sonnet-5-5; expose upstream failure reason
