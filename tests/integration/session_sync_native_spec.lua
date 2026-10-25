@@ -396,10 +396,17 @@ describe("session-sync native edits", function()
     local function slow_next_release(where,persistent)
         local trace=root.."/operator-trace"
         exec([[
-            local where,trace,persistent=...
+            local where,trace,persistent,budget=...
             vim.env.FAKE_COUCH_OPERATOR_TRACE=trace
             local couch=require("parley.couch");local original=couch.operator_lock
             couch.operator_lock=function(v,...)
+                -- The release is the subject, not acquire latency: an acquire killed
+                -- at its budget leaves nothing to release, and these cases wait for one (#442).
+                if v=="acquire" then
+                    local default=couch.OPERATOR_LOCK_TIMEOUT_MS;couch.OPERATOR_LOCK_TIMEOUT_MS=budget
+                    local result=original(v,...);couch.OPERATOR_LOCK_TIMEOUT_MS=default
+                    return result
+                end
                 if v~="release" or _G.release_slowed and not persistent then return original(v,...) end
                 _G.release_slowed=true
                 local knob=where=="before" and "FAKE_COUCH_OPERATOR_PRE_DELAY" or "FAKE_COUCH_OPERATOR_DELAY"
@@ -409,7 +416,7 @@ describe("session-sync native edits", function()
                 _G.slowed_release=result.kind
                 return result
             end
-        ]],where,trace,persistent==true)
+        ]],where,trace,persistent==true,arrival.MS)
         return function(verb)
             local count=0
             for _,line in ipairs(vim.uv.fs_stat(trace) and vim.fn.readfile(trace) or {}) do
