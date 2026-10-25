@@ -1,12 +1,20 @@
 ---
 id: 000445
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-25
 updated: 2026-10-25
 estimate_hours:
-card_mirror: '7669b3e6178da5701d1ca1c8b061fbc93bdc68b7' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'b32ca0c32330cafe00e3b2cad6fb760b0af3d79e' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-25T12:21:29-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Archive the stranded #440 upstream draft
