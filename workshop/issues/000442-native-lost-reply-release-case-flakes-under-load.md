@@ -43,8 +43,8 @@ Fix the first-turn read so it waits for the admitted lock. Trace the second fail
 - [x] Product fix (TL-approved scope add): release_if_baseline releases a clean unconfirmed turn by the lock bearing its turn token, through #432's bounded retry.
 - [x] Regression case from the deterministic probe: red on the base session_sync.lua, green with the fix.
 - [x] Atlas: modes/session_sync.md names the unconfirmed-acquire release.
-- [ ] Targeted runs (infra/test_harness, modes/session_sync) on 0.11.7 and 0.12.5.
-- [ ] Capped-load reps of the #442 cases, 20 per nvim while load is under about 20 (otherwise 10, noted here).
+- [x] Targeted runs (infra/test_harness, modes/session_sync) on 0.11.7 and 0.12.5.
+- [x] Load reps of the #442 cases: 10 per nvim, since the load was over 20 (noted in the Log).
 
 ## Log
 
@@ -61,3 +61,7 @@ TL approved (2026-10-24) the helper sweep and the scope add: on Esc, a clean tur
 Fix: a new turn_lock(buf, s) gives the turn's lock bytes. That is the confirmed proof, or, for an unconfirmed acquire, the lock whose document and turn match this turn. release_owned already accepts a proof by acquire token. If an unconfirmed acquire never landed, there is nothing to release, and the next i retries the same turn (#408). An unconfirmed turn with an edit keeps its lock, as the baseline check requires; the #408 lost-acknowledgment case asserts this.
 
 Control: the new case 'releases a clean turn whose acquire landed but lost its reply (#442)' fails on the base session_sync.lua at 'the clean unconfirmed turn kept its lock' and passes with the fix (0.12.5, disposable clone at 885cf610).
+
+Targeted runs outside the sandbox: infra/test_harness and modes/session_sync passed on 0.11.7 and 0.12.5. One 0.12.5 harness run failed '#220 orphan census serializes real targeted runs and retains orphan cleanup (#409)': its Python unittest hit the 30 s wait (exit 124) at load about 40. #442 touches no harness code, and the rerun passed. A first attempt inside the sandbox failed on spawn EPERM and missing ps; it is not evidence.
+
+Load reps: the 1-minute load was 38 to 56 throughout, well over the TL's cap of about 20 for added stress. So, per the TL, these were 10 reps per nvim, with no spinners and no dd loop, instead of 20 under capped load. The two #442 cases (the lost-reply case and the new regression) passed 20 of 20 on 0.11.7 and 20 of 20 on 0.12.5, two cases per rep. The fleet load alone exceeded the #427 capped load, which was about 30 to 37 with stress.
