@@ -22,10 +22,34 @@ describe('safe skill failure reason (#441)', function()
     end)
     it('redacts quoted document echoes and keeps bounded UTF-8 intact',function()
         local output=reason({http_status=400,body=vim.json.encode({error={message='Invalid value "PRIVATE TEXT"'}})})
-        assert.equals('HTTP 400: Invalid value [redacted]',output)
+        assert.equals('HTTP 400: invalid request',output)
         output=reason({http_status=500,body=vim.json.encode({error={message=string.rep('界',200)}})})
         assert.is_true(#output<=240)
         assert.equals(output,vim.fn.iconv(output,'utf-8','utf-8'))
+    end)
+
+    for _, message in ipairs({
+        'Invalid value: PRIVATE DOCUMENT',
+        'Invalid value "PRIVATE DOCUMENT',
+        'Invalid value \'PRIVATE DOCUMENT',
+        'Invalid x-api credential: abcdef123456',
+        'Service unavailable: PRIVATE DOCUMENT',
+        'tool_choice: type "tool" and "any" are not supported for this model. PRIVATE DOCUMENT',
+        'PRIVATE DOCUMENT',
+    }) do
+        it('does not echo an unrecognized error message: '..message,function()
+            local output=reason({http_status=400,body=vim.json.encode({error={message=message}})})
+            assert.equals('HTTP 400: invalid request',output)
+        end)
+    end
+    it('uses only fixed status and recognized type descriptions for unknown messages',function()
+        assert.equals('HTTP 429: rate limit exceeded',reason({http_status=429,
+            body=vim.json.encode({error={message='PRIVATE DOCUMENT'}})}))
+        assert.equals('HTTP 500: provider overloaded',reason({http_status=500,
+            body=vim.json.encode({error={type='overloaded_error',message='PRIVATE DOCUMENT'}})}))
+        assert.equals('HTTP 500: provider request failed',reason({http_status=500,
+            body=vim.json.encode({error={type='PRIVATE DOCUMENT',message='PRIVATE DOCUMENT'}})}))
+        assert.equals('provider request failed',reason({http_status='PRIVATE DOCUMENT'}))
     end)
 
     it('does not treat malformed, partial or plain bodies as a safe diagnosis', function()

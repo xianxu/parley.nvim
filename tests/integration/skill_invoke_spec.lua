@@ -278,6 +278,32 @@ describe("skill_invoke.invoke", function()
 
     end
 
+    for _, message in ipairs({'Invalid value: PRIVATE_DOCUMENT', 'Invalid value "PRIVATE_DOCUMENT',
+        'Invalid x-api credential: PRIVATE_DOCUMENT'}) do
+        it('keeps unrecognized provider prose out of the real review caption and history (#441): '..message,function()
+            local original={'plain 🤖[fix this]'}
+            vim.fn.writefile(original,path); vim.cmd('edit!'); vim.cmd('messages clear')
+            parley.dispatcher.query=function(_,_,_,_,_,_,_,_,_,on_error)
+                vim.schedule(function()on_error('qid_test',{http_status=400,
+                    body=vim.json.encode({error={message=message}})})end)
+            end
+            local old_notify,notices=vim.notify,{}
+            vim.notify=function(text)notices[#notices+1]=text end
+            require('parley.skills.review').run_via_invoke(buf,{})
+            local arrived=vim.wait(arrival.MS,function()
+                return table.concat(notices,'\n'):find('HTTP 400: invalid request',1,true)~=nil
+            end)
+            vim.notify=old_notify
+            assert.is_true(arrived,vim.inspect(notices))
+            local history=vim.fn.execute('messages')
+            assert.truthy(history:find('HTTP 400: invalid request',1,true))
+            assert.is_nil(history:find('PRIVATE_DOCUMENT',1,true))
+            assert.is_nil(table.concat(notices,'\n'):find('PRIVATE_DOCUMENT',1,true))
+            assert.same(original,vim.fn.readfile(path))
+            assert.same({},vim.fn.glob(path..'.parley-backup.*',false,true))
+        end)
+    end
+
     it('delivers the captured upstream reason instead of transport error (#441)', function()
         local capture=vim.json.decode(table.concat(vim.fn.readfile('tests/fixtures/review_tool_choice_rejection.json'),'\n'))
         parley.dispatcher.query=function(_,_,_,_,_,_,_,_,_,on_error)

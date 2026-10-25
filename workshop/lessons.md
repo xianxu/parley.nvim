@@ -1102,3 +1102,5 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - #419 BR-4: attaching metadata widens source ownership without moving the semantic heading. Keep both positions through inner/around and to-end operations; parity alone can confirm two surfaces share the same destructive bug. Assert exact sibling preservation and one-step undo in native tests.
 
 - #441: provider tool forcing is request policy, not proof of an edit proposal. Preserve a separate proposal-count and exact-classification admission guard when using automatic tool choice, and give prose-only replies an explicit no-edit outcome. Structured transport failures must reach the bounded public notice through a sanitized reason, never a dump of provider envelopes or request data.
+
+- #441 BR-1: a denylist cannot prove public diagnostics exclude sensitive values. Unknown provider prose can echo document text without quotes or use an unfamiliar credential label. Public output must derive only from exact recognized safe messages and fixed status/type descriptions; test unknown text, unmatched quotes and altered recognized messages at every public sink.

@@ -38,14 +38,14 @@ describe("review.run_via_invoke", function()
         assert.is_function(invoke_calls[1].opts.on_done)
     end)
 
-    for _, reason in ipairs({'no edit proposed', 'HTTP 400: tool_choice: unsupported for this model'}) do
+    for _, reason in ipairs({'no edit proposed', 'HTTP 400: tool_choice: type "tool" and "any" are not supported for this model.'}) do
         it('shows the failure reason in the bounded caption and history: '..reason, function()
             local old_notify, notices=vim.notify,{}
             vim.notify=function(msg)notices[#notices+1]=msg end
             vim.api.nvim_buf_set_lines(buf,0,-1,false,{'prose 🤖[fix]'})
             review.run_via_invoke(buf,{})
             local failure=reason:find('HTTP',1,true) and {http_status=400,
-                body=vim.json.encode({error={message='tool_choice: unsupported for this model'}})} or nil
+                body=vim.json.encode({error={message='tool_choice: type "tool" and "any" are not supported for this model.'}})} or nil
             invoke_calls[1].opts.on_done({ok=false,msg=reason,error=failure})
             vim.notify=old_notify
             assert.truthy(vim.fn.execute('messages'):find(reason,1,true))
