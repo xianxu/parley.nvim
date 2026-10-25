@@ -84,6 +84,8 @@ Verification: initial red replay found forced-wire, no-proposal, masked transpor
 
 2026-10-24: Final rework verification: 241/0/0 on each supported runtime (rework-final.log and rework-operator-runtime.log), 4/0/0 JSON/arrival architecture controls (rework-arch.log), lint4 clean, all censuses clean. Evidence root /Volumes/TestScratch/parley441-j0dbwg8e. Queuing the fresh pre-close on this real code fix; then await the hub's combined stage and operator retry before re-close.
 
+2026-10-24: Fresh pre-close attempt0b05e4092133e3658d9ee0b9c4748122 on fc955fb249525287f25da4a472f23f6711ced846 completed exit0 in9m28s, SHA256 prefixc321d956565b; clean process census and SysV owner-before/after0. Log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/fc955fb249525287f25da4a472f23f6711ced846/suite.log. After authenticated freeze lift, retained runner result was read without duplicate check. Authorized sdlc stage --build completed exit0: staged exact fc955fb249525287f25da4a472f23f6711ced846 on parley.nvim:0; plugin has no Go binaries to build. Operator steps sent to hub; hold re-close/merge for outside-Couch claude-sonnet-5-5 mixed question/command acceptance (BR-2).
+
 ## Revisions
 
 2026-10-24 — Hub approved the plan and required explicit prose-only handling: automatic choice may produce no tool call, so zero proposals refuse visibly as `no edit proposed`, before any tool, backup or reload. More than one proposal remains a separate invalid-batch refusal.
