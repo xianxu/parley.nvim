@@ -1,6 +1,6 @@
 ---
 type: side-doc
-parent: ../000440-a-predicate-wait-doing-child-rpc-never-times-out.md
+parent: ../../issues/000440-a-predicate-wait-doing-child-rpc-never-times-out.md
 process-instruction: "[free-form] a draft for the operator to file upstream, or not"
 ---
 
