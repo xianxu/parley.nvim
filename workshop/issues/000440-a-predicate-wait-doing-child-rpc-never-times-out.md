@@ -1,12 +1,12 @@
 ---
 id: 000440
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-24
 updated: 2026-10-25
 estimate_hours:
-card_mirror: '7741c9b468c08d3f6fd929cf31e315e6e82481b1' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f78524c789e47b118bb122206bd44178a3a96e9f' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-25T00:03:36-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "49afb8fe", done: "d9179011"}
+actual_hours: 0.45
 ---
 
 # A predicate wait doing child RPC never times out
