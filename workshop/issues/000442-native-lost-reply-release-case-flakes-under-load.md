@@ -1,12 +1,23 @@
 ---
 id: 000442
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
-card_mirror: '8917aabfc9b64f5b0ec41a321f6daf6c423e49a4' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'e9a7275dac422344b683ffb23d29a6c0b6cc5959' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-24T11:57:59-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retries a clean release whose reply was lost and the next turn is new (#432)]
+flow: {kind: quick, provenance: inferred, spec: "16c72df1", done: "ad6b782e"}
+actual_hours: 2.42
 ---
 
 # Native lost-reply release case flakes under load
@@ -28,10 +39,54 @@ Fix the first-turn read so it waits for the admitted lock. Trace the second fail
 - The case passes 20 reps per nvim under the same capped load.
 - The flake registration comes off at close.
 
+## Revisions
+
+- 2026-10-24, TL-approved scope and evidence changes (close review BR-3):
+  - Scope adds the product fix: a clean turn whose acquire is unconfirmed releases by its turn token, and a retry of that release reconciles a lost reply.
+  - Done-when's "both failures are explained with evidence" is met for the second failure by a deterministic probe, which is the primary evidence (TL). The probe reproduces the symptom by forcing the mechanism. That failure was not observed again under the original load.
+  - Done-when's "20 reps per nvim under the same capped load" became 10 reps per nvim under fleet load alone, with no added stress (TL alternative: load was 38 to 56, over the cap of about 20 for added stress).
+
 ## Plan
 
-- [ ]
+- [x] Shared insert() helper: entry waits for an InsertEnter observer that runs after the production admission, swept over the 13 mode-i sites in the native spec (TL approved).
+- [x] Product fix (TL-approved scope add): release_if_baseline releases a clean unconfirmed turn by the lock bearing its turn token, through #432's bounded retry.
+- [x] Regression case from the deterministic probe: red on the base session_sync.lua, green with the fix.
+- [x] Atlas: modes/session_sync.md names the unconfirmed-acquire release.
+- [x] Targeted runs (infra/test_harness, modes/session_sync) on 0.11.7 and 0.12.5.
+- [x] Load reps of the #442 cases: 10 per nvim, since the load was over 20 (noted in the Log).
 
 ## Log
 
 ### 2026-10-24
+- 2026-10-24: closed — Two causes. (1) Test: mode i is not admission completion; the InsertEnter acquire waits 500ms on Couch, running the event loop, so the harness exec answered mid-admission. Shared insert() helper waits on an InsertEnter observer counter registered after attach; swept all mode-i entry sites (BR-2, BR-5), and tests/arch/insert_admission_spec.lua refuses keys(i) followed by a vim.schedule barrier (red on a0d2a98c naming spec:168 and :337, green on fix). (2) Product, TL-approved scope add: an unconfirmed acquire whose lock landed but reply was lost never released on clean Esc; release_if_baseline now releases a lock bearing the turn acquire_token (of_turn, BR-4), with the #432 bounded retry carrying the first try bytes (BR-1). Regressions: releases a clean turn whose acquire landed but lost its reply (red on base session_sync.lua, green on fix); retries an unconfirmed turn release whose reply was lost (red on 3572f43c, green on fix). Revisions section added (BR-3). Pre-close stall on 924387ee root-caused: an acquire killed at the 500ms budget leaves nothing to release and wait_for never times out (#440 shape, predates #442); slow_next_release gives the acquire a long budget; deterministic probe reproduced and now passes. Reps: 20 per nvim (0.11.7, 0.12.5) with 3 spinners at load 8.5 to 18, all three cases pass, no dd loop; earlier 10 reps under fleet load green. Targeted guard and modes/session_sync green on both nvims at 5a566e54; pre-close sdlc-local/suite green on 5a566e54 (8m8s). (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+
+Registered as a flake during #427's pre-close attribution (evidence, as registered): #427 load reps on 300c65f2 failed this case on nvim 0.11.7 rep 19 (E484 at turn_of_lock :697, called at :716) and on 0.12.5 rep 1 (lock not gone at :724). Load was 3 CPU spinners plus an fsync dd loop, on top of the fleet.
+
+First-turn cause (read from the spec): `wait_for(mode=='i')` is not admission completion. The InsertEnter acquire waits on a subprocess, and the harness's exec RPC is answered during that wait, with the mode already i. The spec already knows this: `observe_insert_admission` is documented as "rather than treating mode i as admission completion". The same shape repeats at every site that reads admission effects (lock, winbar, modifiable) straight after a mode-i wait, so the fix is a shared helper, not one site (ARCH-PURPOSE, ARCH-DRY).
+
+Second failure, traced in a disposable clone, with this case alone and a wrapper logging every operator_lock call. Under fleet load alone (load about 20, no added stress), 10 reps per nvim all ended with the lock gone. Operator calls took 35 to 140 ms, against a 500 ms budget, so this path needs the capped load to hit. A deterministic probe reproduces the symptom. The second turn's acquire reply was delayed past its budget with FAKE_COUCH_OPERATOR_DELAY=1: the effect lands and the reply is lost. Then Esc on a clean buffer. Result: the lock is still there 8 s later, with no notice, and the bar reads 'not locked: Couch unreachable; edits may conflict' while the lock exists. release_if_baseline needs a confirmed owned_lock, so a clean turn whose acquire is unconfirmed never releases; only the next i reconciles it. Asked the TL whether the fix belongs to #442.
+
+TL approved (2026-10-24) the helper sweep and the scope add: on Esc, a clean turn with an unconfirmed acquire releases by its turn token, with #432's bounded retry, and the probe-built regression as the primary evidence. Capped-load reps are allowed while the 1-minute load is under about 20, one at a time, with no dd loop alongside a running suite.
+
+Fix: a new turn_lock(buf, s) gives the turn's lock bytes. That is the confirmed proof, or, for an unconfirmed acquire, the lock whose document and turn match this turn. release_owned already accepts a proof by acquire token. If an unconfirmed acquire never landed, there is nothing to release, and the next i retries the same turn (#408). An unconfirmed turn with an edit keeps its lock, as the baseline check requires; the #408 lost-acknowledgment case asserts this.
+
+Control: the new case 'releases a clean turn whose acquire landed but lost its reply (#442)' fails on the base session_sync.lua at 'the clean unconfirmed turn kept its lock' and passes with the fix (0.12.5, disposable clone at 885cf610).
+
+Targeted runs outside the sandbox: infra/test_harness and modes/session_sync passed on 0.11.7 and 0.12.5. One 0.12.5 harness run failed '#220 orphan census serializes real targeted runs and retains orphan cleanup (#409)': its Python unittest hit the 30 s wait (exit 124) at load about 40. #442 touches no harness code, and the rerun passed. A first attempt inside the sandbox failed on spawn EPERM and missing ps; it is not evidence.
+
+Load reps: the 1-minute load was 38 to 56 throughout, well over the TL's cap of about 20 for added stress. So, per the TL, these were 10 reps per nvim, with no spinners and no dd loop, instead of 20 under capped load. The two #442 cases (the lost-reply case and the new regression) passed 20 of 20 on 0.11.7 and 20 of 20 on 0.12.5, two cases per rep. The fleet load alone exceeded the #427 capped load, which was about 30 to 37 with stress.
+
+Close review round 1 (FIX-THEN-SHIP), addressed:
+- BR-1: a retry of an unconfirmed turn's release could not reconcile a lost reply. turn_lock re-read the lock, which the landed release had removed, so the retry returned before sending. The retry now carries the bytes its first try released (retry_release, then release_if_baseline's retried argument). New case: 'retries an unconfirmed turn's release whose reply was lost and the next turn is new (#442)'.
+- BR-2: one more site, plus the same class in the spaced-quote spelling: insert mode, then a vim.schedule barrier, taken as proof of admission. The barrier can run during the admission's wait. The reviewer named one site (normal-mode edit and insert). An enumeration of every mode-i wait found six more in the spaced spelling, at the insert-turn, foreign-replacement, refused-entry, foreign-before-escape, late-attach and rename cases. All seven now use insert(typed). Detached and unregistered sites, which assert absence, are left as they are.
+- BR-3: the Revisions section above records the scope add and the Done-when changes.
+- BR-4 (Minor): of_turn(s, proof) is now the single ownership check, used by release_owned and turn_lock (ARCH-DRY).
+
+After BR-1 to BR-4, at d1a60d14: targeted runs of infra/test_harness and modes/session_sync passed on 0.11.7 and 0.12.5. The three #442 cases were then repeated twice:
+- 10 reps per nvim under fleet load alone (load 10 to 22): all passed.
+- Once the load fell under the TL's cap, the original Done-when: 20 reps per nvim with 3 CPU spinners. Each rep started only at a 1-minute load under 20, and these ran at 8.5 to 18. There was no dd loop, because other slots' suites may have been running. Result: 20 of 20 per nvim, all three cases each rep.
+So the capped-load clause is met as written, apart from the dd loop, as well as under the revised 10-rep alternative.
+
+Pre-close suite on 924387ee: the 0.11.7 compat pass stalled in '#432 a fresh release supersedes an older release's retries' (DEADLINE after 42 cases, idle 75 s; attempt aa83b3cc3539703ba4a333e76eaeda3b, unattributable). Ten reps of that case alone did not reproduce it. A deterministic probe did: the first acquire was killed before its effects (FAKE_COUCH_OPERATOR_PRE_DELAY=1, past the 500 ms budget), and the same DEADLINE followed at `wait_for(slowed_release=='unavailable')`. The cause: no lock means nothing to release, so the slowed release never runs. The wait's RPC predicate then never times out (#440's shape), so a loud failure becomes a stall. This exposure predates #442: release-subject cases assume their acquire confirms under the 500 ms budget. Fix: slow_next_release gives the acquire an arrival.MS budget in those cases, following the precedent 'refusal/retry behavior is the subject here, not subprocess latency'. With that change, the probe passes, as do all seven #432 and #442 cases.
+
+Close review round 2, BR-5 (family mode-i-is-not-admission): the refused-retry final entry (spec:337) still took keys("i") plus a vim.schedule barrier as admission proof, and the #404 re-entry (spec:168) had the same shape. Both now go through insert(). To fix the rule rather than the instance, tests/arch/insert_admission_spec.lua refuses any keys("i…") followed within 2 lines by a vim.schedule barrier in session_sync_native_spec, with a floor of 10 entries so the check can't pass vacuously. It is mapped under modes/session_sync. Control: on a0d2a98c's spec it fails, naming exactly :168 and :337; with the fix it passes.
