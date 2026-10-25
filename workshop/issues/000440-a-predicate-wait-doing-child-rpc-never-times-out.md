@@ -1,12 +1,20 @@
 ---
 id: 000440
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-24
-updated: 2026-10-24
+updated: 2026-10-25
 estimate_hours:
-card_mirror: '7288225cce89c02eeb4bed570d4a3a4b671d01f3' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '7741c9b468c08d3f6fd929cf31e315e6e82481b1' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-25T00:03:36-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # A predicate wait doing child RPC never times out
@@ -37,8 +45,30 @@ Find why vim.wait's timeout never fires when its predicate makes a synchronous R
 
 ## Plan
 
-- [ ]
+Mechanism (standalone repro, both nvims; see Log): vim.wait's LOOP_PROCESS_EVENTS_UNTIL takes whole elapsed milliseconds off the remaining time and resets its baseline each pass. A predicate that closes a libuv handle queues a close callback, so the next pass returns without blocking. Each pass is then under 1 ms, rounds down to 0, and the wait never expires. Child:request creates, stops and closes a timer around every request, so every predicate doing child RPC has this shape. It is not the stale loop clock, and it is not the RPC itself.
+
+- [ ] Regression in tests/integration/embedded_rpc_wait_spec.lua, mapped under infra/test_harness. A false child:exec predicate under vim.wait(300) returns false, and a wait_for-shaped assert fails naming its code. A fence inside the predicate (10x the bound, measured by hrtime) raises 'wait never timed out', so a regression fails loudly instead of stalling to DEADLINE. Red on the current seam.
+- [ ] Fix at the seam (ARCH-DRY: one place every predicate's RPC goes through): a Child owns one request timer, started and stopped per request and closed when the child stops. The kill-on-deadline path is unchanged.
+- [ ] Not a suite-wide vim.wait override: product code under test would then pass a wait that hangs for users. Upstream report: asking the hub, since it is outward-facing.
+- [ ] Targeted runs of infra/test_harness and modes/session_sync on 0.11.7 and 0.12.5.
+
+ARCH: CONSTRAINTS: the timer is a bounded resource, one per child; requests are serial. ORDER: the per-request state (fired) moves to the child; a fired timer kills the child, and the request fails as before. FUNERAL: the timer closes in stop(), and on_exit closes it too when the child dies without a stop. SECURE, EVOLVE and MOCK: N/A. This touches only the test harness, with no persisted format and no external dependency added.
 
 ## Log
 
 ### 2026-10-24
+
+### 2026-10-25
+
+Standalone repro (/Volumes/TestScratch/tmp/p440/repro.lua: `nvim --clean --headless -l repro.lua <variant>` with vim.wait(500, pred), killed at 8 s), on 0.11.7 and 0.12.5, same results on each:
+- Times out at about 500 ms:
+  - cheap (`return false`);
+  - rpc to an embedded child, with or without an attached UI and redraws;
+  - a timer kept across polls (start and stop only);
+  - slow (a 2 ms busy span plus vim.schedule).
+- Never returns (killed at 8 s):
+  - schedule (vim.schedule per poll);
+  - timer (new_timer, start, stop, close per poll: exactly what Child:request does);
+  - close-0.6ms (a handle closed plus a 0.6 ms busy span).
+- close-1.5ms returns, but after 761 ms for a 500 ms bound: 500 polls, each counted as 1 ms.
+So the cause is whole-millisecond truncation with a baseline reset. A pass that returns without blocking, because a close callback or a scheduled callback is pending, takes under 1 ms and counts as 0. Under the real harness (make test-spec, a spec in a scratch clone), local predicates time out at 1000 ms, but `child:exec('return false')` under vim.wait(1000) hits DEADLINE at 200 s.
