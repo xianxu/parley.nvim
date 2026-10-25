@@ -5,7 +5,7 @@
 -- read_skill tool consume without branching on origin.
 --
 --   { name, description, scope, activation, source, tools?, elevated?,
---     force_tool?, args?, agent? }
+--     force_tool?, tool_choice?, args?, agent? }
 --     name        registry key (non-empty string)
 --     description menu entry shown to the model (non-empty string)
 --     scope       global | repo | super_repo
@@ -15,6 +15,7 @@
 --     tools       list of tool names granted whenever active        (#129)
 --     elevated    list of tool names granted only on MANUAL invoke   (#129)
 --     force_tool  optional tool name to compel this turn
+--     tool_choice optional "auto" (mutually exclusive with force_tool)
 --     args        optional completable-arg specs (the kept v1 picker)
 --     agent       optional model override
 --
@@ -87,6 +88,9 @@ function M.validate(m)
     end
     if m.force_tool ~= nil and type(m.force_tool) ~= "string" then
         return fail("manifest.force_tool must be a tool-name string when present")
+    end
+    if m.tool_choice ~= nil and (m.tool_choice ~= 'auto' or m.force_tool ~= nil) then
+        return fail('manifest.tool_choice must be auto without force_tool')
     end
     if m.args ~= nil and type(m.args) ~= "table" then
         return fail("manifest.args must be a list when present")

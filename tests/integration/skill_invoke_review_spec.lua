@@ -38,6 +38,22 @@ describe("review.run_via_invoke", function()
         assert.is_function(invoke_calls[1].opts.on_done)
     end)
 
+    for _, reason in ipairs({'no edit proposed', 'HTTP 400: tool_choice: type "tool" and "any" are not supported for this model.'}) do
+        it('shows the failure reason in the bounded caption and history: '..reason, function()
+            local old_notify, notices=vim.notify,{}
+            vim.notify=function(msg)notices[#notices+1]=msg end
+            vim.api.nvim_buf_set_lines(buf,0,-1,false,{'prose 🤖[fix]'})
+            review.run_via_invoke(buf,{})
+            local failure=reason:find('HTTP',1,true) and {http_status=400,
+                body=vim.json.encode({error={message='tool_choice: type "tool" and "any" are not supported for this model.'}})} or nil
+            invoke_calls[1].opts.on_done({ok=false,msg=reason,error=failure})
+            vim.notify=old_notify
+            assert.truthy(vim.fn.execute('messages'):find(reason,1,true))
+            assert.truthy(notices[#notices]:find(reason:sub(1,18),1,true))
+            assert.is_true(vim.fn.strdisplaywidth(notices[#notices])<=48)
+        end)
+    end
+
     it("ignores retired mode/instruction args instead of bypassing ready-marker admission", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "plain text, no markers" })
         review.run_via_invoke(buf, { modes = { "proofreading", "copy-editing" }, instruction = "x" })

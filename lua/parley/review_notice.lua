@@ -14,7 +14,7 @@ local function prefix(value, budget)
 end
 
 local function caption(summary)
-    -- Callers supply a constant short summary, never the document/notice body.
+    -- Callers supply a constant summary or a sanitized failure reason, never document text.
     summary = summary:gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
     local budget = math.max(0, math.min(48, vim.o.columns - 16))
     local hint = ":messages"

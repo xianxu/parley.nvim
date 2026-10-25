@@ -71,6 +71,13 @@ describe("providers.disk", function()
         end
     end)
 
+    it('carries explicit automatic tool choice from the packaged review manifest (#441)',function()
+        local review=by_name(providers.disk(vim.fn.getcwd()..'/lua/parley/skills'):list(),'review')
+        assert.is_not_nil(review)
+        assert.equals('auto',review.tool_choice)
+        assert.is_nil(review.force_tool)
+    end)
+
     it("sources the body from SKILL.md via a closure over the captured path", function()
         local alpha = by_name(providers.disk(root):list(), "alpha")
         assert.is_not_nil(alpha)

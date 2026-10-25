@@ -28,6 +28,15 @@ describe("skill_manifest.validate", function()
         assert.is_nil(err)
     end)
 
+    it('accepts explicit auto choice but refuses conflicting or unknown policy (#441)',function()
+        local m=valid(); m.force_tool=nil; m.tool_choice='auto'
+        assert.is_true(manifest.validate(m))
+        m.force_tool='propose_edits'
+        assert.is_false(manifest.validate(m))
+        m.force_tool=nil; m.tool_choice='required'
+        assert.is_false(manifest.validate(m))
+    end)
+
     it("accepts a minimal manifest (no tools/elevated/force_tool/args/agent)", function()
         assert.is_true(manifest.validate({
             name = "x",
