@@ -38,6 +38,13 @@ Fix the first-turn read so it waits for the admitted lock. Trace the second fail
 - The case passes 20 reps per nvim under the same capped load.
 - The flake registration comes off at close.
 
+## Revisions
+
+- 2026-10-24, TL-approved scope and evidence changes (close review BR-3):
+  - Scope adds the product fix: a clean turn whose acquire is unconfirmed releases by its turn token, and a retry of that release reconciles a lost reply.
+  - Done-when's "both failures are explained with evidence" is met for the second failure by a deterministic probe, which is the primary evidence (TL). The probe reproduces the symptom by forcing the mechanism. That failure was not observed again under the original load.
+  - Done-when's "20 reps per nvim under the same capped load" became 10 reps per nvim under fleet load alone, with no added stress (TL alternative: load was 38 to 56, over the cap of about 20 for added stress).
+
 ## Plan
 
 - [x] Shared insert() helper: entry waits for an InsertEnter observer that runs after the production admission, swept over the 13 mode-i sites in the native spec (TL approved).
@@ -66,3 +73,9 @@ Control: the new case 'releases a clean turn whose acquire landed but lost its r
 Targeted runs outside the sandbox: infra/test_harness and modes/session_sync passed on 0.11.7 and 0.12.5. One 0.12.5 harness run failed '#220 orphan census serializes real targeted runs and retains orphan cleanup (#409)': its Python unittest hit the 30 s wait (exit 124) at load about 40. #442 touches no harness code, and the rerun passed. A first attempt inside the sandbox failed on spawn EPERM and missing ps; it is not evidence.
 
 Load reps: the 1-minute load was 38 to 56 throughout, well over the TL's cap of about 20 for added stress. So, per the TL, these were 10 reps per nvim, with no spinners and no dd loop, instead of 20 under capped load. The two #442 cases (the lost-reply case and the new regression) passed 20 of 20 on 0.11.7 and 20 of 20 on 0.12.5, two cases per rep. The fleet load alone exceeded the #427 capped load, which was about 30 to 37 with stress.
+
+Close review round 1 (FIX-THEN-SHIP), addressed:
+- BR-1: a retry of an unconfirmed turn's release could not reconcile a lost reply. turn_lock re-read the lock, which the landed release had removed, so the retry returned before sending. The retry now carries the bytes its first try released (retry_release, then release_if_baseline's retried argument). New case: 'retries an unconfirmed turn's release whose reply was lost and the next turn is new (#442)'.
+- BR-2: one more site, plus the same class in the spaced-quote spelling: insert mode, then a vim.schedule barrier, taken as proof of admission. The barrier can run during the admission's wait. The reviewer named one site (normal-mode edit and insert). An enumeration of every mode-i wait found six more in the spaced spelling, at the insert-turn, foreign-replacement, refused-entry, foreign-before-escape, late-attach and rename cases. All seven now use insert(typed). Detached and unregistered sites, which assert absence, are left as they are.
+- BR-3: the Revisions section above records the scope add and the Done-when changes.
+- BR-4 (Minor): of_turn(s, proof) is now the single ownership check, used by release_owned and turn_lock (ARCH-DRY).
