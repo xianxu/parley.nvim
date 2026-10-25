@@ -1,12 +1,12 @@
 ---
 id: 000445
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-25
 updated: 2026-10-25
 estimate_hours:
-card_mirror: 'b32ca0c32330cafe00e3b2cad6fb760b0af3d79e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'fdae6d303e68dfc37699550ca23353f2eaefdb8b' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-25T12:21:29-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "6e77ad95", done: "860bbf8a"}
+actual_hours: 0.01
 ---
 
 # Archive the stranded #440 upstream draft
