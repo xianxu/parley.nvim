@@ -1,13 +1,13 @@
 ---
 id: 000427
-status: codecomplete
+status: done
 deps: []
 github_issue:
 created: 2026-10-23
 updated: 2026-10-24
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '0d36a79ef1b8483602b54de90fc2fe45a497e0d4' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd8386bc790c087e31c6b4fa70644b60fdda123df' # card fields mirrored from issue-cards; edit via sdlc
 flake_tests: ["lua:tests/integration/session_sync_native_spec.lua#session-sync native edits undo releases acquisition baseline, redo retakes: open autosave=true", "lua:tests/integration/session_sync_native_spec.lua#session-sync native edits undo releases acquisition baseline, redo retakes: watch autosave=true"]
 started: 2026-10-24T10:09:05-07:00
 claimant:
