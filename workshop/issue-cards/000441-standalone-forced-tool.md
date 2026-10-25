@@ -1,6 +1,6 @@
 ---
 id: 000441
-status: working
+status: codecomplete
 created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.24
+tracker:
+    version: 1
+    completion:
+        token: close-50cb5ad0d82c
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 475638abdc2bd0cb6de83318df9720a9bfb1572e
+        evidence_commit: 84fa9c04c4fafdf802b86fe917d5b0ad2dc96a87
 ---
 
 # Standalone review: forced tool choice rejected by claude-sonnet-5-5; expose upstream failure reason
