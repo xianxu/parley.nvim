@@ -64,7 +64,7 @@ Production seams: skill_invoke's payload tool-choice construction and on_error c
 - [x] Replay the sanitized captured 400 through the normal invocation seam, red first; pin automatic review payloads for Anthropic and OpenAI wires, retaining named forcing for other skills.
 - [x] Replace review's named forcing with automatic choice, encoded by the existing provider-wire owner. Preserve the local proposal validator and all edit authority; no-proposal, malformed and missing classifications refuse before any write/backup/reload.
 - [x] Format a bounded safe reason from the structured transport failure at the skill boundary; expose it in review's bounded caption and message history without dumping response/request envelopes, headers or credentials. Keep cancellation/stale-generation guards and notification bounds.
-- [ ] Cover mixed command/question success, missing/invalid proposals, captured HTTP 400, other HTTP/transport failures and sensitive-envelope exclusion; run focused tests serially on both runtimes, then queued pre-close, close and hub-coordinated operator retry.
+- [x] Cover mixed command/question success, missing/invalid proposals, captured HTTP 400, other HTTP/transport failures and sensitive-envelope exclusion; run focused tests serially on both runtimes, then queued pre-close, close and hub-coordinated operator retry.
 
 
 ## Log
@@ -85,6 +85,8 @@ Verification: initial red replay found forced-wire, no-proposal, masked transpor
 2026-10-24: Final rework verification: 241/0/0 on each supported runtime (rework-final.log and rework-operator-runtime.log), 4/0/0 JSON/arrival architecture controls (rework-arch.log), lint4 clean, all censuses clean. Evidence root /Volumes/TestScratch/parley441-j0dbwg8e. Queuing the fresh pre-close on this real code fix; then await the hub's combined stage and operator retry before re-close.
 
 2026-10-24: Fresh pre-close attempt0b05e4092133e3658d9ee0b9c4748122 on fc955fb249525287f25da4a472f23f6711ced846 completed exit0 in9m28s, SHA256 prefixc321d956565b; clean process census and SysV owner-before/after0. Log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/fc955fb249525287f25da4a472f23f6711ced846/suite.log. After authenticated freeze lift, retained runner result was read without duplicate check. Authorized sdlc stage --build completed exit0: staged exact fc955fb249525287f25da4a472f23f6711ced846 on parley.nvim:0; plugin has no Go binaries to build. Operator steps sent to hub; hold re-close/merge for outside-Couch claude-sonnet-5-5 mixed question/command acceptance (BR-2).
+
+2026-10-24: Hub delivered operator PASS on staged fc955fb249525287f25da4a472f23f6711ced846: “yes, works” outside Couch; the command applied and the question was kept. This closes BR-2's real retry requirement for the same claude-sonnet-5-5 / CLIProxy setup described in the handoff. Operator side note: after review rewrites the file, Neovim prompts whether to keep local changes; this is awkward. The operator wants to think about outside-Couch review's workflow before filing anything, so no issue or additional behavior change is made here. Hub directs re-close and merge, and will clear the stage afterward.
 
 ## Revisions
 
