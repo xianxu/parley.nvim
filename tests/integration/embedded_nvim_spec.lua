@@ -33,6 +33,24 @@ describe("embedded nvim helper", function()
         assert.is_nil(uv.fs_lstat(fixture),'request timeout left its private fixture behind')
     end)
 
+    -- vim.wait counts whole elapsed ms per pass; a handle closed by each request
+    -- made every pass return under 1 ms, so a false predicate never timed out (#440).
+    it("lets a predicate wait over child requests time out", function()
+        child = Embedded.start({ ui = { 80, 24 } })
+        local bound, started = 300, uv.hrtime()
+        local function wait_for(code)
+            assert.is_true(vim.wait(bound, function() -- bound: the timeout is the property under test
+                -- A fence, so a wait that never expires fails here instead of stalling the spec.
+                if (uv.hrtime() - started) / 1e6 > 10 * bound then error("wait never timed out", 0) end
+                return child:exec(code)
+            end), code)
+        end
+        local ok, err = pcall(wait_for, "return false")
+        assert.is_false(ok)
+        assert.matches("return false", err)
+        assert.is_true((uv.hrtime() - started) / 1e6 < 10 * bound, "the wait outlived its bound")
+    end)
+
     it('joins an intentionally killed child before removing its private fixture',function()
         child=Embedded.start()
         local fixture=child:exec("return require('parley.remote_runtime').default_parent()")
