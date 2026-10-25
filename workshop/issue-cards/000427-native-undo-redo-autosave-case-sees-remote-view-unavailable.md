@@ -1,6 +1,6 @@
 ---
 id: 000427
-status: codecomplete
+status: done
 created: 2026-10-23
 updated: 2026-10-24
 estimate_hours:
@@ -22,6 +22,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 05be4ebadddea40cf7885e4cf4fadc780516ff0d
         evidence_commit: 896fbad6bcd40d0601ba6af4aedd2b45bab4c17e
+        landed_commit: 709a6f864dbf56f529883fddaf78efc1e0d02434
 ---
 
 # Native undo/redo autosave case sees Remote view unavailable
