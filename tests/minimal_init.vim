@@ -122,7 +122,7 @@ vim.api.nvim_create_autocmd("VimLeavePre", { callback = function()
 end })
 EOF
 
-" One runner owns completed-case progress and an absolute runtime ceiling;
+" One runner owns completed-case progress, its one runtime bound (#446);
 " mapped and full runs share its child bootstrap and existing corpus budgets.
 command! -nargs=1 -complete=file PlenaryBustedFile
       \ lua require('tests.helpers.spec_runner').run([[<args>]])

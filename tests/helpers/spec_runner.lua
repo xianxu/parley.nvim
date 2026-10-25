@@ -21,7 +21,7 @@ end
 -- than the ones that remember to ask (#261 M5 review BR-71).
 local INIT='tests/minimal_init.vim'
 -- Keep the quiet-machine hang budget and bounded load scaling. It applies to
--- completed-case inactivity; the independent absolute ceiling is base x4.
+-- completed-case inactivity, the runner's one bound (#446).
 local DEFAULT_TIMEOUT=50000 -- plenary.test_harness's own default
 M.DEFAULT_TIMEOUT=DEFAULT_TIMEOUT
 -- How long a terminated spec's process group gets before SIGKILL. A spinning
@@ -125,10 +125,9 @@ function M.execute(path, options)
             signal_group("sigterm")
         end
     end)
-    local ceiling = Deadline.snapshot(state).absolute_ms
-    vim.wait(math.ceil(ceiling + 1000), function()
-        return result ~= nil or Deadline.snapshot(state).status ~= "running"
-    end, 10)
+    -- The tick timer ends a stall, so this wait ends on an event, not a ceiling.
+    local function settled() return result ~= nil or Deadline.snapshot(state).status ~= "running" end
+    repeat vim.wait(math.ceil(Deadline.snapshot(state).idle_ms), settled, 10) until settled()
     local expiring = Deadline.snapshot(state).status ~= "completed"
     if not result or expiring then
         escalate(function(ms) vim.wait(ms, function() return result ~= nil end, 10) end)
@@ -144,10 +143,10 @@ function M.execute(path, options)
     end
     reader.finish()
     local snapshot = Deadline.snapshot(state)
-    local expired = snapshot.status == "stalled" or snapshot.status == "absolute-expired"
+    local expired = snapshot.status == "stalled"
     if expired then
-        output("stderr", ("DEADLINE: %s %s after %d completed case(s); idle %.0fms, absolute %.0fms\n")
-            :format(path, snapshot.status, snapshot.sequence, snapshot.idle_ms, snapshot.absolute_ms))
+        output("stderr", ("DEADLINE: %s stalled after %d completed case(s): none completed within the %.0fms idle budget\n")
+            :format(path, snapshot.sequence, snapshot.idle_ms))
     end
     local code = result and result.code or 125
     if (not cleanup.ok or cleanup.leaked) and code == 0 then code = 125 end

@@ -371,9 +371,12 @@ load sample formerly set a whole-file deadline; growing files were killed after
 successful cases at 50–64s although identical code passed in 56–83s elsewhere.
 `spec_deadline` now holds the pure transition policy. Its no-completed-case
 budget is the base multiplied by the startup 1-minute load/CPU ratio, bounded
-from 1x to 4x. An independent absolute ceiling is always base×4: 200s normally,
-720s for the existing large corpora. Useful case completions can therefore pass
-50s overall; no amount of progress can evade the absolute ceiling.
+from 1x to 4x, and it is the runner's one bound (#446). There is no whole-file
+ceiling: #337's base×4 ceiling killed a progressing file in a window about 14x
+slower than quiet, while the startup sample read 2.77x, so no fixed or
+load-scaled whole-file budget is right. A file has finitely many cases, so it
+stays bounded by (cases+1)×idle, and a stuck bootstrap, case or teardown still
+expires.
 
 `spec_child` runs the real Plenary assertions and fixtures. Only after a full
 case returns, including before_each/body/after_each, does it emit a monotonically
@@ -384,13 +387,13 @@ bounded at 64KiB. Bootstrap, a stuck case and final teardown remain covered by
 the same idle budget. `spec_runner` owns the child and timer until observed
 exit, sends TERM on expiry and escalates to KILL if needed, then reaps and
 closes the timer. Normal assertion/exit results stay failures. A timeout names
-`stalled` or `absolute-expired`, completed cases and both budgets. Existing
+`stalled`, the completed cases and the idle budget. Existing
 `PASS`/`===FAIL` lines still report whole-file wall time.
 
 Deterministic virtual-clock tests exercise the exact policy (including late
 frames, load bounds and terminal states). Native conformance uses isolated real
 Plenary children for successful assertions, failed assertions, stalled bootstrap,
-case/teardown and a progressing child that reaches the absolute cap; it checks
+case/teardown and a progressing child that outlasts four budgets and passes; it checks
 that timed-out PIDs are gone. Reason-specific probes inject ordinary and capped
 load/CPU values through the runner; default invocations still sample the machine.
 No test is retried, skipped or granted a new

@@ -66,15 +66,18 @@ describe("owned headless spec execution", function()
         assert.equals("ESRCH", gone)
     end)
 
-    it("enforces the absolute ceiling even while cases keep completing", function()
+    -- #446: a file that keeps completing cases runs past base x4 and passes.
+    it("lets a file run past four idle budgets while its cases keep completing", function()
+        local started = vim.uv.hrtime()
         local result = run({
             'describe("real child", function()',
-            'for i = 1, 200 do it("progress " .. i, function() vim.wait(50, function() return false end, 10) end) end',
+            'for i = 1, 20 do it("progress " .. i, function() vim.wait(250, function() return false end, 10) end) end',
             'end)',
-        }, { base_ms = 1000 })
-        assert.equals(124, result.code)
-        assert.equals("absolute-expired", result.reason)
-        assert.is_true(result.completed > 1)
+        }, { base_ms = 1000 }) -- base: each case leaves 750 ms of its budget for overhead under load
+        assert.is_true((vim.uv.hrtime() - started) / 1e6 > 4 * 1000, "the file did not outlast four budgets")
+        assert.equals(0, result.code)
+        assert.is_nil(result.reason)
+        assert.equals(20, result.completed)
         assert.is_true(result.reaped)
         local _, _, gone = vim.uv.kill(result.pid, 0)
         assert.equals("ESRCH", gone)
@@ -95,12 +98,12 @@ describe("owned headless spec execution", function()
         assert.matches("arbitrary output", output, 1, true)
     end)
 
-    it("gives the absolute deadline precedence at controlled capped load", function()
+    it("still kills a stuck bootstrap at controlled capped load", function()
         local result = run({
             'vim.wait(15000, function() return false end, 10)',
         }, { base_ms = 250, load1 = 100000, ncpu = 12 })
         assert.equals(124, result.code)
-        assert.equals("absolute-expired", result.reason)
+        assert.equals("stalled", result.reason)
         assert.equals(0, result.completed)
         assert.is_true(result.reaped)
         local _, _, gone = vim.uv.kill(result.pid, 0)

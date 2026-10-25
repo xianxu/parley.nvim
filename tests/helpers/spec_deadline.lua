@@ -27,10 +27,14 @@ function M.load_factor(load, ncpu)
     return math.min(4, math.max(1, load / math.max(1, ncpu)))
 end
 
+-- The one bound is inactivity: only completed cases renew it, so a stuck
+-- bootstrap, case or teardown expires, and a slow but progressing file never
+-- does. A file has finitely many cases, so it stays bounded by (cases+1) x idle.
+-- No whole-file wall-clock ceiling: a 14x slow window failed one (#446).
 function M.new(base_ms, load, ncpu, now_ms)
     return sealed({status="running",completed=false,
-        idle_ms=base_ms*M.load_factor(load,ncpu),absolute_ms=base_ms*4,
-        started_at=now_ms,last_progress_at=now_ms,observed_at=now_ms,sequence=0})
+        idle_ms=base_ms*M.load_factor(load,ncpu),
+        last_progress_at=now_ms,observed_at=now_ms,sequence=0})
 end
 
 function M.snapshot(state)
@@ -47,9 +51,7 @@ function M.transition(state, event)
     local now = event.now_ms
     next_state.observed_at = now
     -- Expired work cannot revive itself by reporting progress or exit late.
-    if now-next_state.started_at >= next_state.absolute_ms then
-        next_state.status = "absolute-expired"
-    elseif now-next_state.last_progress_at >= next_state.idle_ms then
+    if now-next_state.last_progress_at >= next_state.idle_ms then
         next_state.status = "stalled"
     elseif event.kind == "exit" then
         next_state.status, next_state.completed = "completed", true
