@@ -488,7 +488,7 @@ M.skill = {
     activation = { manual = true, auto = true },
     tools = { "read_file" },
     elevated = { "propose_edits" }, -- write tool, granted only on manual invoke (#129)
-    force_tool = "propose_edits", -- compel the batch-edit tool this turn (M3)
+    tool_choice = "auto", -- proposal validation, not provider forcing, owns admission
 }
 
 --------------------------------------------------------------------------------
@@ -616,7 +616,9 @@ M.run_via_invoke = function(buf, _args, resubmit_count)
             if not result or not result.ok then
                 projection.set_applying(buf, false)
                 if result and result.msg then
-                    require('parley.review_notice').show({tostring(result.msg)}, 'review: unchanged', vim.log.levels.WARN)
+                    local summary = result.error and ('review: ' .. require('parley.skill_failure').reason(result.error))
+                        or result.msg == 'no edit proposed' and 'review: no edit proposed' or 'review: unchanged'
+                    require('parley.review_notice').show({tostring(result.msg)}, summary, vim.log.levels.WARN)
                 end
                 return
             end

@@ -1,0 +1,15 @@
+{
+  "request": {
+    "model": "claude-sonnet-5-5",
+    "stream": true,
+    "max_tokens": 100000,
+    "tool_choice": {
+      "type": "tool",
+      "name": "propose_edits"
+    }
+  },
+  "response": {
+    "http_status": 400,
+    "body": "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"tool_choice: type \\\"tool\\\" and \\\"any\\\" are not supported for this model.\"}}"
+  }
+}

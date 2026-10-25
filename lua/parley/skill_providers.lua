@@ -81,6 +81,7 @@ local function manifest_from_def(def, dir)
         tools = def.tools,
         elevated = def.elevated,
         force_tool = def.force_tool,
+        tool_choice = def.tool_choice,
         args = def.args,
         agent = def.agent,
     }

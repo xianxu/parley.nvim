@@ -1476,6 +1476,11 @@ atlas:
       - lua/parley/skill_edits.lua
       - lua/parley/skill_assembly.lua
       - lua/parley/skill_invoke.lua
+      - lua/parley/skill_failure.lua
+      - lua/parley/review_notice.lua
+      - lua/parley/tools/wire.lua
+      - lua/parley/tools/wire_anthropic.lua
+      - lua/parley/tools/wire_openai.lua
       - lua/parley/skill_source_read.lua
       - lua/parley/skill_render.lua
       - lua/parley/neighborhood.lua
@@ -1487,6 +1492,10 @@ atlas:
       - lua/parley/init.lua
     tests:
       - tests/unit/skill_manifest_spec.lua
+      - tests/unit/review_failure_spec.lua
+      - tests/unit/tool_wire_registry_spec.lua
+      - tests/unit/anthropic_tool_wire_spec.lua
+      - tests/unit/openai_tool_encode_spec.lua
       - tests/integration/skill_providers_spec.lua
       - tests/integration/skill_registry_spec.lua
       - tests/unit/skill_edits_spec.lua

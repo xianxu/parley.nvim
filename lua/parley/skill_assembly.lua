@@ -50,6 +50,7 @@ function M.build_invocation(manifest, opts)
         },
         tools = tools,
         force_tool = manifest.force_tool,
+        tool_choice = manifest.tool_choice,
     }
 end
 

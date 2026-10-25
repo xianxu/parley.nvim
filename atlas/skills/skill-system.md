@@ -28,8 +28,17 @@ contains `init.lua`, returning a `SkillManifest`:
 
 ```lua
 { name, description, scope, activation, source,
-  tools = {}, elevated = {}, force_tool = nil, args = {}, agent = nil }
+  tools = {}, elevated = {}, force_tool = nil, tool_choice = nil, args = {}, agent = nil }
 ```
+
+`tool_choice = "auto"` requests automatic choice through the selected provider
+wire and excludes `force_tool`; review uses it, while voice-apply keeps its
+named forcing. Automatic choice never replaces proposal-count, classification
+or source/write admission. Empty or prose-only review responses refuse with
+`no edit proposed`. `skill_failure` recognizes exact safe diagnostic messages and maps known error
+types/statuses to fixed descriptions for review's caption/history. Arbitrary
+provider prose, raw bodies, headers, requests and stderr never contribute text;
+unknown diagnostics use the fixed status fallback.
 
 `SKILL.md` is the default prompt body. A manifest can instead provide a
 `source(ctx)` function; `define` uses this and has no SKILL.md. The disk provider
