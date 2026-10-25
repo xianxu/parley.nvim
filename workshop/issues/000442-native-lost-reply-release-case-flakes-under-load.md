@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retries a clean release whose reply was lost and the next turn is new (#432)]
+flow: {kind: quick, provenance: inferred, spec: "16c72df1", done: "ad6b782e"}
 ---
 
 # Native lost-reply release case flakes under load
