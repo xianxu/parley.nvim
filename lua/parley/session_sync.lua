@@ -1106,15 +1106,28 @@ local function retry_release(buf, s, attempt)
     end, RELEASE_RETRY_MS[attempt])
 end
 
+-- The turn's lock bytes: the confirmed proof, or, for an unconfirmed acquire
+-- whose effect landed with its reply lost (#442), the lock bearing this turn.
+local function turn_lock(buf, s)
+    local owned = admission(s)
+    if owned.owned_lock then return owned.owned_lock end
+    if owned.phase ~= "unconfirmed" or not owned.acquire_token then return nil end
+    local bytes = lock_bytes(M.lock_path(buf))
+    local proof = couch.operator_proof(bytes)
+    return proof and proof.ID == s.identity.ID and proof.Turn == owned.acquire_token and bytes or nil
+end
+
 -- A retry finds the lock ours or already gone: a lost reply may have removed it.
 release_if_baseline = function(buf, retrying)
     local s = state[buf]
+    local expected
     local function ours()
         local bytes = lock_bytes(M.lock_path(buf))
-        return bytes == admission(s).owned_lock or retrying and bytes == nil
+        return bytes == expected or retrying and bytes == nil
     end
     if not s or s.moving or not automatic_release_eligible(buf, s) or content_hash(buf) ~= admission(s).baseline then return false end
-    if not admission(s).owned_lock or not ours() then return false end
+    expected = turn_lock(buf, s)
+    if not expected or not ours() then return false end
     if disk_changed(buf) then
         violation(buf)
         return false
@@ -1127,7 +1140,7 @@ release_if_baseline = function(buf, retrying)
     if not ours() then return false end
     -- A fresh release supersedes an older one's pending retry.
     if not retrying then s.release_generation = (s.release_generation or 0) + 1 end
-    local ok, _, unconfirmed = release_owned(buf, file_of(buf), admission(s).owned_lock)
+    local ok, _, unconfirmed = release_owned(buf, file_of(buf), expected)
     if not ok then
         if unconfirmed then retry_release(buf, s, (retrying or 0) + 1) end
         return false
