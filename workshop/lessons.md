@@ -1105,3 +1105,8 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
 - Classify public functions by their actual effects: a manifest/body loader using io.open is filesystem integration even when its inputs are finite packaged files. Put its temporary-folder tests under integration and name that seam in the plan; retain plain-table tests for genuinely pure entities.
 
 - #419 BR-4: attaching metadata widens source ownership without moving the semantic heading. Keep both positions through inner/around and to-end operations; parity alone can confirm two surfaces share the same destructive bug. Assert exact sibling preservation and one-step undo in native tests.
+
+## 2026-10-24 (#442 close — mode i is not admission)
+
+- An observable state that the product reaches mid-operation is not proof the operation finished. The InsertEnter admission runs the event loop while it awaits Couch, so mode i (and a vim.schedule barrier) answers before the lock is decided. Wait on a signal that the operation itself emits (an observer registered after the production handler), and guard the shape with an arch test, not by sweeping sites: the sweep missed a site twice (BR-2, BR-5).
+- A test that slows one effect must not let the slowdown kill an earlier step it depends on. Slowing the release past the 500 ms acquire budget left no lock to release, and the RPC-predicate wait never timed out (#440), so the result was a stall rather than a failure.
