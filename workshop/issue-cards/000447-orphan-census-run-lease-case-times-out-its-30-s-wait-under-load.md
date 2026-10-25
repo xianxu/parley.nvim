@@ -5,6 +5,7 @@ created: 2026-10-25
 updated: 2026-10-25
 estimate_hours:
 github_issue:
+flake_tests: ["lua:tests/unit/reap_test_orphans_spec.lua#tests/unit/reap_test_orphans_spec.lua #220 orphan census serializes real targeted runs and retains orphan cleanup (#409)"]
 ---
 
 # orphan census run-lease case times out its 30 s wait under load
