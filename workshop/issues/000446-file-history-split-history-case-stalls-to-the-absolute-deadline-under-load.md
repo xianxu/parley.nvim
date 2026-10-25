@@ -1,12 +1,21 @@
 ---
 id: 000446
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-25
 updated: 2026-10-25
 estimate_hours:
-card_mirror: '7364e419a3e1febb65ec2cb8e6566030330adcb9' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8228bf87349030a2a5b07099ef0b50a9c5d0f8eb' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-25T16:34:12-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flake_tests: [lua:tests/integration/file_history_spec.lua#per-window file Back (#333) copies the parent's history into a split and keeps later cursors and visits independent]
 ---
 
 # file_history split-history case stalls to the absolute deadline under load
@@ -28,6 +37,17 @@ Find what a synchronous case spends 138 s on under load. Make the spec's budget 
 - The flake registration is retired.
 
 ## Plan
+
+Mechanism (measured, 2026-10-25): load slowdown against a fixed whole-file ceiling, not a hang. The DEADLINE line's "idle 138334ms" is the load-scaled idle budget (50 s x 2.77), not observed idle; the status was absolute-expired, the unscaled base x4 = 200 s ceiling #337 added. Quiet (load 12): 47 cases in 19.7 s, slowest case 0.86 s. The failed suite ran 23 cases in 200 s, about 14x slower, and its sibling specs were as slow in the same window against the passing rerun bpx4caybq: entity_textobj 58 s vs 4 s, branch_child 120 s vs 4 to 6 s, starter_config 63 s vs 9 s. The startup load sample (2.77) understates such a window, so no fixed or load-scaled whole-file wall-clock budget can be right.
+
+Proposed (a design change to #337, waits for hub approval): drop the absolute ceiling as a kill trigger. The no-completed-case watchdog (load-scaled idle budget, renewed only by harness-framed case completions) stays the one bound, so a stuck bootstrap, case or teardown still dies, and a spec that keeps completing cases is never killed for being slow. A spec's case count is finite, so its total stays bounded by (cases + 1) x idle, an event-derived bound (ARCH-CONSTRAINTS still holds). The runner's outer vim.wait(ceiling + 1000) becomes a wait on result or a non-running status, repeated in idle-sized slices.
+
+- [ ] spec_deadline: remove absolute_ms and absolute-expired; update tests/unit/spec_deadline_spec.lua (the three absolute cases become: progress past base x4 keeps running; a stall still expires).
+- [ ] spec_runner: outer wait no longer derived from a ceiling; DEADLINE line names the idle budget and the observed idle time.
+- [ ] spec_runner_native_spec: "enforces the absolute ceiling while cases keep completing" becomes "a progressing child past base x4 completes"; capped-load precedence case becomes stalled.
+- [ ] atlas/infra/test_harness.md Deadlines section; unregister the #446 flake.
+
+Alternative, smaller: scale the ceiling by the same load factor (max 800 s). Rejected as primary: the measured window was 14x slow at a sampled factor of 2.77, so it would still fail.
 
 ## Log
 
