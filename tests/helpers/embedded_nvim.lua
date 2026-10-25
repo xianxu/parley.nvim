@@ -25,6 +25,8 @@ Child.__index = Child
 local owned=setmetatable({},{__mode='k'})
 
 local function join_and_cleanup(child)
+    if child.timer and not child.timer:is_closing() then child.timer:close() end
+    child.timer=nil
     local state=owned[child]
     -- Conformance borrows request() for a socket channel. That channel is not
     -- the native child job: only the original Child may join and clean it.
@@ -43,17 +45,19 @@ end
 --- Send one request; raise if the child doesn't answer within M.request_ms().
 --- The deadline kills the child from a libuv callback, where jobstop isn't
 --- allowed; the pending request then fails on the closed channel.
+--- One timer per child, kept across requests: a handle closed per request
+--- makes a vim.wait over requests never time out (#440).
 function Child:request(method, ...)
-    local ms, fired = M.request_ms(), false
-    local timer = uv.new_timer()
-    timer:start(ms, 0, function()
-        fired = true
+    local ms = M.request_ms()
+    self.timer = self.timer or uv.new_timer()
+    self.fired = false
+    self.timer:start(ms, 0, function()
+        self.fired = true
         uv.kill(self.pid, "sigkill")
     end)
     local ok, result = pcall(vim.rpcrequest, self.channel, method, ...)
-    timer:stop()
-    timer:close()
-    if fired then
+    self.timer:stop()
+    if self.fired then
         local joined,err=join_and_cleanup(self)
         error(("embedded nvim did not answer %s within %d ms; killed pid %d"):format(method, ms, self.pid)
             ..(not joined and '; '..tostring(err) or ''), 2)

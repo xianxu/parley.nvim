@@ -347,7 +347,8 @@ child's runtimepath. Every request is bounded by `request_ms()`: half the spec's
 budget, which `spec_runner` passes to the spec child, load-scaled, as `PARLEY_SPEC_IDLE_MS`.
 A child that never answers is killed by pid, and the request fails naming its method,
 before the runner's idle kill ends the spec with no cause. `tests/arch/embedded_rpc_spec.lua` refuses a raw `vim.rpcrequest` or
-`--embed` spawn anywhere else.
+`--embed` spawn anywhere else. The bound is one timer per child, reused across requests and closed when the child is joined.
+`vim.wait` counts only whole elapsed milliseconds per pass, so a predicate that closes a libuv handle on every call returns in under 1 ms per pass, and the wait never times out. A timer created and closed per request made every `wait_for` over child RPC stall to the runner's deadline instead of failing (#440).
 
 ### A spec's processes end with it (#402)
 
