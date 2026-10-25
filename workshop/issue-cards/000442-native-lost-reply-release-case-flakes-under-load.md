@@ -1,6 +1,6 @@
 ---
 id: 000442
-status: working
+status: codecomplete
 created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retries a clean release whose reply was lost and the next turn is new (#432)]
+actual_hours: 2.42
+tracker:
+    version: 1
+    completion:
+        token: close-2b5a72dc7ffb
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 5a566e541bb361b042503268dc5d0a7e5001186b
+        evidence_commit: 2b9faba8b3f2c7836dea2aa613a4129e662ed68e
 ---
 
 # Native lost-reply release case flakes under load
