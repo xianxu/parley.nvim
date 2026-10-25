@@ -15,7 +15,8 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flake_tests: 
+flake_tests:
+flow: {kind: quick, provenance: inferred, spec: "05bbe709", done: "1b8d44ee"}
 ---
 
 # file_history split-history case stalls to the absolute deadline under load
