@@ -72,3 +72,4 @@ Standalone repro (/Volumes/TestScratch/tmp/p440/repro.lua: `nvim --clean --headl
   - close-0.6ms (a handle closed plus a 0.6 ms busy span).
 - close-1.5ms returns, but after 761 ms for a 500 ms bound: 500 polls, each counted as 1 ms.
 So the cause is whole-millisecond truncation with a baseline reset. A pass that returns without blocking, because a close callback or a scheduled callback is pending, takes under 1 ms and counts as 0. Under the real harness (make test-spec, a spec in a scratch clone), local predicates time out at 1000 ms, but `child:exec('return false')` under vim.wait(1000) hits DEADLINE at 200 s.
+Upstream: the TL routed filing to the operator, whose account it posts under. The draft is in [upstream-neovim-draft.md](000440-a-predicate-wait-doing-child-rpc-never-times-out.side/upstream-neovim-draft.md). Its 13-line repro was run as written on 0.11.7 and 0.12.5: plain 500 ms, close+1.5ms 760 ms, then the close variant hung until killed at 8 s.
