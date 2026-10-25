@@ -709,7 +709,7 @@ describe("session-sync native edits", function()
         assert.equals("unavailable",exec("return _G.slowed_release"))
     end)
 
-    it("retries a clean release whose reply was lost, so the next turn is new (#432)",function()
+    it("retries a clean release whose reply was lost and the next turn is new (#432)",function()
         open(false,false,true,true)
         local calls=slow_next_release("after")
         keys("i");wait_for("return vim.fn.mode()=='i'")
@@ -1740,6 +1740,37 @@ describe("session-sync native edits", function()
             assert.is_true(exec("return require('parley.session_sync').is_session_sync(0)"))
         end)
     end
+
+    -- #427: an unregistered open's remote-view lookup has finished (its callback
+    -- returned) before a case asserts on notices, rather than racing it.
+    local function open_after_lookup()
+        exec([[
+            local registry = require("parley.document_registry"); local request = registry.request
+            registry.request = function(operation, args, witness, callback, ...)
+                if operation ~= "lookup" then return request(operation, args, witness, callback, ...) end
+                return request(operation, args, witness, function(...)
+                    callback(...); _G.lookup_done = true
+                end, ...)
+            end
+        ]])
+        open(false)
+        wait_for("return _G.lookup_done == true")
+    end
+
+    -- The undo/redo cases below assert no notices; on the default fake the
+    -- unregistered open's lookup finds nothing registered and posts none.
+    it("a finished remote-view lookup on the default fake posts no notice (#427)", function()
+        open_after_lookup()
+        assert.same({}, exec("return notifications"))
+    end)
+
+    -- Control: against a Couch from before pair#437 the same lookup fails, and its
+    -- notice reaches the captured list.
+    it("an unavailable remote-view lookup reaches the captured notices (#427)", function()
+        exec('vim.env.FAKE_COUCH_LOOKUP = "legacy"')
+        open_after_lookup()
+        assert.same({ "Remote view unavailable; reopen the file to retry" }, exec("return notifications"))
+    end)
 
     for _, autosave in ipairs({false, true}) do
         for _, reloaded in ipairs({"open", "watch", "checktime"}) do
