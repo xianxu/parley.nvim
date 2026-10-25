@@ -1,6 +1,6 @@
 ---
 id: 000445
-status: working
+status: codecomplete
 created: 2026-10-25
 updated: 2026-10-25
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.01
+tracker:
+    version: 1
+    completion:
+        token: close-a42d7da54511
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 5b62dcac2dab846717bd9ae22be8dc5d6594f1c1
+        evidence_commit: 4f25530f1989eefab917edee035909f0e73a57cd
 ---
 
 # Archive the stranded #440 upstream draft
