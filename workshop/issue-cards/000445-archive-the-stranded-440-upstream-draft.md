@@ -1,6 +1,6 @@
 ---
 id: 000445
-status: codecomplete
+status: done
 created: 2026-10-25
 updated: 2026-10-25
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 5b62dcac2dab846717bd9ae22be8dc5d6594f1c1
         evidence_commit: 4f25530f1989eefab917edee035909f0e73a57cd
+        landed_commit: 71328abc6d9df6d2687bc537be0a18be7b81692c
 ---
 
 # Archive the stranded #440 upstream draft
