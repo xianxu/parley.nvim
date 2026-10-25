@@ -60,6 +60,7 @@ ARCH: CONSTRAINTS: the timer is a bounded resource, one per child; requests are 
 ### 2026-10-24
 
 ### 2026-10-25
+- 2026-10-25: closed — Mechanism, standalone repro on 0.11.7 and 0.12.5 (Log, plus side doc upstream-neovim-draft.md): vim.wait subtracts whole elapsed ms per loop pass and resets its baseline. A predicate that closes a libuv handle makes each pass return in under 1 ms, so the wait never expires (close variant hangs until killed; close+1.5ms takes 760 ms for a 500 ms bound). Child:request created and closed a timer per request, so every child-RPC predicate (all wait_for) stalled to DEADLINE; reproduced under make test-spec. Fix: one request timer per embedded Child, closed in join_and_cleanup; atlas/infra/test_harness.md records it. Regression in tests/integration/embedded_nvim_spec.lua: a wait_for-shaped assert over child:exec false fails at its 300 ms timeout naming its code, with an hrtime fence turning a stall into an error. Red on the old seam (wait never timed out), green on the fix. Existing callers unchanged. Targeted tmp regression, infra/test_harness and modes/session_sync green on both nvims at load 37 to 50; pre-close sdlc-local/suite green on 61fd9849 (later commit atlas-only). Upstream filing: the draft is with the operator via the TL.; review verdict: SHIP
 
 Standalone repro (/Volumes/TestScratch/tmp/p440/repro.lua: `nvim --clean --headless -l repro.lua <variant>` with vim.wait(500, pred), killed at 8 s), on 0.11.7 and 0.12.5, same results on each:
 - Times out at about 500 ms:
