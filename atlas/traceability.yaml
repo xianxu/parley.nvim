@@ -893,6 +893,7 @@ atlas:
       - tests/unit/helper_io_spec.lua
       - tests/integration/session_sync_spec.lua
       - tests/integration/session_sync_native_spec.lua
+      - tests/arch/insert_admission_spec.lua
       - tests/integration/session_sync_file_changed_spec.lua
       - tests/integration/fake_couch_operator_spec.lua
       - tests/integration/agentic_document_spec.lua
