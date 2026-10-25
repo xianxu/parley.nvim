@@ -1,12 +1,22 @@
 ---
 id: 000445
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-25
 updated: 2026-10-25
 estimate_hours:
-card_mirror: '7669b3e6178da5701d1ca1c8b061fbc93bdc68b7' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'fdae6d303e68dfc37699550ca23353f2eaefdb8b' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-25T12:21:29-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e77ad95", done: "860bbf8a"}
+actual_hours: 0.01
 ---
 
 # Archive the stranded #440 upstream draft
@@ -28,4 +38,6 @@ Move the file byte-for-byte to workshop/history/plans/000440-a-predicate-wait-do
 
 ## Log
 
+
+- 2026-10-25: closed — Docs-only move at hub direction, citing ariadne#623. The #440 upstream draft was stranded active at workshop/plans/000440-...-plan.side/upstream-neovim-draft.md, because the archive step refused a plan side folder with no plan document. It is moved byte-for-byte with git mv to workshop/history/plans/000440-...-plan.side/upstream-neovim-draft.md: git ls-tree on the head shows blob 019dc761539e225e0164bb94a882ef50545afbc6, 2784 bytes, the same as on main d1f173bf, and it is the only copy in the tree. The archived #440 issue link (../plans/000440-...-plan.side/upstream-neovim-draft.md) resolves to the new path; test -f confirmed. Nothing else changed.; review verdict: SHIP
 Filed at hub direction (cfa12599). Cites ariadne#623.
