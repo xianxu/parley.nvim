@@ -1,12 +1,12 @@
 ---
 id: 000442
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
-card_mirror: '00dd99dba20659ce43a046e320417cbcd8e6c853' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'e9a7275dac422344b683ffb23d29a6c0b6cc5959' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-24T11:57:59-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     repository: github.com/xianxu/parley.nvim
 flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retries a clean release whose reply was lost and the next turn is new (#432)]
 flow: {kind: quick, provenance: inferred, spec: "16c72df1", done: "ad6b782e"}
+actual_hours: 2.42
 ---
 
 # Native lost-reply release case flakes under load
