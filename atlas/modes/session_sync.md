@@ -128,7 +128,8 @@ timer or new watcher is added; a refused release retains the existing band/recov
 An automatic release killed at its budget is unconfirmed, not failed (#432): it
 is retried with the same idempotent token 1, 2 and 4 s after each failed try while the same clean
 turn stands (a new acquire or a fresh release supersedes it), then one WARN
-leaves that recovery. This acquisition baseline is an in-memory content hash: explicit saves
+leaves that recovery. An unconfirmed acquire whose lock landed with its reply lost
+is released the same way on a clean exit: the lock bearing the turn's token is the turn's own (#442). This acquisition baseline is an in-memory content hash: explicit saves
 and immediate auto-save never advance it. A save of changed text keeps the turn.
 A pre-existing registered lock after a restart has no proven local ownership; it is not adopted or removed by guessing. Its owner must release it before a new turn can acquire. Legacy unregistered session files retain their previous submit behavior. A legacy `holder: agent` lock reads as no lock and is
 overwritten by insert entry or an edit. A failed send leaves the file free; `<M-CR>`
