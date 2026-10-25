@@ -5,7 +5,7 @@ created: 2026-10-25
 updated: 2026-10-25
 estimate_hours:
 github_issue:
-flake_tests: [lua:tests/integration/file_history_spec.lua#per-window file Back (#333) copies the parent's history into a split and keeps later cursors and visits independent]
+flake_tests: 
 started: 2026-10-25T16:34:12-07:00
 claimant:
     operator: Xian Xu
