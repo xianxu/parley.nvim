@@ -79,3 +79,8 @@ Close review round 1 (FIX-THEN-SHIP), addressed:
 - BR-2: one more site, plus the same class in the spaced-quote spelling: insert mode, then a vim.schedule barrier, taken as proof of admission. The barrier can run during the admission's wait. The reviewer named one site (normal-mode edit and insert). An enumeration of every mode-i wait found six more in the spaced spelling, at the insert-turn, foreign-replacement, refused-entry, foreign-before-escape, late-attach and rename cases. All seven now use insert(typed). Detached and unregistered sites, which assert absence, are left as they are.
 - BR-3: the Revisions section above records the scope add and the Done-when changes.
 - BR-4 (Minor): of_turn(s, proof) is now the single ownership check, used by release_owned and turn_lock (ARCH-DRY).
+
+After BR-1 to BR-4, at d1a60d14: targeted runs of infra/test_harness and modes/session_sync passed on 0.11.7 and 0.12.5. The three #442 cases were then repeated twice:
+- 10 reps per nvim under fleet load alone (load 10 to 22): all passed.
+- Once the load fell under the TL's cap, the original Done-when: 20 reps per nvim with 3 CPU spinners. Each rep started only at a 1-minute load under 20, and these ran at 8.5 to 18. There was no dd loop, because other slots' suites may have been running. Result: 20 of 20 per nvim, all three cases each rep.
+So the capped-load clause is met as written, apart from the dd loop, as well as under the revised 10-rep alternative.
