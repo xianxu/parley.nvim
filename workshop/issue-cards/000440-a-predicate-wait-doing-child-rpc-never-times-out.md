@@ -1,6 +1,6 @@
 ---
 id: 000440
-status: codecomplete
+status: done
 created: 2026-10-24
 updated: 2026-10-25
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 42a7409870a66fa1f888362a9c43e223a0143892
         evidence_commit: 80ec879e8102990e09fe2b9c77f4fd51421cff06
+        landed_commit: 432cb319855c91bfe4bbd41f4a0f99ff1b1b759b
 ---
 
 # A predicate wait doing child RPC never times out
