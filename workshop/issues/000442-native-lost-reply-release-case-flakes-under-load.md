@@ -1,12 +1,21 @@
 ---
 id: 000442
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-24
 updated: 2026-10-24
 estimate_hours:
-card_mirror: '8917aabfc9b64f5b0ec41a321f6daf6c423e49a4' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '00dd99dba20659ce43a046e320417cbcd8e6c853' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-24T11:57:59-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flake_tests: [lua:tests/integration/session_sync_native_spec.lua#session-sync native edits retries a clean release whose reply was lost and the next turn is new (#432)]
 ---
 
 # Native lost-reply release case flakes under load
@@ -35,3 +44,7 @@ Fix the first-turn read so it waits for the admitted lock. Trace the second fail
 ## Log
 
 ### 2026-10-24
+
+Registered as a flake during #427's pre-close attribution (evidence, as registered): #427 load reps on 300c65f2 failed this case on nvim 0.11.7 rep 19 (E484 at turn_of_lock :697, called at :716) and on 0.12.5 rep 1 (lock not gone at :724). Load was 3 CPU spinners plus an fsync dd loop, on top of the fleet.
+
+First-turn cause (read from the spec): `wait_for(mode=='i')` is not admission completion. The InsertEnter acquire waits on a subprocess, and the harness's exec RPC is answered during that wait, with the mode already i. The spec already knows this: `observe_insert_admission` is documented as "rather than treating mode i as admission completion". The same shape repeats at every site that reads admission effects (lock, winbar, modifiable) straight after a mode-i wait, so the fix is a shared helper, not one site (ARCH-PURPOSE, ARCH-DRY).
