@@ -1,6 +1,8 @@
 -- A fake `couch` binary for specs (#313, #316). Queries answer from env:
 -- `--actors` prints $FAKE_COUCH_ACTORS; `--session-sync` exits 2 unless
--- $FAKE_COUCH_STATUS is set (the verb before pair#437). Every send appends
+-- $FAKE_COUCH_STATUS is set (the verb before pair#437), except `lookup`: it
+-- answers that nothing is registered, as a current Couch does (#427), and
+-- $FAKE_COUCH_LOOKUP=legacy makes it exit 2 like the rest. Every send appends
 -- one line `<to>|<first line of the message>` to `log_file`, writes its argv one per line to
 -- `argv_file` (whole, then renamed: specs poll for it) and the message alone
 -- to `log_file .. ".last"`. $FAKE_COUCH_SLEEP delays a send and
@@ -42,7 +44,10 @@ function M.write(root, log_file, argv_file)
         'case "$1" in --actors|--session-sync) [ -n "$FAKE_COUCH_QUERY_SLEEP" ] && nap "$FAKE_COUCH_QUERY_SLEEP";; esac',
         'case "$1" in',
         '--actors) printf "%s" "$FAKE_COUCH_ACTORS"; exit 0;;',
-        '--session-sync) [ -n "$FAKE_COUCH_STATUS" ] || exit 2; printf "%s" "$FAKE_COUCH_STATUS"; exit 0;;',
+        '--session-sync) if [ "$2" = lookup ] && [ -z "$FAKE_COUCH_STATUS" ] && [ "$FAKE_COUCH_LOOKUP" != legacy ]; then',
+        '    printf "%s" \'{"Code":"ok","Error":"","Registration":null}\'; exit 0',
+        '  fi',
+        '  [ -n "$FAKE_COUCH_STATUS" ] || exit 2; printf "%s" "$FAKE_COUCH_STATUS"; exit 0;;',
         'esac',
         'if [ -n "$FAKE_COUCH_SLEEP" ]; then nap "$FAKE_COUCH_SLEEP"; fi',
         'if [ -n "$FAKE_COUCH_LOG_DELAY" ]; then : >> "' .. log_file .. '"; sleep "$FAKE_COUCH_LOG_DELAY"; fi',
