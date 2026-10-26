@@ -15,6 +15,7 @@ tracker:
         reviewed_head: 3e1560e54a2c26e542d60d99b41d1a09955efcc5
         evidence_commit: 634f2930567dffcdaed1d1403c2b9af4e4464772
         landed_commit: 1d68bfdce7d5521dd51e9b241afe39751c3d01c3
+kind: feature
 ---
 
 # Write each tool block in one append during streaming; fold tool blocks and summaries as written
