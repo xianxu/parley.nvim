@@ -5,6 +5,7 @@ started: 2026-09-27T11:38:12-07:00
 created: 2026-09-26
 updated: 2026-09-27
 actual_hours: 0.11
+kind: feature
 ---
 
 # Rethink tool-call storage and streaming presentation
