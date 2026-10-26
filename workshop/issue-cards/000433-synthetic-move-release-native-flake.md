@@ -17,6 +17,7 @@ claimant:
 tracker:
     version: 1
     abandoned: {}
+kind: bug
 ---
 
 # Synthetic move release native test intermittently fails its baseline assertion
