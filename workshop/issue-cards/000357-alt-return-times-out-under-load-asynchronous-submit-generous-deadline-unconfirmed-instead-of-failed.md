@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 71341518fbb6feb4c69136b4c72d295f86e0a492
         evidence_commit: 6b21c9bdbe669ef1ee6c6200f3afd1338edf1db5
         landed_commit: 1838a8a55027064668c25901208955001d041782
+kind: bug
 ---
 
 # Alt+Return times out under load: asynchronous submit, generous deadline, unconfirmed instead of failed
