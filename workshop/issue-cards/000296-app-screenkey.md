@@ -18,6 +18,7 @@ tracker:
         destination: workshop/issues/000296-app-screenkey.md
         main_commit: 47faad3428db20cdcb41676918a81d9f9be6d842
 started: 2026-09-28T17:32:50-07:00
+kind: feature
 ---
 
 # Package Screenkey for app recordings
