@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 12105c271e036569b9a917a5ca3da1c1860116ba
         evidence_commit: 794343525606bee58c2efffc145c31a7970d0fc9
         landed_commit: 9bc380e8b5f0586f89ef78df8fb828d01d65fe44
+kind: bug
 ---
 
 # Cliproxy expired-token recovery intermittently retries instead of prompting
