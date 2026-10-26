@@ -22,6 +22,7 @@ tracker:
         reviewed_head: e6e2a208d14027b4eb52c5056d2b916a5228a27c
         evidence_commit: 79e68c752afc03325db7f15abe19abd904f5fd21
         landed_commit: bc72df3beab8d299e71bff0923a49aa5b47121f1
+kind: bug
 ---
 
 # Agent-edit highlight: same style in normal and insert mode (the underline disappears in insert)
