@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 0c9ab358822e20670a58467ad050217d830ff25c
         evidence_commit: 07dc3fdd5c1768c79406ac3a8bba9843e2569a9c
         landed_commit: 63e46c363c9927c5248c9f967b2b17b1b4a19f58
+kind: bug
 ---
 
 # breadcrumb winbar: show a side doc's tree path (parent chain), not the navigation path that reached it
