@@ -22,6 +22,7 @@ tracker:
         reviewed_head: d4677890cc2ba8539394c6d4f9c97ded4d3176f3
         evidence_commit: 8fcfc96f784e43949c9d4542ef3b3e883356322d
         landed_commit: 6a418d25a0654b7ac949a1cba332be86438d20d0
+kind: bug
 ---
 
 # A spec or review run outside the test harness wrote the operator's real cliproxy catalog cache
