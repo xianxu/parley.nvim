@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 82f1c26c445fe64022ccd0c36ef4515b41738037
         evidence_commit: 8bad6bf3cdfcf56c445fec7dd52f1f762e6e287d
         landed_commit: a7370ffb935d56e14cc160ceeee901a2bf3c1420
+kind: feature
 ---
 
 # Route the render walk's reasoning transitions through leave_row
