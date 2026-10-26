@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 517b3bb2b254a4c0eaf9ae600aad24b14f37bc04
         evidence_commit: 2cb81bc38d0bff4c2d6069a4347c65cc7abaf472
         landed_commit: b1a207cc0bc1a183eb8449eb0660ef608cafe7e2
+kind: feature
 ---
 
 # Unify buffer_edit refusal handling across chat command call sites
