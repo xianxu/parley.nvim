@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 6ead4772405e93e115d7b6f86be3c3f907e16778
         evidence_commit: c3b2909bbb83a5a96a08f4198593366c36b8e03c
         landed_commit: d86a445187ef9be4539223ecbda5d9621b4778ba
+kind: bug
 ---
 
 # Registry queue deadline flake
