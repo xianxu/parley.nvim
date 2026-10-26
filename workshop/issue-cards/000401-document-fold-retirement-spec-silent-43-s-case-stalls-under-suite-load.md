@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 1d168ccaa7afba31b643dfb743400cb5b9a75bd5
         evidence_commit: be2129fdfe31d42707a9a1377a1b7fa038f99670
         landed_commit: 2b4034e478f14dbb2c9482b85ebee8763bd89872
+kind: bug
 ---
 
 # document_fold_retirement_spec: silent 43 s case stalls under suite load
