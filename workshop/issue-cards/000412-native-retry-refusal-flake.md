@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 823e00427984579672757290ff6eefdf153be628
         evidence_commit: 43aba7227b8ed7b217cc1410aa886382092ef3e0
         landed_commit: d5f1f5047439c0f2e29a854ed8febb807054a46d
+kind: bug
 ---
 
 # Investigate native o-retry refusal flake on Neovim 0.11
