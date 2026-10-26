@@ -22,6 +22,7 @@ tracker:
         reviewed_head: e4fd6fb1734bcc2be5546291877c8870dbdf16a6
         evidence_commit: 54cd27156133093f271b47b497f2ca89bd14cac6
         landed_commit: 68ad7c6f9a1286224749b038dac55f40707e13cd
+kind: feature
 ---
 
 # document_session: one tagged inheritance stage instead of three flags (#378 review, ARCH-ORDER)
