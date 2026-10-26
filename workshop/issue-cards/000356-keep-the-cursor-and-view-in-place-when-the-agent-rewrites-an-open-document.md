@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 63020146bab5a5db78e91856fec4382d75cc5546
         evidence_commit: 14d1440634388b4616b1c15bfae07bd293ecf45a
         landed_commit: e1bbedf394921dbdff2dfab816c10a93daece02b
+kind: bug
 ---
 
 # Keep the cursor and view in place when the agent rewrites an open document
