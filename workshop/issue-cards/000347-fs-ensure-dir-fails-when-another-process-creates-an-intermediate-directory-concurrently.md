@@ -23,6 +23,7 @@ tracker:
         reviewed_head: 3d9726a73cf806d5ca83e0acdd7f085a10a1ebdd
         evidence_commit: 2475a982d42643b5696a1c4bcb521edea4737571
         landed_commit: 147241e6f2f7558f420353c805c740698ceea12b
+kind: bug
 ---
 
 # fs.ensure_dir fails when another process creates an intermediate directory concurrently
