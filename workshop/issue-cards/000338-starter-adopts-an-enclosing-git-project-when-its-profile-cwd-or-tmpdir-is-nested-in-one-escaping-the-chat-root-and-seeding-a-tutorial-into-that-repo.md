@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 9b518f2d19e311e84bc8dbeeaee1a8c4c95d26de
         evidence_commit: 78750706f17c0efd6d02a8c911b54789731d2d04
         landed_commit: 6c905bff88bcbd8e327592df991c8234b80d94df
+kind: bug
 ---
 
 # Starter adopts an enclosing git project when its profile cwd or TMPDIR is nested in one, escaping the chat root and seeding a tutorial into that repo
