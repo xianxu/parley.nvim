@@ -32,6 +32,7 @@ tracker:
         reviewed_head: 03b245448ae147a6d8aba3ebf8e53f05dcbab5e1
         evidence_commit: 47e6c6e8169ec773bf11ff47ab211b9785c06d7e
         landed_commit: 420b2b3109fb83b6fa68470841d47261e96c4744
+kind: feature
 ---
 
 # First-class review comments: conceal markers + thread float
