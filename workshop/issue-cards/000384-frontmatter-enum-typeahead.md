@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 9e3ea59d8048877d821f8b18a8af690530a5c02b
         evidence_commit: e8cdcdc4b0909a13a42288e51cddf35b0b815631
         landed_commit: 61a5826f3e244db0dda3d47877d5b0e2e4450a3c
+kind: feature
 ---
 
 # Frontmatter typeahead for enum values (collaboration-mode first, generic registry)
