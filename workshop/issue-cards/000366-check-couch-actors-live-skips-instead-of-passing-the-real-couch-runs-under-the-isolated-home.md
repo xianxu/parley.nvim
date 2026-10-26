@@ -22,6 +22,7 @@ tracker:
         reviewed_head: e6b4a8de051080a9f129ad213dab016e38ac8e6a
         evidence_commit: d7e7f91aebf9d99fd1861d1634b97d335a02ca0d
         landed_commit: 41bd006797874b1b21de9a79b5d99387fe0f9487
+kind: bug
 ---
 
 # check-couch-actors-live skips instead of passing: the real couch runs under the isolated HOME
