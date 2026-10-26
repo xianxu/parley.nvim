@@ -23,6 +23,7 @@ tracker:
         reviewed_head: c22db1af4f86c379beb39948aa8eeb2f1e46c3e0
         evidence_commit: 303eb1d314920acec58fcd4d30939539699ad7cb
         landed_commit: 53be0c7ba673bb3aa243f05174d3719481259086
+kind: bug
 ---
 
 # packaging_launcher_spec: await_ready can read the barrier's pid file before it is written
