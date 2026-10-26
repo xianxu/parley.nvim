@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 9a2a54c3aed9aee6d7142fb7a85d951bc5918516
         evidence_commit: 036ccad8125ea90abbf786aee387882ddbd9c8e1
         landed_commit: 09b98872038c916431d470df42fe1a657061fed7
+kind: bug
 ---
 
 # packaging_vm_spec reads an empty vms.json: fake_tart's state write is not atomic (flake)
