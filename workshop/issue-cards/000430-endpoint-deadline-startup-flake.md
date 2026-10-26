@@ -20,6 +20,7 @@ tracker:
         ref: refs/ariadne/abandoned/000430
         branch: 000430-endpoint-deadline-startup-flake
         head: 51a4876710cf21e114ec53d57137123cdc15563b
+kind: bug
 ---
 
 # Endpoint deadline test races Python startup and registry publication
