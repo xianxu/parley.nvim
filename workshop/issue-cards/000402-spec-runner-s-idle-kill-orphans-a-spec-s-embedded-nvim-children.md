@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 1be85079cb8976ba54b34f92d2c120a0af4936b7
         evidence_commit: c97af72fcde2638374ceb0cd9010c3f93b6b98d8
         landed_commit: 01689626ebfa22af9909144c37ec87d928bc8721
+kind: bug
 ---
 
 # spec_runner's idle kill orphans a spec's embedded nvim children
