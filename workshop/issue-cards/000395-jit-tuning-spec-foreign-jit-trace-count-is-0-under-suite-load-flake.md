@@ -23,6 +23,7 @@ tracker:
         reviewed_head: 96f7806da80eb48ea99ca06024aa634a81cc36b5
         evidence_commit: 046f963cb5e59089006c833041832d2bebbd2b99
         landed_commit: f0258366c856b4b96ca746ee63b13012300e7691
+kind: bug
 ---
 
 # jit_tuning_spec foreign JIT trace count is 0 under suite load (flake)
