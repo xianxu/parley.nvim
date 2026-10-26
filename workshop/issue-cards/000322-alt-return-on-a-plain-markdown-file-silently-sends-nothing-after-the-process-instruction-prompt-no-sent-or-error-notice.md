@@ -21,6 +21,7 @@ tracker:
         reviewed_head: b2a6e58e990199e9f29dfa4044f1940272726564
         evidence_commit: 252d3dff07c1fd8fee61d7cdb49a3d5893ea198b
         landed_commit: 33638c0e6573eb974db16243d3c8eccd27559957
+kind: bug
 ---
 
 # Alt+Return on a plain markdown file silently sends nothing after the process-instruction prompt (no 'sent' or error notice)
