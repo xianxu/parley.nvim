@@ -25,6 +25,7 @@ tracker:
         reviewed_head: c48559771d3be07f14b36e2f88ee121eea365d08
         evidence_commit: ca1c65d96a147d56544d2a770d09514088d5a393
         landed_commit: b1d3a6bf0949ed75aa8fc2e3692f97d91a497286
+kind: feature
 ---
 
 # Issue finder folds in issue-tracker card fields
