@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 11e5bce23fd4ae2a7fc25b759177864e518f4db2
         evidence_commit: 2d363c15120b94cb9af5a42589458e9d17711ff2
         landed_commit: 260cf863fc878042fb277a48edda5ba3c114ca86
+kind: bug
 ---
 
 # starter welcome lock: a second starter can see the lock dir before its owner file and demand repair
