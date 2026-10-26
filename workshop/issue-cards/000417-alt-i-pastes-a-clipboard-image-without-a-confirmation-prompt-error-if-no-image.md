@@ -22,6 +22,7 @@ tracker:
         reviewed_head: f405d52460d1cf18c8699a9a98c951f2d0208e47
         evidence_commit: 76ffa8a736bf26cdf6c098a8974a2dfcf528ee4f
         landed_commit: df83def3404a005611b2daeab17a7705a91317f5
+kind: feature
 ---
 
 # Alt+i pastes a clipboard image without a confirmation prompt; error if no image
