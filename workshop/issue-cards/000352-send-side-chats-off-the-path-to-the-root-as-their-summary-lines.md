@@ -23,6 +23,7 @@ tracker:
         reviewed_head: 9bff6ff762f7c2424347c92143e2e1dc0e174258
         evidence_commit: 176bd35abcf133d9e286fea8536044466e71c7b4
         landed_commit: 7020048e26eff653267ff9c40dfdfbb82999f08e
+kind: feature
 ---
 
 # Send side chats off the path to the root as their summary lines
