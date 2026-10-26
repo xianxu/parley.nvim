@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 38ebb2a8e6629fa6a50c42c9c3a9fdeccba70a31
         evidence_commit: b300258c5685f26730791bede628baa77132129e
         landed_commit: f24bc7e7ac3374972d45e2dad61b7a02dcbc0c28
+kind: bug
 ---
 
 # Investigate embedded fold-retirement timeout under native suite load
