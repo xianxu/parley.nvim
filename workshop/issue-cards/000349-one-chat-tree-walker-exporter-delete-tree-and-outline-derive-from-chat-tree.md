@@ -23,6 +23,7 @@ tracker:
         reviewed_head: 5f72682db64c82b47452ac2f7dcbde6a1c85a1ab
         evidence_commit: 4602e8c812b8faa90323131d81eb9066fab871c3
         landed_commit: 9d2df08e326b86797cfc85422e756e5bb9a2b7dd
+kind: feature
 ---
 
 # One chat tree walker: exporter, delete-tree and outline derive from chat_tree
