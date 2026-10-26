@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 0342dddacf2bd79268ec0c437ab515d28a5eddb3
         evidence_commit: 4211b6390f207b6322673352eba1cefe0e220276
         landed_commit: b390b3ff586af7d6118d46021c66ca7ff4b44cb9
+kind: feature
 ---
 
 # Remap keys: Alt+i pastes an image (matching pair draft), Alt+b creates a sub-chat
