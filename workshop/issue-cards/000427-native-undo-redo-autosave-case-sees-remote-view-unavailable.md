@@ -23,6 +23,7 @@ tracker:
         reviewed_head: 05be4ebadddea40cf7885e4cf4fadc780516ff0d
         evidence_commit: 896fbad6bcd40d0601ba6af4aedd2b45bab4c17e
         landed_commit: 709a6f864dbf56f529883fddaf78efc1e0d02434
+kind: bug
 ---
 
 # Native undo/redo autosave case sees Remote view unavailable
