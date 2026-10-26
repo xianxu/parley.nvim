@@ -22,6 +22,7 @@ tracker:
         reviewed_head: b11e2e9ce3838fdba088932557e6425ad68b930c
         evidence_commit: 6a173e8c48f5f76045f270e75da09a2fcb285465
         landed_commit: d24a04c287b137c020baecf0e6230bdaebe29691
+kind: bug
 ---
 
 # Investigate registered-saveas timing flake under load
