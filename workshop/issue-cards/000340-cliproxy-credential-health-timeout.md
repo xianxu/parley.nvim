@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 426c2054ab1cf82030d0e9fceb8f910afa3e2b2a
         evidence_commit: 9f143862186c847af19b9081f8bdba945c3d463a
         landed_commit: bbaea2146fb6d8f0ff85d88351c252e09c4dc2b8
+kind: bug
 ---
 
 # Credential-health persistent-404 test times out in the required suite
