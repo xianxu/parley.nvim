@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 847a807c5ffd5ede0730be6f61e19484927db9db
         evidence_commit: 624e8586c111dc1654ebc5e2d88da2abdc73371a
         landed_commit: 61d16c2093801ff39f03d87ea91ec1f0177de0f5
+kind: bug
 ---
 
 # single_source_sweeps fails a direct make test on a quick-flow issue branch with no Core-concepts table
