@@ -25,6 +25,7 @@ tracker:
         reviewed_head: ff69bfc8a250685654ef3a04db3a3c15e545ece3
         evidence_commit: d9696248baa490f24532b1ce9e5e49233ded49e4
         landed_commit: 571c885911ff857743b42e1a498ed491f9687be9
+kind: bug
 ---
 
 # Preserve empty tool input objects
