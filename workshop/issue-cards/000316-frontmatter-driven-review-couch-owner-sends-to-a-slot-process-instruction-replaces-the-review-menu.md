@@ -32,6 +32,7 @@ tracker:
         reviewed_head: 847acc93440d696637352c6eb85daee07404dee3
         evidence_commit: bc0bbced9c89589b7ee80b1d8d1c6ed01eedfd07
         landed_commit: deb688c70d2b9270eee98c6f033c188062551595
+kind: feature
 ---
 
 # Frontmatter-driven review: couch-owner sends to a slot; process-instruction replaces the review menu
