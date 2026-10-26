@@ -25,6 +25,7 @@ tracker:
         reviewed_head: 408843e3b4773a0d666f1caab9cf8e434f54eb49
         evidence_commit: b4784dd5b440b8acd2be3faf026467c6788d81ce
         landed_commit: b1eb095f9573825dbe1f225a7a64c67e9f2d0a91
+kind: feature
 ---
 
 # Show tracker-only cards in issue finder and viewer
