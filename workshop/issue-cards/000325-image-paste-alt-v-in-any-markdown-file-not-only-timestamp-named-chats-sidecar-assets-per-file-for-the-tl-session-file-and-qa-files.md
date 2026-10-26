@@ -22,6 +22,7 @@ tracker:
         reviewed_head: c4ab831355e1edcf135dd5509eef8ffdb30cd569
         evidence_commit: b9d54ffd75a4fe1e16d64942da2e2b905ad74ea7
         landed_commit: bd2a859a4f8d3911ac900fcf343a5e7210531dc3
+kind: feature
 ---
 
 # Image paste (Alt+v) in any markdown file, not only timestamp-named chats: sidecar assets per file, for the TL session file and QA files
