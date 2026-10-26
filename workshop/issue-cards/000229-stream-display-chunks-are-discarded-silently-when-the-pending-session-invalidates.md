@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 9d987af401a5af70aa599b5d5d3a76f7916c8d57
         evidence_commit: d29e26554a0152edc34f7e420ff85f5241a7ca8e
         landed_commit: 198e6ce5c46aecb2bf69e827155701acc37a9463
+kind: bug
 ---
 
 # Stream display chunks are discarded silently when the pending session invalidates
