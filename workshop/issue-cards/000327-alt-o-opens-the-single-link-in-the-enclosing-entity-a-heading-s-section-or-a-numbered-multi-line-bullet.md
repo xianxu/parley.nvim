@@ -22,6 +22,7 @@ tracker:
         reviewed_head: d09dfa7998a94abd21bc242b56c08a068966289d
         evidence_commit: a771d303d12b47112b41e1d3560179bbfc5d4cc9
         landed_commit: bf98edb0f6b86bc846a55f2d26b24d4313374dca
+kind: feature
 ---
 
 # Alt+o opens the single link in the enclosing entity: a heading's section, or a numbered multi-line bullet
