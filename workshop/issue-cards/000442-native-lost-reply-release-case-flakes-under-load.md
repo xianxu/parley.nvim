@@ -23,6 +23,7 @@ tracker:
         reviewed_head: 5a566e541bb361b042503268dc5d0a7e5001186b
         evidence_commit: 2b9faba8b3f2c7836dea2aa613a4129e662ed68e
         landed_commit: ed338d6e335ce82e0959ab7c1c5749591eaee733
+kind: bug
 ---
 
 # Native lost-reply release case flakes under load
