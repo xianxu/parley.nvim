@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 3f9321f80a8aff88078f4d30f69c04637b8586ed
         evidence_commit: 7e43bea490d4b9387f4ae8d3823d32890b5b11bc
         landed_commit: 59b7bdcc9be32edc58e15412ee42833be83e3514
+kind: bug
 ---
 
 # Alt+o with no link under the cursor flashes the winbar instead of a raw gf error
