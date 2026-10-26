@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 03cda5a53e5dedef3e5cc1a0518b5bad51501c08
         evidence_commit: 80dff904cbfdbdd85cef5d899c2437dd48fee545
         landed_commit: 35e2b8c42cad3bd6fe9604ec04929fa91633f1d5
+kind: feature
 ---
 
 # Review: one universal review skill in ariadne, so parley's send names it instead of embedding the instructions
