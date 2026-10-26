@@ -7,13 +7,18 @@ estimate_hours:
 github_issue:
 flake_tests: 
 started: 2026-10-25T16:34:12-07:00
-claimant:
-    operator: Xian Xu
-    machine: 4716879978a7b90f6b583da1716fd0e9
-    machine_name: Xian’s MacBook Pro
-    workspace: parley.nvim:1
-    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
-    repository: github.com/xianxu/parley.nvim
+tracker:
+    version: 1
+    release:
+        by:
+            operator: Xian Xu
+            machine: 4716879978a7b90f6b583da1716fd0e9
+            machine_name: Xian’s MacBook Pro
+            workspace: parley.nvim:1
+            worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+            repository: github.com/xianxu/parley.nvim
+        branch: 000446-file-history-split-history-case-stalls-to-the-absolute-deadline-under-load
+        head: 1ac78fbb88084211194caee3291ad199771d0415
 ---
 
 # file_history split-history case stalls to the absolute deadline under load
