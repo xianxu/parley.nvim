@@ -32,6 +32,7 @@ tracker:
         reviewed_head: bb33472800137efccebb1e994e6dc276b060c254
         evidence_commit: 78208cb1974394380c326a97f5243a0e597f7ed0
         landed_commit: 3a60f53a2cf007216ce531d50ff02a8bf2fc4698
+kind: feature
 ---
 
 # Issue view: overlay all tracker card fields generically
