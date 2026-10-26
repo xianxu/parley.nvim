@@ -17,6 +17,7 @@ claimant:
 tracker:
     version: 1
     abandoned: {}
+kind: bug
 ---
 
 # Lock leave reminder window-close case gets no pulse when the first-edit operator acquire fails
