@@ -32,6 +32,7 @@ tracker:
         reviewed_head: d4051e8f9ec793d6506a770a8160be15bcd8b2a8
         evidence_commit: d3bc6d4aef17f74e4b1e99d337a62dc97b5b5bf1
         landed_commit: 844244fb22c7d692177112c351fe6e25c480886d
+kind: bug
 ---
 
 # session-sync: the operator's own auto-save reads as an agent write
