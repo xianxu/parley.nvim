@@ -23,6 +23,7 @@ tracker:
         reviewed_head: b3ce489106e4353652201bb9cfaa3b396edb8b6e
         evidence_commit: 9b096e3c3c61a60a0144fd89d30d5630690fb8a4
         landed_commit: 28672d6fedb5a38518cadb6e8b64edb81dd65217
+kind: bug
 ---
 
 # help-parley omits the make goldens and make perf-finder targets
