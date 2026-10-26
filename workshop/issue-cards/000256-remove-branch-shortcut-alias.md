@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 9a3ace7fc4b6458c2436abb4e4347fd047646c70
         evidence_commit: df48ae9e5111e21a8d4d31f9d5970be0f739994f
         landed_commit: d3b0e730db6d0bd4b8a1218eeb54590346531159
+kind: bug
 ---
 
 # Remove conflicting branch shortcut alias
