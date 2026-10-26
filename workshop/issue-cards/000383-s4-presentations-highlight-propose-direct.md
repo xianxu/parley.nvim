@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 845884bcc17313d4415e4935b8da9dc67bf786d9
         evidence_commit: 52ff641564d0213fe857ec94a41c1bd0996e461b
         landed_commit: 27773aed76013c9609752f99339d3e749b0cd879
+kind: feature
 ---
 
 # S4 presentations: highlight agent rounds from Couch's round sidecar, propose and direct
