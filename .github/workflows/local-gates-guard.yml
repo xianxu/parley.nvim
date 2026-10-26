@@ -39,7 +39,10 @@ concurrency:
 
 jobs:
   local-gates-guard:
-    runs-on: ubuntu-latest
+    # A repository picks its runner with the CI_RUNS_ON variable, a JSON
+    # runs-on value (#641); unset is GitHub-hosted. This job installs nothing:
+    # it uses the runner's git and gh.
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(vars.CI_RUNS_ON) || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
