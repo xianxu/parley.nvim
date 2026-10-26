@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 0b8c2fa14d28084ae98bc18d93956c8f5a58ba97
         evidence_commit: d57f76e539309a7f335db03970a0e8e0a0d215f8
         landed_commit: 91f973410ac6da886ca044f952fb07df6fe3a595
+kind: feature
 ---
 
 # Edit rendering: subtle changed-span highlight; show full 🤖 marker text and links
