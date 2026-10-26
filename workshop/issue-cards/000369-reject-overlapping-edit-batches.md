@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 6184b45993c76622407b6a68bbdd97f7fb62bff9
         evidence_commit: 1a30b6ab4da4c00f2030eb02ae7346c7f9377b1c
         landed_commit: eba279341ea4b0f274bd08cf5042541bbb5051db
+kind: feature
 ---
 
 # Reject overlapping edit batches
