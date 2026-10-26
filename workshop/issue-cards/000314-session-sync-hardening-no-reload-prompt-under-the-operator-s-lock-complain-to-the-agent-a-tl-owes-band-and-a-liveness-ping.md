@@ -32,6 +32,7 @@ tracker:
         reviewed_head: e53f5d94d977c82ff14d2341688a04215f9a4506
         evidence_commit: 9125d863a9947ae728efcfe5316f741b10cc47ac
         landed_commit: 97b426f1cc5a4f059c9e3d410791a4579264969e
+kind: feature
 ---
 
 # Session-sync hardening: no reload prompt under the operator's lock, complain to the agent, a 'TL owes' band, and a liveness ping
