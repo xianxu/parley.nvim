@@ -22,6 +22,7 @@ tracker:
         reviewed_head: bf27b054c65b62a19fc8d50ac3b7c64e9bc8c44a
         evidence_commit: 2f0eb3c8d0bc410b9af1311b8519301be20688a6
         landed_commit: 11a9993f447a1e80b6c795ee438a45f5fc815723
+kind: feature
 ---
 
 # side-quest: skill_render dismiss comment names the agent round it keeps
