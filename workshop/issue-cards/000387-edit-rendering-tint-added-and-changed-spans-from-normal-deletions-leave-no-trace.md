@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 6a3660d606f4b8ec358e602192d7776ae7520a28
         evidence_commit: 58efb0db2e16719e3e53cc0a37482831266f2c82
         landed_commit: 95af912273f39e9086e997f290b8d6fd8b2f3f6a
+kind: feature
 ---
 
 # Edit rendering: tint added and changed spans from Normal; deletions leave no trace
