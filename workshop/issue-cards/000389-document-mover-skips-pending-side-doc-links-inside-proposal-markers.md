@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 2e5e9b73518ef4d5f95051c1e43bcb37e9b710e2
         evidence_commit: ac274005470eb21a2254b68db05cbde98c8fcd75
         landed_commit: ac786eef26be886606e418c939aecddd344fe6c7
+kind: bug
 ---
 
 # Document mover skips pending side-doc links inside proposal markers
