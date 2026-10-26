@@ -23,6 +23,7 @@ tracker:
         reviewed_head: 5cdcfa828869c68e4fc4aec0094f9f8a9ba0dd39
         evidence_commit: f2789c57fa176b321dfcc192555206d057aabe1b
         landed_commit: 0620eaedf13f2c73853010c1a64a6175d7c60515
+kind: bug
 ---
 
 # flake: lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership keeps inspection bounded when all 256 marked directory owners differ from this editor, lua:tests/integration/remote_runtime_spec.lua#private editor RPC runtime ownership retains a directory whose inode changes after inspection begins
