@@ -25,6 +25,7 @@ tracker:
         reviewed_head: be93eb1b5d121443b1604f7fafa1700d585236a3
         evidence_commit: 29f9726139356d89532197eeb74b33e5c8370038
         landed_commit: 9a6ea9858d7625153e3358b82184e37352017ee3
+kind: feature
 ---
 
 # Alt+h as an alias of <C-g>? (keybinding help)
