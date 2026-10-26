@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 25674936013026ee64bbb2a366eb197658db07e3
         evidence_commit: 8a492c25a6e13331c69273e31402474c168e9d79
         landed_commit: 84c816668c260b1c3c94d18c73633ffe3b3d2cce
+kind: bug
 ---
 
 # session-sync: fence insert admission and reload after lock acquisition
