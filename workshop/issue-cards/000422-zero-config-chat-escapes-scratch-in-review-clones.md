@@ -22,6 +22,7 @@ tracker:
         reviewed_head: f5bd5052ddd7f48fd515a88e0d4f2b38466f8af4
         evidence_commit: 8cb7afc076347cd380f224bb36223aba0092c389
         landed_commit: e169face48edcdbbae4e464bbc428f291f878147
+kind: bug
 ---
 
 # Zero-config chat escapes scratch in review clones
