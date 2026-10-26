@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 4012c9d579f1db161cd916f6d67e7845f822b6b3
         evidence_commit: f8c4490016fea744576a1c9b8e064fc35b495eac
         landed_commit: 256747edee8e2eae123e995f1f9afa77efd90dd9
+kind: bug
 ---
 
 # A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree
