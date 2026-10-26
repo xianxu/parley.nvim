@@ -22,6 +22,7 @@ tracker:
         reviewed_head: e6fc10ea300bb089ac2cb1e9317179567cab9d13
         evidence_commit: f856cfa12d0eecb64da5ad9f78a96529524f7fa6
         landed_commit: 00ad533920759f6bb51a94c4135d51a9435faa7b
+kind: bug
 ---
 
 # Test census reports clean while an orphaned embedded Neovim survives
