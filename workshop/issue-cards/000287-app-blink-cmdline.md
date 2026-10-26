@@ -5,6 +5,7 @@ started: 2026-09-27T11:18:04-07:00
 created: 2026-09-27
 updated: 2026-09-27
 actual_hours: 1.13
+kind: feature
 ---
 
 # app: blink.cmp (lua matcher) for fuzzy cmdline completion and history search
