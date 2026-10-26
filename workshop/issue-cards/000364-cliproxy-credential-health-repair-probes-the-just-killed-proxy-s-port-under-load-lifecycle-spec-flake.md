@@ -5,6 +5,7 @@ created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 github_issue:
+kind: bug
 ---
 
 # cliproxy credential_health repair probes the just-killed proxy's port under load (lifecycle spec flake)
