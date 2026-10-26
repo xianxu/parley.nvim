@@ -22,6 +22,7 @@ tracker:
         reviewed_head: e718dddf04f63a90c91a600216aecbb45b87d34c
         evidence_commit: ed154c88c948db99eb355576268001832f63f8de
         landed_commit: 1b8d1b2cdc26144167f56d9e76442e4cef1e3eff
+kind: bug
 ---
 
 # Track generated TL skill ignore entries
