@@ -1,12 +1,12 @@
 ---
 id: 000448
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-26
 updated: 2026-10-26
 estimate_hours:
-card_mirror: '4be4471963355e057d40d6e79e9a3f75cf8a28e0' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '89d951468a2507e1147bf6a73c31af4b4b6aece5' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-26T11:00:46-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/42shots/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "ea281263", done: "677b4229"}
+actual_hours: N/A
 ---
 
 # 42shots move: declare former name and refresh weave workflows
