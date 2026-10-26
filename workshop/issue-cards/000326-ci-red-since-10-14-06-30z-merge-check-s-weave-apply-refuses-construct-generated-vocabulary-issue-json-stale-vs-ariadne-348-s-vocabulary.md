@@ -22,6 +22,7 @@ tracker:
         reviewed_head: d42134d9a9cd4abc9168e794b5371a83e599c112
         evidence_commit: f969502d301597e50b610f14fcb0b07b1b0b87a5
         landed_commit: 813ef78f6eef65146fcf65a8b69b498208a21532
+kind: bug
 ---
 
 # CI red since 10-14 06:30Z: merge-check's weave apply refuses construct/generated/vocabulary/issue.json (stale vs ariadne#348's vocabulary)
