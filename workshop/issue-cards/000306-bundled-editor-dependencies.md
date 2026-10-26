@@ -25,6 +25,7 @@ tracker:
         reviewed_head: 0f1671540c9a0b35c54788b11fd2b432c41aeb2b
         evidence_commit: 7c9dd54c135e561c1a1f376d5b27ba535b545d9d
         landed_commit: d0bbbfde7c9c196edb17d750aafda5b8c7ea6f89
+kind: feature
 ---
 
 # Bundle tested editor dependencies for offline app startup
