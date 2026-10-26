@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 0c4552064aa5a005038317f90d5f87c3a2a45613
         evidence_commit: ecad3d09e4eaec584c20b6cc609bed87ba2aefab
         landed_commit: 3219cc0c705bd1a7c097bcf920135155892645b9
+kind: feature
 ---
 
 # Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side)
