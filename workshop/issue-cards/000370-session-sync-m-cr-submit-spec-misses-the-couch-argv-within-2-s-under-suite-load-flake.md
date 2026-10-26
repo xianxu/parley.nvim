@@ -22,6 +22,7 @@ tracker:
         reviewed_head: d0d574ff658a3cf5a0f513957cd91564857f72dd
         evidence_commit: 8c3f8e03bbfadfdfc17d0fc4f7ff3d467ab983d0
         landed_commit: 186894acdf9e68286a1ddada2609cc5877c104fd
+kind: bug
 ---
 
 # session_sync M-CR submit spec misses the couch argv within 2 s under suite load (flake)
