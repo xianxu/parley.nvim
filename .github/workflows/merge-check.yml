@@ -13,13 +13,35 @@ permissions:
 
 jobs:
   merge-check:
-    runs-on: ubuntu-latest
+    # A repository picks its runner with the CI_RUNS_ON variable, a JSON
+    # runs-on value such as ["self-hosted","local-ci"] (#641); unset is
+    # GitHub-hosted. Invalid JSON fails the run; a falsy value (0, false, "",
+    # null) reads as unset.
+    runs-on: ${{ vars.CI_RUNS_ON && fromJSON(vars.CI_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # On a self-hosted runner (the operator's machine) nothing installs: the
+      # host's tools are checked instead, and toolchains never download.
+      - name: Check the self-hosted runner's installed tools
+        if: runner.environment != 'github-hosted'
+        run: |
+          set -euo pipefail
+          missing=()
+          for tool in go git python3; do
+            command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "merge-check: the self-hosted runner lacks ${missing[*]}; install them on the host (this job installs nothing there)" >&2
+            exit 1
+          fi
+          go version
+          # A pin whose go.mod needs a newer Go fails in go build, naming it.
+          printf '%s\n' GOTOOLCHAIN=local UV_PYTHON_DOWNLOADS=never >> "$GITHUB_ENV"
       - uses: Homebrew/actions/setup-homebrew@main
+        if: runner.environment == 'github-hosted'
       - name: Resolve exact compiler sources
         id: gateway
         env:
@@ -32,6 +54,12 @@ jobs:
           if [ "$CI_REPOSITORY" = xianxu/ariadne ]; then
             source_ci=true
             grep -Eq '^module[[:space:]]+github.com/xianxu/ariadne[[:space:]]*$' go.mod
+            # Source CI installs its tools with brew bundle, which never runs
+            # on a self-hosted runner; skipping it would build without them.
+            if [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then
+              echo 'merge-check: ariadne source CI runs on GitHub-hosted runners only (it installs its tools with brew bundle); unset CI_RUNS_ON' >&2
+              exit 1
+            fi
           fi
           # This validator lives in the workflow: consumers have not bootstrapped
           # Ariadne's helpers yet. No tag, branch, extra record or shell text.
@@ -86,10 +114,12 @@ jobs:
           go version
           metadata="$(go version -m "$output/weave")"
           printf 'compiler source: %s\n%s\n' "$PIN_REF" "$metadata"
-          printf '%s\n' "$metadata" | grep -Eq "build[[:space:]]+vcs.revision=$PIN_REF$"
-          printf '%s\n' "$metadata" | grep -Eq 'build[[:space:]]+vcs.modified=false$'
+          # Drain printf's full input: quiet grep can SIGPIPE it under pipefail.
+          printf '%s\n' "$metadata" | grep -E "build[[:space:]]+vcs.revision=$PIN_REF$" >/dev/null
+          printf '%s\n' "$metadata" | grep -E 'build[[:space:]]+vcs.modified=false$' >/dev/null
           BUILD
       - name: Select first pinned toolchain
+        if: runner.environment == 'github-hosted'
         uses: actions/setup-go@v5
         with:
           go-version-file: ${{ runner.temp }}/weave-ci/pin1/go.mod
@@ -106,7 +136,7 @@ jobs:
             echo "$RUNNER_TEMP/weave-ci/bin-pin1" >> "$GITHUB_PATH"
           fi
       - name: Select second pinned toolchain
-        if: steps.gateway.outputs.pin2 != ''
+        if: runner.environment == 'github-hosted' && steps.gateway.outputs.pin2 != ''
         uses: actions/setup-go@v5
         with:
           go-version-file: ${{ runner.temp }}/weave-ci/pin2/go.mod
@@ -120,7 +150,7 @@ jobs:
           set -euo pipefail
           bash "$RUNNER_TEMP/weave-ci/build.sh"
       - name: Select candidate toolchain
-        if: steps.gateway.outputs.source_ci == 'true'
+        if: runner.environment == 'github-hosted' && steps.gateway.outputs.source_ci == 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -133,6 +163,16 @@ jobs:
           GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/weave-candidate/weave" ./cmd/weave
           GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/weave-candidate/vocabulary" ./cmd/vocabulary
           echo "$RUNNER_TEMP/weave-candidate" >> "$GITHUB_PATH"
+      # bootstrap.sh installs weave with brew when none answers on PATH; on a
+      # self-hosted runner the pinned compiler must answer, so that never runs.
+      - name: Check the self-hosted runner has the pinned compiler
+        if: runner.environment != 'github-hosted'
+        run: |
+          set -euo pipefail
+          if ! { command -v weave >/dev/null 2>&1 && weave dependencies --help >/dev/null 2>&1; }; then
+            echo 'merge-check: no weave with dependencies on PATH after the pinned build; bootstrap.sh would install one with brew' >&2
+            exit 1
+          fi
       - name: Prepare dependencies and compile composition
         run: |
           set -euo pipefail

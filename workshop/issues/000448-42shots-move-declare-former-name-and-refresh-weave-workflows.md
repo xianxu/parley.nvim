@@ -1,12 +1,22 @@
 ---
 id: 000448
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-26
 updated: 2026-10-26
 estimate_hours:
-card_mirror: '68d1fe2cfc14cebe7ebb88411de5271b20286d4b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '89d951468a2507e1147bf6a73c31af4b4b6aece5' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-26T11:00:46-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/42shots/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "ea281263", done: "677b4229"}
+actual_hours: N/A
 ---
 
 # 42shots move: declare former name and refresh weave workflows
@@ -36,3 +46,14 @@ The operator verifies with the `local-gates-verified` label, and the TL then set
 ## Log
 
 ### 2026-10-26
+- 2026-10-26: closed — repo move (42shots phase C). .sdlc/repository.json declares former name github.com/xianxu/parley.nvim; construct/deps points at 42shots/ariadne (TL-approved); weave refresh --substrate against ariadne 2e1114ec (past ee3d24ba) seeded merge-check + local-gates-guard byte-identical to ariadne main; TL-run weave compile regenerated issue vocabulary (sha256 sidecar matches) and the side-doc gitignore entry; settings.json unchanged; weave-compiler-ref unchanged. Full suite pass recorded as sdlc-local/suite on ebc189af (6m36s). --no-atlas: local-gates config only, no parley surface.; review verdict: SHIP
+
+### 2026-10-26
+- TL approved changing construct/deps to the 42shots URL. The refresh's origin check compares the rewritten (insteadOf) origin, while acquire.checkExisting compares the raw configured origin. Repointed the slot-private ariadne clone's origin to 42shots, which satisfies both checks; the TL is filing the weave follow-up.
+- weave refresh --substrate advanced slot ariadne b9452c63→2e1114ec; seeded merge-check/local-gates-guard applied byte-identical to ariadne main (54d0042b); weave-compiler-ref unchanged.
+- Compile aborted writing .claude/settings.json (sandbox-protected, untracked). Generators did not run, so construct/generated/vocabulary/issue.json may be stale (issue.cue changed upstream). Asked the hub how to proceed.
+- TL ran weave compile outside the sandbox: settings.json byte-identical; 83d8dddb commits the regenerated issue.json (sidecar sha matches) and the side-doc.json gitignore entry (ariadne#623). The TL added the double origin check to ariadne#650.
+
+## Revisions
+
+- 2026-10-26: scope +1 (TL-approved): repoint construct/deps substrate to https://github.com/42shots/ariadne.git, which the refresh's origin check requires after the move.

@@ -20,6 +20,10 @@
             "high",
             "medium",
             "low"
+        ],
+        "kind": [
+            "bug",
+            "feature"
         ]
     },
     "repoEnums": {
@@ -117,6 +121,12 @@
                 "kind": "enum",
                 "enum": "severity",
                 "setter": "sdlc issue set-severity"
+            },
+            {
+                "name": "kind",
+                "kind": "enum",
+                "enum": "kind",
+                "setter": "sdlc issue set-kind"
             },
             {
                 "name": "flake_tests",
@@ -359,6 +369,7 @@
         },
         "card-enums-declared": {
             "severity": true,
+            "kind": true,
             "area": true
         },
         "escapable": {
