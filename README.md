@@ -1,5 +1,9 @@
 # Parley
 
+> **Frozen public snapshot of 2026-10-26.** Development continues in a private repository; this copy is archived
+> and no longer updated. Existing tags and Homebrew installs (`brew install xianxu/parley/parley`) keep working.
+
+
 <!-- parley:introduction:start -->
 Parley is a workspace for exploring ideas with AI. Conversations live in local
 Markdown files that you can edit, search, and annotate. Ask different models in the
