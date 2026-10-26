@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 10db2bcdc144b82f823a01f020d0e2e0e2fbcff0
         evidence_commit: d3a9efd7527e868abdec6ce5d098854d4d26e142
         landed_commit: be9e449b798f3e75882a16c1ffcacb6d77693eaf
+kind: bug
 ---
 
 # cliproxy_update_spec: 'old proxy outlives the restart' races the fake's 4 s exit delay under load
