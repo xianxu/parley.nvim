@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 5d00733614cc0c18ca1135f4549b3e5440cb1b09
         evidence_commit: 9f1dc6357b7c6a00d5dde02747b6e5d700149712
         landed_commit: 775246fb99a694603c12b892e1fc5275eb3f8c28
+kind: bug
 ---
 
 # Cliproxy catalog joins-routes case intermittently returns empty under suite load
