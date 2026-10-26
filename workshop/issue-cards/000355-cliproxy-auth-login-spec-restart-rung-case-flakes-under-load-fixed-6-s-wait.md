@@ -23,6 +23,7 @@ tracker:
         reviewed_head: fb0694d52d805cdb99e84e395484a64d4e797fb1
         evidence_commit: 5e76e74014ad45b81d87f40062c5801aca6b570f
         landed_commit: b61efa5e0d15105a922a8c9a79ca9ae3e572075a
+kind: bug
 ---
 
 # cliproxy_auth_login_spec restart-rung case flakes under load (fixed 6 s wait)
