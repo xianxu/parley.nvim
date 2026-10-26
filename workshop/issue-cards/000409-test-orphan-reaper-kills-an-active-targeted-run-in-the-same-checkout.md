@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 92168f8e0df941de0c7ca17ea201071d3a9ace00
         evidence_commit: b903af963e4c694fb9fa321b016a72b96b15467d
         landed_commit: 7f4100e3020dc597e37f1ed43126585ac2085d1b
+kind: bug
 ---
 
 # Test orphan reaper kills an active targeted run in the same checkout
