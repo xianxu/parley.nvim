@@ -15,6 +15,7 @@ tracker:
         reviewed_head: 5ad0ab93d21f3e01c1bbe9f5cfb21bfd4614b333
         evidence_commit: d1be3fee12c80d5e40c50021fbe194f3d3b1bc84
         landed_commit: 388169357eafd7cc3363fb50757d6bc8fe24c721
+kind: feature
 ---
 
 # Make each answer one undo history entry
