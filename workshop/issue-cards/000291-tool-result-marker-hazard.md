@@ -15,6 +15,7 @@ tracker:
         reviewed_head: 80f10ce3fe13fb77ba783f101bbc5b2964e6c27c
         evidence_commit: 78f0c426dc5a1b4caa715e4bf59dc70050dc23e6
         landed_commit: 80e939e8436b463e22f2d9ad5b45ff303d46bfe3
+kind: bug
 ---
 
 # Close the column-0 marker hazard in tool results (ls/find/stderr)
