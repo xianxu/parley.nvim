@@ -44,3 +44,8 @@ The operator verifies with the `local-gates-verified` label, and the TL then set
 ## Log
 
 ### 2026-10-26
+
+### 2026-10-26
+- TL approved changing construct/deps to the 42shots URL. The refresh's origin check compares the rewritten (insteadOf) origin, while acquire.checkExisting compares the raw configured origin. Repointed the slot-private ariadne clone's origin to 42shots, which satisfies both checks; the TL is filing the weave follow-up.
+- weave refresh --substrate advanced slot ariadne b9452c63→2e1114ec; seeded merge-check/local-gates-guard applied byte-identical to ariadne main (54d0042b); weave-compiler-ref unchanged.
+- Compile aborted writing .claude/settings.json (sandbox-protected, untracked). Generators did not run, so construct/generated/vocabulary/issue.json may be stale (issue.cue changed upstream). Asked the hub how to proceed.
