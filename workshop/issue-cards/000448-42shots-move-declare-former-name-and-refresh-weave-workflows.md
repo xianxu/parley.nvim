@@ -1,6 +1,6 @@
 ---
 id: 000448
-status: working
+status: codecomplete
 created: 2026-10-26
 updated: 2026-10-26
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/42shots/parley.nvim
+actual_hours: N/A
+tracker:
+    version: 1
+    completion:
+        token: close-589531c598f7
+        repository: github.com/42shots/parley.nvim
+        reviewed_head: ebc189afcaf84db73ea2850f66b5405e648ed56d
+        evidence_commit: f186854300d4cf59bb62dba309d40355b994e9f9
 ---
 
 # 42shots move: declare former name and refresh weave workflows
