@@ -23,6 +23,7 @@ tracker:
         reviewed_head: aae97db73b9403cb42264d9f7e39a5e40d877513
         evidence_commit: 0dcbb1b4116dd59b1632ca8973a414a6a10a9139
         landed_commit: 601798ecb09db76aebb7b2bfb402fbbbc0a31d75
+kind: feature
 ---
 
 # Asynchronous rename protocol for agentic documents (BufFilePre/BufFilePost preflights)
