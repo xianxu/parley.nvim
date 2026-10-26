@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 0ea8a86dadf6adbbc84a21d8c285677a449aa751
         evidence_commit: a159c261140d6927e5f02de626eef56ef23dd2d1
         landed_commit: cc0583261a6f76db5b41fe7504fafd2d7a14b23c
+kind: feature
 ---
 
 # move_chat_tree's 🌿 rewrite pass looks unreachable since resolve_chat_path resolves by basename
