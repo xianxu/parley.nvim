@@ -23,6 +23,7 @@ tracker:
         reviewed_head: 2999bfba8d35a68d1436e301cc63b61e76ed2f65
         evidence_commit: 0676b17ad605bde0270e880dbebfb1233c736286
         landed_commit: c256e54643f2324e03b3df5d57f0419b271a765f
+kind: bug
 ---
 
 # Tests inherit the slot's live Couch environment and query the real registry (chat_move_spec failed when Couch flapped)
