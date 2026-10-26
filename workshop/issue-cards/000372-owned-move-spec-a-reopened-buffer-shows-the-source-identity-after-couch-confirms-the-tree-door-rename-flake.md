@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 88acb8bd3ffde461022b14314f9dda8e0f9ccac2
         evidence_commit: 51004a5fe3f48b46e862071f354b60eb831aa77a
         landed_commit: 1b9b9d553bbf368d12708125baabd804a6c68bde
+kind: bug
 ---
 
 # owned-move spec: a reopened buffer shows the source identity after Couch confirms the tree-door rename (flake)
