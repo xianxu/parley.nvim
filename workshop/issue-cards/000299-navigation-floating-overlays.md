@@ -25,6 +25,7 @@ tracker:
         reviewed_head: fc16ff034cce1fbfb20d46797788b9559af5d87a
         evidence_commit: 5491cde0dd8427078615a8a9ebc21f36e1ae66a8
         landed_commit: 6e7d822c660da786ea91526aa0a8535a72bf4c56
+kind: bug
 ---
 
 # Ignore floating overlays during chat navigation
