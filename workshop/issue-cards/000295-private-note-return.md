@@ -25,6 +25,7 @@ tracker:
         reviewed_head: 7a42de80e07e2000196340d5ee7fcf1bf85e25b4
         evidence_commit: 1438e54a46f02000a7d17c76a60eb3c42679dfd4
         landed_commit: e942bdf00af25223045114f067229caa17c80ccf
+kind: feature
 ---
 
 # Continue private note prefixes on Return
