@@ -6,6 +6,7 @@ created: 2026-09-16
 updated: 2026-09-27
 estimate_hours: 3.71
 actual_hours: 2.46
+kind: bug
 ---
 
 # Semantic folds flicker open on a local blank-line edit
