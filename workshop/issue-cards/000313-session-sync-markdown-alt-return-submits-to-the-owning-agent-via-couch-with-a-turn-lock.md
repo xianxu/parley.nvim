@@ -32,6 +32,7 @@ tracker:
         reviewed_head: df3b00d600c47b9de78854214616b922db7d5a67
         evidence_commit: 37715870d4411dd862374fc96b0e00a13ef39844
         landed_commit: aa726b6d17c36806e60feb0d2368b6fb56818a85
+kind: feature
 ---
 
 # session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock
