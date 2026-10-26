@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 1297e8d4ce147ffc6d477eed499d210353c35d8c
         evidence_commit: 236b161e65f5979a65f27e7664d37c56c471b3a2
         landed_commit: 2cf363f1421ce27ab3230099380f999a0a4bdaf6
+kind: bug
 ---
 
 # session-sync: a normal-mode edit (dd) doesn't take the operator's lock; only insert-mode edits seem to
