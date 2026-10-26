@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 42a7409870a66fa1f888362a9c43e223a0143892
         evidence_commit: 80ec879e8102990e09fe2b9c77f4fd51421cff06
         landed_commit: 432cb319855c91bfe4bbd41f4a0f99ff1b1b759b
+kind: bug
 ---
 
 # A predicate wait doing child RPC never times out
