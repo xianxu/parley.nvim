@@ -87,6 +87,7 @@
 /construct/generated/vocabulary/issue.json.weave-sha256
 /construct/generated/vocabulary/pensive.json
 /construct/generated/vocabulary/project.json
+/construct/generated/vocabulary/side-doc.json
 /construct/generated/vocabulary/verdict.json
 /construct/generated/weave/
 /construct/scripts/apply-gitignore-entries.sh
