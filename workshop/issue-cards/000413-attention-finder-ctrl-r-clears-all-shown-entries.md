@@ -22,6 +22,7 @@ tracker:
         reviewed_head: fe309b7064129e5e25968eab1c12f9a7356999aa
         evidence_commit: 2f8b59b2db66d47dc0008b83acc06da2a7cefdd4
         landed_commit: 2d4f13943a68f17f6f59151a1aed07c9f5647030
+kind: feature
 ---
 
 # Attention finder: Ctrl+R clears all shown entries
