@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 2be663329e6f2984be613a815bf7b860a705022e
         evidence_commit: aa2628badb07cc8578d46b687771eea15a9553c4
         landed_commit: e0c4da54c84fabe1b4b8477bf2f3b81fbba1a6c0
+kind: bug
 ---
 
 # Catalog conformance cases cannot pass with the fabricated credential
