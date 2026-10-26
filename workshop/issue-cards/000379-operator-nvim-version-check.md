@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 9d14002faac5989a513086a70facc27869593ef5
         evidence_commit: 31b98a329caf673c6d74f6fff35ee549c7fd1cab
         landed_commit: 7125357492c019dab1dd2a5af3ebc61ea0fa6b82
+kind: feature
 ---
 
 # Check operator Neovim compatibility
