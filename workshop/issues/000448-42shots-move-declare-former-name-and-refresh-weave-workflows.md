@@ -45,6 +45,7 @@ The operator verifies with the `local-gates-verified` label, and the TL then set
 ## Log
 
 ### 2026-10-26
+- 2026-10-26: closed — repo move (42shots phase C). .sdlc/repository.json declares former name github.com/xianxu/parley.nvim; construct/deps points at 42shots/ariadne (TL-approved); weave refresh --substrate against ariadne 2e1114ec (past ee3d24ba) seeded merge-check + local-gates-guard byte-identical to ariadne main; TL-run weave compile regenerated issue vocabulary (sha256 sidecar matches) and the side-doc gitignore entry; settings.json unchanged; weave-compiler-ref unchanged. Full suite pass recorded as sdlc-local/suite on ebc189af (6m36s). --no-atlas: local-gates config only, no parley surface.; review verdict: SHIP
 
 ### 2026-10-26
 - TL approved changing construct/deps to the 42shots URL. The refresh's origin check compares the rewritten (insteadOf) origin, while acquire.checkExisting compares the raw configured origin. Repointed the slot-private ariadne clone's origin to 42shots, which satisfies both checks; the TL is filing the weave follow-up.
