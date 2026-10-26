@@ -25,6 +25,7 @@ tracker:
         reviewed_head: ef336da699c25819524c82b34fda17da45eb74dd
         evidence_commit: cfe01c8a51bc2ee7de763323081cbc9e6ed56224
         landed_commit: c502111abb34e589c5dd1c576b3bd977e9510e76
+kind: feature
 ---
 
 # Unify automatic spell suggestions in Blink
