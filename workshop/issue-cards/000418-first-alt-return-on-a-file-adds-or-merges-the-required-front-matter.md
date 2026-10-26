@@ -22,6 +22,7 @@ tracker:
         reviewed_head: b1b34cb9761bfc7aa0fbe5fbe8139cde6e7ed44c
         evidence_commit: 053aea044aee9a1f9995f7174e1e08dcf5a396e3
         landed_commit: 79c19beac69531c4a154aa82a9856487f326a033
+kind: bug
 ---
 
 # Legacy chat reader tolerates quotes in unrelated plain metadata
