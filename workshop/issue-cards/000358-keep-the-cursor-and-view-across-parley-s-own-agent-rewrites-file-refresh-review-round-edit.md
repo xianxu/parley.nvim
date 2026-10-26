@@ -23,6 +23,7 @@ tracker:
         reviewed_head: b31928c1200e7b0e3932dbbcf2d2c3f434a85c2d
         evidence_commit: 69e4a41287d7cc25c097f5b16945802494ca2104
         landed_commit: 6f7837a1103877378df902bfa4faa9c9566fb362
+kind: bug
 ---
 
 # Keep the cursor and view across parley's own agent rewrites (file_refresh, review round edit!)
