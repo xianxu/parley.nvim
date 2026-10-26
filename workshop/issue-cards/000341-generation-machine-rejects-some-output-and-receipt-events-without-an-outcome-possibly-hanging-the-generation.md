@@ -22,6 +22,7 @@ tracker:
         reviewed_head: 2d0efab84cd098fc657a4327886d28cc59f8368e
         evidence_commit: c0b29c8b9002c5bc5019840740d7bc5eb4df17ff
         landed_commit: a84a37afa9b8af4a407d233ed056e1a18a72677e
+kind: bug
 ---
 
 # Generation machine rejects some output and receipt events without an outcome, possibly hanging the generation
