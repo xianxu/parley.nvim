@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/42shots/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "ea281263", done: "677b4229"}
 ---
 
 # 42shots move: declare former name and refresh weave workflows
